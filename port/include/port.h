@@ -6,6 +6,15 @@
 #include <cstddef>
 #include <new>
 
+#ifdef __APPLE__
+#undef __assert
+#define section(name)
+#endif
+
+#define PORT_STRINGIFY2(x) #x
+#define PORT_STRINGIFY(x) PORT_STRINGIFY2(x)
+#define PORT_ASM_NAME(name) PORT_STRINGIFY(__USER_LABEL_PREFIX__) #name
+
 [[noreturn]] void Ps2Unimplemented(const char *function, const char *file, int line);
 
 #define PS2_UNIMPLEMENTED() Ps2Unimplemented(__func__, __FILE__, __LINE__)

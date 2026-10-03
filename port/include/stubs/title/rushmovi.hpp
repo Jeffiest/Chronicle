@@ -6,17 +6,17 @@
 
 // This unit declares title.cpp's scene drawing and loading functions static, and the PS2 link
 // binds them to title.cpp's global ones. Here the static ones forward to those.
-void PortTitleDataLoad() asm("_Z8DataLoadv");
-void PortTitleDrawProcA() asm("_Z9DrawProcAv");
-void PortTitleDrawProcB() asm("_Z9DrawProcBv");
-void PortTitleDrawProcC() asm("_Z9DrawProcCv");
-void PortTitleDrawProcD() asm("_Z9DrawProcDv");
-void PortTitleDrawProcE() asm("_Z9DrawProcEv");
-void PortTitleDrawProcF() asm("_Z9DrawProcFv");
-void PortTitleDrawProcG() asm("_Z9DrawProcGv");
-void PortTitleDrawProcH() asm("_Z9DrawProcHv");
-void PortTitleDrawProcI() asm("_Z9DrawProcIv");
-void PortTitleDrawProcTitle() asm("_Z13DrawProcTitlev");
+void PortTitleDataLoad() asm(PORT_ASM_NAME(_Z8DataLoadv));
+void PortTitleDrawProcA() asm(PORT_ASM_NAME(_Z9DrawProcAv));
+void PortTitleDrawProcB() asm(PORT_ASM_NAME(_Z9DrawProcBv));
+void PortTitleDrawProcC() asm(PORT_ASM_NAME(_Z9DrawProcCv));
+void PortTitleDrawProcD() asm(PORT_ASM_NAME(_Z9DrawProcDv));
+void PortTitleDrawProcE() asm(PORT_ASM_NAME(_Z9DrawProcEv));
+void PortTitleDrawProcF() asm(PORT_ASM_NAME(_Z9DrawProcFv));
+void PortTitleDrawProcG() asm(PORT_ASM_NAME(_Z9DrawProcGv));
+void PortTitleDrawProcH() asm(PORT_ASM_NAME(_Z9DrawProcHv));
+void PortTitleDrawProcI() asm(PORT_ASM_NAME(_Z9DrawProcIv));
+void PortTitleDrawProcTitle() asm(PORT_ASM_NAME(_Z13DrawProcTitlev));
 
 static void DataLoad() {
     PortTitleDataLoad();

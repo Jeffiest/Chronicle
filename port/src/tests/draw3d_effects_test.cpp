@@ -54,8 +54,9 @@ TEST(Draw3dEffects, WaterSamplesFrameCopyInScreenSpace) {
     PortReleaseKey(key);
 }
 
-// The cloth is rebuilt from its grid every draw and lit with its fixed material: ambient 0.3 of
-// the scene's full ambient, 0x26 in GS bytes, with no directional light.
+// The cloth is rebuilt from its grid every draw and lit with its fixed material: a diffuse of 1
+// under the scene's full ambient, 0x80 in GS bytes, with no directional light. Its second vector,
+// 0.3, does not dim the ambient.
 TEST(Draw3dEffects, ClothRebuiltPerDraw) {
     Draw3DFixture fixture;
     SetDataBuffer(&VisualData, 4096);
@@ -72,8 +73,8 @@ TEST(Draw3dEffects, ClothRebuiltPerDraw) {
     }
 
     fixture.Frame([&] { cloth.Draw(); });
-    ASSERT_TRUE(fixture.PixelNear(320, 240, 38, 38, 38));
-    ASSERT_TRUE(fixture.PixelNear(265, 185, 38, 38, 38));
+    ASSERT_TRUE(fixture.PixelNear(320, 240, 128, 128, 128));
+    ASSERT_TRUE(fixture.PixelNear(265, 185, 128, 128, 128));
     ASSERT_TRUE(fixture.PixelNear(250, 240, 0, 0, 0));
 
     // Moved: the next draw follows the grid.
@@ -84,5 +85,5 @@ TEST(Draw3dEffects, ClothRebuiltPerDraw) {
     }
     fixture.Frame([&] { cloth.Draw(); });
     ASSERT_TRUE(fixture.PixelNear(320, 240, 0, 0, 0));
-    ASSERT_TRUE(fixture.PixelNear(480, 240, 38, 38, 38));
+    ASSERT_TRUE(fixture.PixelNear(480, 240, 128, 128, 128));
 }

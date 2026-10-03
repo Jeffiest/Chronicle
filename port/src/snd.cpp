@@ -263,9 +263,16 @@ void set2DSpriteC4(sceVif1Packet *packet, const CRect_i_ &screen, spRGBA *top_le
 }
 
 // Retail's rotation: offsets in whole pixels (the far edges one past the rect), turned with the
-// axes swapped at angle 0, truncated to pixels.
+// axes swapped at angle 0. Retail truncates each turned corner to a pixel, so a slow turn (the
+// title's backdrop, half a milliradian a tick) moves the corners one at a time; they are kept as
+// turned here.
 void set2DSprite(sceVif1Packet *packet, CTexture *texture, const CRect_i_ &screen, const CRect_i_ &texel,
                  int pivot_x, int pivot_y, float angle) {
+    draw2d::TurnedSprite(texture, screen, texel, pivot_x, pivot_y, angle, 1.0f);
+}
+
+void draw2d::TurnedSprite(CTexture *texture, const CRect_i_ &screen, const CRect_i_ &texel, int pivot_x,
+                          int pivot_y, float angle, float scale) {
     if (texture == nullptr) {
         return;
     }
@@ -282,8 +289,8 @@ void set2DSprite(sceVif1Packet *packet, CTexture *texture, const CRect_i_ &scree
         const float turned_x = y[i] * cosf(angle) + x[i] * sinf(angle);
         const float turned_y = x[i] * cosf(angle) - y[i] * sinf(angle);
 
-        x[i] = static_cast<float>(static_cast<int>(turned_x) + screen.x);
-        y[i] = static_cast<float>(static_cast<int>(turned_y) + screen.y);
+        x[i] = turned_x * scale + static_cast<float>(screen.x);
+        y[i] = turned_y * scale + static_cast<float>(screen.y);
     }
 
     const float u0 = static_cast<float>(texel.x);

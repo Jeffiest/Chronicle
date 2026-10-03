@@ -6,6 +6,15 @@
 #include "renderinfo.hpp"
 #include "texture.hpp"
 
+namespace {
+
+// CCloth::Step carries the grid along rigidly, without simulating, when its root moved further than
+// this in a tick (a cut, a warp, a turn on the spot in an event). The vertices of the two ticks are
+// then not one motion, and blended they pass through each other, so such a tick is not blended.
+constexpr float kClothResetDistance = 10.0f;
+
+} // namespace
+
 // The grid is rebuilt every frame from the simulation, so it is drawn as an immediate triangle
 // list: one strip per row pair, each row drawn from the far side (wound the other way) when
 // polygon_divide says so, all with the fixed cloth material and the model's texture. The vertices
@@ -69,7 +78,7 @@ int CCloth::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, VU1_PRO
     CreateVUData(vu_block[DBuffID]);
     vu_data = vu_block[DBuffID];
     if (const Draw3DVisual *visual = Draw3DFindVisual(vu_data)) {
-        Draw3DIdentityScope identity(this, kDraw3DTeleportDistance, true);
+        Draw3DIdentityScope identity(this, kClothResetDistance, true);
         Draw3DDrawVisual(*visual, matrix, *info, program);
     }
     return 0;

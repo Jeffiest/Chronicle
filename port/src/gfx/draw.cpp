@@ -220,6 +220,7 @@ bool Prepare(PipelineFamily family, VkPrimitiveTopology topology, const TextureB
             float          width = static_cast<float>(image.width);
             float          height = static_cast<float>(image.height);
             mode = kTextureRgba;
+            texa = binding.ignore_alpha;
             push.texture_slot = PreviousFrameSlot();
             if (family != kFamilyMesh) {
                 push.uv_xform[0] = mapping.scale_x / width;
@@ -256,7 +257,7 @@ bool Prepare(PipelineFamily family, VkPrimitiveTopology topology, const TextureB
                 mode = kTexturePalette;
             } else {
                 mode = kTextureRgba;
-                texa = !texture->desc.has_alpha;
+                texa = !texture->desc.has_alpha || binding.ignore_alpha;
             }
         }
     }
@@ -875,7 +876,7 @@ void Draw2DSided(Primitive primitive, std::span<const Vertex2D> vertices, const 
         return;
     }
     DrawPrepared(primitive, vertices, binding, state, ui);
-    if (uint32_t axes = ExtentAxes(g.target) & TextureAxes(binding); axes != 0 && g.in_frame) {
+    if (uint32_t axes = ExtentAxes(g.target) & TextureAxes(binding); axes != 0 && g.in_frame && !g.host_draws) {
         LogicalMapping mapping = GetLogicalMapping(g.target);
         if (ui && g.target == kMainTarget) {
             mapping = UiMapping(mapping);

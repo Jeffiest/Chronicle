@@ -65,11 +65,9 @@ bool Resolve(u_long tex0, u_long tex1, gfx::DrawState &state, Texture &texture) 
     }
 
     if (((tex0 >> 34) & 1) == 0) {
-        std::optional<gfx::TextureInfo> info = gfx::GetTextureInfo(texture.binding.texture);
-        if (info && !info->has_alpha) {
-            state.texa_aem = false;
-            state.texa_ta0 = 0x80;
-        }
+        texture.binding.ignore_alpha = true;
+        state.texa_aem = false;
+        state.texa_ta0 = 0x80;
     }
 
     return true;

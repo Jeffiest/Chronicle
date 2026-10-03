@@ -27,6 +27,17 @@ struct Draw2DEntry {
     TextureBinding        binding;
     DrawState             state;
     UiSide                side;
+    // DisplayList::scenes: the scene a draw that tests depth (a 3D sprite) stands in, or -1.
+    int32_t scene = -1;
+};
+
+// The projection and camera the meshes around a 3D sprite were drawn with, and where the target's
+// logical space lay in clip space (x and y: scale, then offset). A display render carries the
+// sprite's corners from the tick's camera to the interpolated one through them.
+struct SpriteScene {
+    uint32_t camera = 0;
+    Mat4     projection = {};
+    float    to_clip[4] = {};
 };
 
 // One record of DisplayList::meshes per entry.
@@ -118,6 +129,11 @@ struct DisplayList {
     std::vector<detail::Entry>      entries;
     std::vector<detail::MeshRecord> records;
     std::vector<detail::Mat4>       cameras;
+    std::vector<detail::SpriteScene> scenes;
+    // While recording: the scene of the last mesh drawn on the current target, or -1, and on each
+    // target drawn into so far (the fire's texture is blended between the map and its sprites).
+    int32_t                                    scene = -1;
+    std::unordered_map<TextureHandle, int32_t> target_scenes;
     std::vector<TextureHandle>      doomed_textures;
     std::vector<MeshHandle>         doomed_meshes;
     bool                            cut = false;

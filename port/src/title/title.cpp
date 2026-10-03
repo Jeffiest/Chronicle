@@ -80,6 +80,7 @@ struct MAP_INFO {
 #include "water.hpp"
 #include "wind.hpp"
 #include "mainselect.hpp"
+#include "title_port.hpp"
 
 // The bodies are retail's, which pass string literals as char * and brace-elide their tables.
 #pragma clang diagnostic ignored "-Wwritable-strings"
@@ -2308,7 +2309,7 @@ static void InitProcTitle() {
 void DrawProcTitle() {
     TexManager.ReloadTexture(Vif1Packet, 1);
 
-    set2DSprite(GetVif1Packet(), TexManager.GetTexture("bg01", -1), CRect<int>(320, 224, 768, 768), CRect<int>(0, 0, 768, 768), 384, 384, TitleAngle);
+    TitlePortCard(TexManager.GetTexture("bg01", -1), TitleAngle);
     TitleAngle -= 0.0005f;
 
     set2DSprite(GetVif1Packet(), TexManager.GetTexture("dc01", -1), CRect<int>(0, 80, 288, 160), CRect<int>(0, 0, 288, 160), 128);

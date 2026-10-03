@@ -222,6 +222,33 @@ uint32_t CameraIndex(DisplayList &list, const float *view) {
     return static_cast<uint32_t>(list.cameras.size() - 1);
 }
 
+// The scene the 3D sprites recorded after this mesh stand in.
+void NoteScene(DisplayList &list, const MeshRecord &record) {
+    LogicalMapping mapping = GetLogicalMapping(g.record_target);
+    if (mapping.pixel_width == 0 || mapping.pixel_height == 0 || mapping.scale_x == 0.0f || mapping.scale_y == 0.0f) {
+        list.scene = -1;
+        list.target_scenes.erase(g.record_target);
+        return;
+    }
+    SpriteScene scene;
+    scene.camera = record.camera;
+    scene.projection = record.projection;
+    scene.to_clip[0] = 2.0f * mapping.scale_x / static_cast<float>(mapping.pixel_width);
+    scene.to_clip[1] = 2.0f * mapping.scale_y / static_cast<float>(mapping.pixel_height);
+    scene.to_clip[2] = 2.0f * mapping.offset_x / static_cast<float>(mapping.pixel_width) - 1.0f;
+    scene.to_clip[3] = 2.0f * mapping.offset_y / static_cast<float>(mapping.pixel_height) - 1.0f;
+    if (list.scene >= 0) {
+        const SpriteScene &current = list.scenes[list.scene];
+        if (current.camera == scene.camera && current.projection == scene.projection &&
+            std::memcmp(current.to_clip, scene.to_clip, sizeof(scene.to_clip)) == 0) {
+            return;
+        }
+    }
+    list.scene = static_cast<int32_t>(list.scenes.size());
+    list.scenes.push_back(scene);
+    list.target_scenes[g.record_target] = list.scene;
+}
+
 bool CoversLogicalFrame(const LogicalRect &rect) {
     return rect.x <= 0.0f && rect.y <= 0.0f && rect.x + rect.w >= kLogicalWidth &&
            rect.y + rect.h >= kLogicalHeight;
@@ -402,7 +429,106 @@ struct Overrides {
     std::vector<MeshConstants>         constants;
     std::vector<int32_t>               vertex_index; // per record, into vertices, or -1
     std::vector<std::vector<Vertex3D>> vertices;
+    // The 3D sprites whose scene's camera moved, as the interpolated camera sees them.
+    std::unordered_map<const Draw2DEntry *, std::vector<Vertex2D>> sprites;
 };
+
+bool Invert(const Mat4 &m, Mat4 &out) {
+    double a[4][8];
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            a[r][c] = m[c * 4 + r];
+            a[r][c + 4] = r == c ? 1.0 : 0.0;
+        }
+    }
+    for (int column = 0; column < 4; column++) {
+        int pivot = column;
+        for (int r = column + 1; r < 4; r++) {
+            if (std::fabs(a[r][column]) > std::fabs(a[pivot][column])) {
+                pivot = r;
+            }
+        }
+        if (std::fabs(a[pivot][column]) < 1e-30) {
+            return false;
+        }
+        std::swap(a[pivot], a[column]);
+        double scale = 1.0 / a[column][column];
+        for (int c = 0; c < 8; c++) {
+            a[column][c] *= scale;
+        }
+        for (int r = 0; r < 4; r++) {
+            if (r == column) {
+                continue;
+            }
+            double factor = a[r][column];
+            for (int c = 0; c < 8; c++) {
+                a[r][c] -= factor * a[column][c];
+            }
+        }
+    }
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            out[c * 4 + r] = static_cast<float>(a[r][c + 4]);
+        }
+    }
+    return true;
+}
+
+// A 3D sprite is recorded as the screen corners the tick's camera gave it, so replayed as it is
+// it stands a tick ahead of the meshes a display render draws under the interpolated camera: a
+// torch's flame and glow shake against the torch whenever the camera moves. Its corners are taken
+// back through the tick's camera to where they stood in the world and seen again from the
+// interpolated one. A corner that falls behind that camera leaves the sprite as recorded.
+bool MoveSprite(const Draw2DEntry &sprite, const SpriteScene &scene, const Mat4 &carry,
+                std::vector<Vertex2D> &out) {
+    out = sprite.vertices;
+    for (Vertex2D &vertex : out) {
+        const float in[4] = {vertex.x * scene.to_clip[0] + scene.to_clip[2],
+                             vertex.y * scene.to_clip[1] + scene.to_clip[3], vertex.z, 1.0f};
+        float       clip[4];
+        for (int r = 0; r < 4; r++) {
+            clip[r] = carry[0 * 4 + r] * in[0] + carry[1 * 4 + r] * in[1] + carry[2 * 4 + r] * in[2] +
+                      carry[3 * 4 + r] * in[3];
+        }
+        if (!(clip[3] > 1e-6f) || !std::isfinite(clip[0]) || !std::isfinite(clip[1]) || !std::isfinite(clip[2])) {
+            return false;
+        }
+        vertex.x = (clip[0] / clip[3] - scene.to_clip[2]) / scene.to_clip[0];
+        vertex.y = (clip[1] / clip[3] - scene.to_clip[3]) / scene.to_clip[1];
+        vertex.z = clip[2] / clip[3];
+    }
+    return true;
+}
+
+void MoveSprites(const DisplayList &list, const std::vector<Mat4> &views, const std::vector<bool> &moved,
+                 Overrides &out) {
+    std::vector<Mat4> carry(list.scenes.size());
+    std::vector<int>  state(list.scenes.size(), 0);
+    for (const Entry &entry : list.entries) {
+        const Draw2DEntry *sprite = std::get_if<Draw2DEntry>(&entry);
+        if (sprite == nullptr || sprite->scene < 0) {
+            continue;
+        }
+        const SpriteScene &scene = list.scenes[sprite->scene];
+        if (!moved[scene.camera]) {
+            continue;
+        }
+        if (state[sprite->scene] == 0) {
+            Mat4 unproject;
+            Mat4 place;
+            state[sprite->scene] = -1;
+            if (Invert(scene.projection, unproject) && InvertAffine(list.cameras[scene.camera], place)) {
+                carry[sprite->scene] = Multiply(Multiply(scene.projection, views[scene.camera]),
+                                                Multiply(place, unproject));
+                state[sprite->scene] = 1;
+            }
+        }
+        std::vector<Vertex2D> vertices;
+        if (state[sprite->scene] == 1 && MoveSprite(*sprite, scene, carry[sprite->scene], vertices)) {
+            out.sprites.emplace(sprite, std::move(vertices));
+        }
+    }
+}
 
 void Interpolated(const DisplayList &list, const DisplayList &previous, float alpha, Overrides &out) {
     if (list.cache.previous_serial != previous.serial) {
@@ -419,6 +545,8 @@ void Interpolated(const DisplayList &list, const DisplayList &previous, float al
             moved[i] = InterpolateView(previous.cameras[before], list.cameras[i], alpha, views[i]);
         }
     }
+
+    MoveSprites(list, views, moved, out);
 
     out.index.assign(list.records.size(), -1);
     out.constants.clear();
@@ -582,9 +710,10 @@ TextureBinding GrabbedBinding(const TextureBinding &binding, bool canonical) {
     return out;
 }
 
-void Replay(const DisplayList &list, bool canonical, const Overrides *overrides) {
+void Replay(const DisplayList &list, bool canonical, const Overrides *overrides, bool host = false) {
     g.replaying = true;
     g.quiet = !canonical;
+    g.host_draws = host;
     if (!canonical) {
         ResetGrabTwins();
     }
@@ -593,7 +722,13 @@ void Replay(const DisplayList &list, bool canonical, const Overrides *overrides)
             [&](const auto &e) {
                 using T = std::decay_t<decltype(e)>;
                 if constexpr (std::is_same_v<T, Draw2DEntry>) {
-                    Draw2DSided(e.primitive, e.vertices, GrabbedBinding(e.binding, canonical), e.state, e.side);
+                    const std::vector<Vertex2D> *vertices = &e.vertices;
+                    if (overrides != nullptr) {
+                        if (auto it = overrides->sprites.find(&e); it != overrides->sprites.end()) {
+                            vertices = &it->second;
+                        }
+                    }
+                    Draw2DSided(e.primitive, *vertices, GrabbedBinding(e.binding, canonical), e.state, e.side);
                 } else if constexpr (std::is_same_v<T, MeshEntry>) {
                     const MeshConstants *constants = &e.constants;
                     if (overrides != nullptr && overrides->index[e.record] >= 0) {
@@ -639,6 +774,7 @@ void Replay(const DisplayList &list, bool canonical, const Overrides *overrides)
     }
     g.replaying = false;
     g.quiet = false;
+    g.host_draws = false;
 }
 
 } // namespace
@@ -693,8 +829,14 @@ bool RecordingCalls() { return g.list != nullptr; }
 
 void RecordEntry(Entry &&entry) {
     DisplayList &list = *g.list;
-    if (std::holds_alternative<Draw2DEntry>(entry)) {
+    if (Draw2DEntry *draw = std::get_if<Draw2DEntry>(&entry)) {
         NoteMainDraw(list);
+        if (draw->state.depth_test != DepthTest::Always) {
+            draw->scene = list.scene;
+        }
+    } else if (const TargetEntry *target = std::get_if<TargetEntry>(&entry)) {
+        auto it = list.target_scenes.find(target->target);
+        list.scene = it != list.target_scenes.end() ? it->second : -1;
     }
     list.entries.push_back(std::move(entry));
 }
@@ -717,6 +859,7 @@ void RecordMesh(MeshEntry &&entry, const MeshTransform *transform) {
         record.model = ToMat4(transform->model);
         record.local = ToMat4(transform->local);
         record.camera = CameraIndex(list, transform->view);
+        NoteScene(list, record);
     }
     entry.record = static_cast<uint32_t>(list.records.size());
     record.entry = static_cast<uint32_t>(list.entries.size());
@@ -848,10 +991,10 @@ bool RenderList(const DisplayList &list, float alpha, const RenderOptions &optio
     if (!OpenListFrame(false, options.present, list.needs_base)) {
         return false;
     }
-    Replay(list, false, interpolate ? &overrides : nullptr);
+    Replay(list, false, interpolate ? &overrides : nullptr, options.host);
     if (options.overlay != nullptr && options.overlay->instance == g.renderer_instance) {
         SetRenderTarget(kMainTarget);
-        Replay(*options.overlay, false, nullptr);
+        Replay(*options.overlay, false, nullptr, true);
     }
     CloseListFrame(false, options.present);
     return true;

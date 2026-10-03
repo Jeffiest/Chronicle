@@ -241,6 +241,9 @@ struct TextureBinding {
     Filter        filter = Filter::Linear;
     Wrap          wrap_u = Wrap::Clamp;
     Wrap          wrap_v = Wrap::Clamp;
+    // GS TEX0 TCC 0: the texture gives colour only and its alpha is DrawState's TEXA, as for a
+    // texture without alpha.
+    bool ignore_alpha = false;
 };
 
 // GS ALPHA: ((A - B) * C >> 7) + D. A, B, D: 0 source, 1 destination, 2 zero. C: 0 source
@@ -388,6 +391,10 @@ enum MeshFlags : uint32_t {
     kMeshShadow = 1u << 3,
     kMeshClip0 = 1u << 4,
     kMeshClip1 = 1u << 5,
+    // The texture is an image of the target (the same pixels, sides included): a vertex samples it
+    // where the vertex itself lands, and Vertex3D::uv is an offset from there in the image's
+    // normalised units. A display render's interpolated camera moves the sample with the vertex.
+    kMeshScreenUv = 1u << 6,
 };
 
 // Matches the std140 block in shaders/mesh.vert. Colours are modulations with 1.0 as GS 0x80.
@@ -552,6 +559,9 @@ struct RenderOptions {
     // Display renders: drawn over the list, as recorded, on kMainTarget, before the result is
     // presented (a host overlay). Never part of a canonical image.
     const DisplayList *overlay = nullptr;
+    // Display renders: the list is the host's own 2D, as an overlay always is, so the full-frame
+    // rule carries none of it past the logical frame.
+    bool host = false;
 };
 
 // False when nothing was rendered: the list belongs to another renderer, a frame is open, or a

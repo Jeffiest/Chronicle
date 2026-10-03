@@ -51,7 +51,8 @@ float MGPortTargetRowScale(gfx::TextureHandle target);
 void MGPortWorldToClip(float clip[4][4]);
 
 // Whether a texture name the game registers is one of its frame grabs ("frame_image",
-// "frame_buff" and their kin), which gfx keeps at the window's aspect (gfx::CreateRenderTarget).
+// "frame_buff" and their kin, and the water's "water" and "water_buff"), which gfx keeps at the
+// window's aspect (gfx::CreateRenderTarget).
 bool MGPortFrameTarget(std::string_view name);
 
 // MGMoveFrameBuffImage of the last finished frame, for a grab made before the tick has drawn:

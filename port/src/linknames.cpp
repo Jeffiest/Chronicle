@@ -26,9 +26,6 @@
 #include "water.hpp"
 
 #define PORT_LINK_NAME __attribute__((weak))
-#define PORT_STRINGIFY2(x) #x
-#define PORT_STRINGIFY(x) PORT_STRINGIFY2(x)
-#define PORT_ASM_NAME(name) PORT_STRINGIFY(__USER_LABEL_PREFIX__) #name
 
 // The literals, as the PAL executable has them.
 PORT_LINK_NAME char       BtAtraShortCharaFile[] = "dun/mainchara/c01d_ex00.chr";
@@ -102,7 +99,7 @@ PORT_LINK_NAME void set2DSprite(sceVif1Packet *packet, CTexture *texture, const 
 // op_c.cpp types CWater itself and calls DrawVu1 with a u_long128 * last; the member's mangled
 // name is defined as a function taking the object first, which is how the member is called.
 PORT_LINK_NAME void OpeningWaterDrawVu1(CWater *water, RenderInfo *info, sceVif1Packet *packet,
-                                        u_long128 *parent) asm("_ZN6CWater7DrawVu1EP10RenderInfoP13sceVif1PacketPo");
+                                        u_long128 *parent) asm(PORT_ASM_NAME(_ZN6CWater7DrawVu1EP10RenderInfoP13sceVif1PacketPo));
 
 void OpeningWaterDrawVu1(CWater *water, RenderInfo *info, sceVif1Packet *packet, u_long128 *parent) {
     DrawVu1__6CWaterFP10RenderInfoP13sceVif1PacketP1(water, info, packet, parent);

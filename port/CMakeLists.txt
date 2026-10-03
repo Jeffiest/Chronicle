@@ -108,6 +108,9 @@ add_library(dc_ps2 OBJECT ${PS2_UNITS})
 target_link_libraries(dc_ps2 PRIVATE dc_options)
 if(APPLE)
     target_compile_options(dc_ps2 PRIVATE "SHELL:-Xclang -fsemantic-interposition" -fno-inline-functions)
+    set_property(SOURCE ${PS2_DIR}/title/op_a.cpp ${PS2_DIR}/title/op_b.cpp ${PS2_DIR}/title/op_c.cpp
+        ${PS2_DIR}/title/rushmovi.cpp
+        APPEND PROPERTY COMPILE_OPTIONS -fno-zero-initialized-in-bss)
 else()
     target_compile_options(dc_ps2 PRIVATE -fPIC -fsemantic-interposition)
 endif()

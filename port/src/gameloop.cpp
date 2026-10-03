@@ -133,7 +133,7 @@ bool DisplayFrame(float alpha, bool present) {
 // The canonical image as it is, or a display render of the overlay alone, which starts from it.
 bool PresentCanonicalFrame() {
     const gfx::DisplayList *overlay = FpsOverlayList();
-    bool                    shown = overlay != nullptr ? gfx::RenderList(*overlay, 1.0f, {.present = true})
+    bool                    shown = overlay != nullptr ? gfx::RenderList(*overlay, 1.0f, {.present = true, .host = true})
                                                        : gfx::PresentCanonical();
     if (shown) {
         NotePresented();

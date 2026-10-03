@@ -391,6 +391,38 @@ TEST(DecoupleList, PreviousFrameFeedbackIsTickExact) {
     ASSERT_TRUE(fixture.Pixel(448, 240)[0] > 0x10 && fixture.Pixel(448, 240)[0] < 0x70);
 }
 
+// A grab of the frame drawn back over it (the depth of field's blur) shows the scene where the
+// display frame drew it, not where the tick did, and the grab the canonical render took is kept.
+TEST(DecoupleList, FrameGrabFollowsTheDisplayFrame) {
+    GfxFixture         fixture;
+    gfx::MeshHandle    mesh = Square();
+    gfx::TextureHandle grab = gfx::CreateRenderTarget(640, 480, false);
+    auto               tick = [&](float x) {
+        return Tick([&] {
+            gfx::SetInterpKey(11);
+            Draw(mesh, Translation(x, 0));
+            ASSERT_TRUE(gfx::SnapshotFrame(grab));
+            gfx::Clear(true, kBlack.data(), true, 0.0f);
+            gfx::TextureBinding binding;
+            binding.texture = grab;
+            auto quad = Quad(0, 0, 640, 480, {0x80, 0x80, 0x80, 0x80}, 0, 0, 640, 480);
+            gfx::Draw2D(gfx::Primitive::Quads, quad, binding, {});
+        });
+    };
+    gfx::DisplayListRef first = tick(-0.5f);
+    gfx::DisplayListRef second = tick(0.5f);
+    ASSERT_TRUE(gfx::PresentCanonical());
+    ASSERT_TRUE(gfx::ReadbackFrame(fixture.pixels, fixture.width, fixture.height));
+    ASSERT_TRUE(SquareAt(fixture, 480));
+    Display(fixture, second, first, 0.5f);
+    ASSERT_TRUE(SquareAt(fixture, 320));
+    Display(fixture, second, first, 0.0f);
+    ASSERT_TRUE(SquareAt(fixture, 160));
+    ASSERT_TRUE(gfx::ReadbackTexture(grab, fixture.pixels, fixture.width, fixture.height));
+    ASSERT_TRUE(SquareAt(fixture, 480));
+    gfx::DestroyTexture(grab);
+}
+
 // The canonical render of a list is the frame immediate drawing makes, and presenting it as it is
 // (interpolation off) shows exactly that.
 TEST(DecoupleList, CanonicalMatchesImmediate) {

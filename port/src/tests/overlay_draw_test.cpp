@@ -165,6 +165,30 @@ TEST(OverlayDraw, SitsInTheWindowCornerWhenPillarboxed) {
     ASSERT_TRUE(!Near(shown.At(4 + 1, 4), {0xFF, 0xFF, 0xFF}));
 }
 
+// The window's sides are the game's in the fill layout, and what reaches the logical frame's edge
+// there is carried to the window's. The counter is the host's: a glyph run lying on the frame's left
+// edge (the dash, from pixel 160) stays the run it is.
+TEST(OverlayDraw, IsNotCarriedPastTheFrameInTheFillLayout) {
+    GfxFixture fixture(960, 480);
+    gfx::SetFrameLayout({gfx::AspectMode::Fill, 1.0f});
+    ASSERT_TRUE(gfx::GetLogicalMapping(gfx::kMainTarget).offset_x == 160.0f);
+    gfx::DisplayListRef scene = SceneList();
+    ASSERT_TRUE(gfx::RenderList(*scene, 1.0f, {.canonical = true}));
+    gfx::DisplayListRef overlay = OverlayRecord("                          -");
+    ASSERT_TRUE(overlay != nullptr);
+
+    for (bool alone : {false, true}) {
+        ASSERT_TRUE(alone ? gfx::RenderList(*overlay, 1.0f, {.present = true, .host = true})
+                          : gfx::RenderList(*scene, 0.5f, {.present = true, .overlay = overlay.get()}));
+        Image shown;
+        ASSERT_TRUE(gfx::ReadbackFrame(shown.pixels, shown.width, shown.height));
+        ASSERT_TRUE(Near(shown.At(162, 4 + 3), {0xFF, 0xFF, 0xFF}));
+        ASSERT_TRUE(!Near(shown.At(159, 4 + 3), {0xFF, 0xFF, 0xFF}));
+        ASSERT_TRUE(!Near(shown.At(100, 4 + 3), {0xFF, 0xFF, 0xFF}));
+    }
+    gfx::SetFrameLayout({gfx::AspectMode::Letterbox, 1.0f});
+}
+
 TEST(OverlayDraw, FontAndPixelSize) {
     ASSERT_TRUE(OverlayGlyph(' ') == nullptr);
     ASSERT_TRUE(OverlayGlyph('a') == OverlayGlyph('A'));

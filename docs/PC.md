@@ -445,6 +445,12 @@ rate, with motion interpolated between ticks (`port/src/gfx/README.md`,
    share theirs) is matched place by place, not in draw order. A tick that did not wait, or presented nothing, presents its
    canonical image.
 
+A grab of the frame that the tick draws back (the depth of field's blur, the water)
+is taken again by each display frame from its own image, so it lines up with the
+interpolated scene; the game's texture keeps the tick's grab. A cloth is blended
+vertex by vertex unless one moved more than 10 units in the tick, which is where
+`CCloth::Step` stops simulating and carries the grid along.
+
 What a display frame does not interpolate: 2D (the HUD is tick-exact), 3D
 sprites (2D quads with depth), skinned poses, objects that moved more than
 `kDraw3DTeleportDistance` (200 units) in a tick, a camera that moved more than
@@ -590,17 +596,50 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   `EdDrawClock`, `port/src/editloop.cpp`). Menus, message windows, the Georama
   editor's panels and 2D placed from 3D projections stay in the frame.
 - **Frame grabs** (`frame_image`, `frame_buff` and the other `frame_*`
-  placeholders, `MGPortFrameTarget`) are as wide as the window, so what they
-  hold and draw back includes the sides; the canonical and display images are
-  the window's size. The game's other 640xN targets (`water`, `blender`,
-  `shadow_buf`) keep their size at the render scale.
+  placeholders, and the water's `water` and `water_buff`; `MGPortFrameTarget`)
+  are as wide as the window, so what they hold and draw back includes the
+  sides; the canonical and display images are the window's size. The game's
+  other 640xN targets (`blender`, `shadow_buf`) keep their size at the render
+  scale.
+- **Depth of field** (`DepthOfField`, `port/src/effectmacro.cpp`; the towns'
+  heat haze is its jittered second pass) is not retail's two shrunk copies of
+  the whole frame, which blurred whatever stood in front of a focus plane into
+  the scenery behind it and came back as blocks. Each pass blurs only what
+  lies beyond its own plane: the frame is drawn into a target sharing its
+  depth buffer under the plane's depth test (the rest stays transparent
+  black, so the image is premultiplied by its coverage), resized to half size
+  (and for the second pass to quarter size and back to half, which rounds the
+  texels off) and laid back in retail's bands, the frame first scaled down by
+  the image's coverage and the image then added. The images are as wide as
+  what the target shows, so the blur and the haze reach the window's edges;
+  the two outermost haze columns do not wander, which on the PS2 left a
+  ragged strip of the sharp frame in the overscan; `frame_image` is no longer
+  written.
+- **Water** (`port/src/water_draw.cpp`) refracts the frame at its own
+  resolution instead of the game's field copy, and only from where water
+  shows: a ripple's sample that lands on a bank or a character in front of the
+  water gives way to the pixel's own colour. `MGMoveImage` takes a whole
+  picture of the frame beside the game's copy (`Draw3DFramePicture`); the
+  surface is drawn flat into a target sharing the frame's depth buffer (what
+  the water covers), the rippled samples of that are laid over a second flat
+  drawing by their coverage, and the frame takes the result with the game's
+  colour and blend. Every sample is taken where the vertex lands
+  (`gfx::kMeshScreenUv`), so it follows a display render's camera and reaches
+  the window's sides. A surface drawn with no frame copy to hand, or into
+  another target, samples the game's copy as before.
+- **The title's backdrops** are built for the frame's width: the title
+  screen's sky model, its cloud (whose animation parks spheres just outside
+  the frame's sides; it is spread across, not enlarged) and the attract
+  movie's turning title card are drawn larger by as much as the view is wider
+  (`TitlePortBackdropScale`, `port/src/title/title_port.cpp`).
+- **The FPS counter** is the host's and is never carried past the frame
+  (`gfx::RenderOptions::host`).
 - **Game logic** is unchanged: `MGRotTransPers*` answer in retail's GS and
   logical coordinates, which land on the meshes through the same mapping (the
   dungeon's lock-on corners, the town's edit cursor and name tags).
 
 `aspect = 4:3` letterboxes everything as before, byte for byte. Known
-differences at other aspects: the water samples its 640-wide frame copy, so
-water seen past the 4:3 edge repeats the copy's edge column; game code that
+differences at other aspects: game code that
 drops 2D it projects outside 0..640 (effects, name tags) still does; at a
 `ui_scale` other than 1 the 2D the game places from 3D projections moves with
 the HUD.

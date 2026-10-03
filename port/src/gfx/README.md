@@ -53,7 +53,8 @@ else is internal. No game header is reachable from here: `platform/`, `gfx/` and
 - **Texture coordinates** in `Draw2D` are logical texels of the texture (its `TextureDesc` size,
   or its logical size for render targets, 640x480 for `kPreviousFrame`). In `Vertex3D` they are
   normalised.
-- **Meshes** draw over the whole target (not letterboxed). `MeshConstants::mvp` (column-major)
+- **Meshes** draw over the whole target (not letterboxed). With `kMeshScreenUv` a vertex samples
+  an image of the target where it lands itself, `Vertex3D::uv` an offset from there. `MeshConstants::mvp` (column-major)
   maps to Vulkan clip space: x right, y down, z/w in [0, 1] with **near at 1** (reverse-Z).
   Front faces are counter-clockwise as seen on the target with y down.
 - **Depth** is D32 float with an 8-bit stencil (`D32_SFLOAT_S8_UINT`; `D24_UNORM_S8_UINT` where
@@ -81,7 +82,10 @@ else is internal. No game header is reachable from here: `platform/`, `gfx/` and
     continued (so an image of the frame shows its own sides) and colour, fog and depth held at the
     edge. Fades, however tiled, full-frame fills and bands, the previous-frame feedback and frame
     grabs drawn back therefore reach the window's edges; HUD pieces (textured from ordinary
-    textures) and anything wholly outside the frame (the FPS counter in a bar) do not grow.
+    textures) and anything wholly outside the frame do not grow. Nothing of a host list is carried:
+    a display render's `options.overlay`, and the list itself with `options.host` (the FPS counter,
+    whose glyph runs would otherwise streak to the window's edge wherever one lies across the
+    frame's).
     A copy or blit between two images that show past their frames, whose rects cover both frames
     along an axis, copies them edge to edge along it.
   - **Frame targets** (`CreateRenderTarget(..., frame_target = true)`; the game's `frame_*` grabs)
@@ -256,8 +260,13 @@ renders one.
   buffer (the window's size). There `kMainTarget` is that image, `kPreviousFrame` the image the
   tick's canonical render sampled, and a target sharing the main depth shares that image's. Render
   targets are drawn again (the shadow volumes follow the interpolated models); textures the stateful
-  entries wrote (frame copies, water, texture animation, palette swaps) hold what the canonical
-  render left. With `options.present` it is presented and becomes what `ReadbackFrame` reads. A list
+  entries wrote (texture animation, palette swaps, uploads) hold what the canonical
+  render left. A grab of the frame is the exception: a copy or blit out of `kMainTarget`, or out
+  of a texture grabbed into earlier in the list, runs again from the display image into a twin of
+  its destination (the destination's contents with the grab laid over them), and the draws and
+  target changes that follow use the twin, so what is drawn back from the grab (the depth of
+  field's blurred bands, the water) lines up with the interpolated scene. The destination itself
+  keeps the canonical grab. With `options.present` it is presented and becomes what `ReadbackFrame` reads. A list
   that draws to the main target before clearing its logical frame starts from the canonical image.
   Display renders are refused once an immediate frame has followed the canonical render (the
   loading screen took the window). `options.overlay` names a second list whose drawing entries run
@@ -276,8 +285,12 @@ renders one.
   constants bit for bit. Not interpolated: draws without a transform or without a match, those tagged
   `no_interpolation` or whose model moved further than the tag's teleport distance, every draw of a
   list after `CutInterpolation()`, the views after `CutCameraInterpolation()`, non-affine or
-  singular matrices, and anything 2D, including 3D sprites (2D vertices with depth): they replay as
-  recorded. Vertex animation (skinning written with `UpdateMeshVertices`) shows the tick's pose.
+  singular matrices, and 2D that tests no depth: they replay as recorded. 2D that tests depth (a
+  3D sprite: a fire, its glow) is recorded as the screen corners the tick's camera gave it, so it
+  is carried to the interpolated camera instead: each corner goes back through the projection and
+  view of the last mesh drawn on its target to where it stood in the world, and is seen again from
+  the interpolated view. Without that a torch's flame stands a tick ahead of its torch in every
+  display frame while the camera moves. The sprite's own movement is not interpolated. Vertex animation (skinning written with `UpdateMeshVertices`) shows the tick's pose.
   A matched immediate mesh (`DrawMeshImmediate`) tagged `blend_vertices` in both ticks, with as
   many vertices as its predecessor, has them interpolated instead: positions lerped, normals lerped
   and normalised, unless one moved further than the teleport distance. The cloth asks for it: its

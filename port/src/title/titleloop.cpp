@@ -377,6 +377,7 @@ void TitleDraw() {
         }
 
         ObjectFrame3->SetRotation(rot[0], rot[1], rot[2]);
+        ObjectFrame3->SetScale(TitlePortBackdropScale(), 1.0f, TitlePortBackdropScale());
         MGDraw(ObjectFrame3);
     }
 
@@ -390,6 +391,7 @@ void TitleDraw() {
         }
 
         MGSetAmbient(ambient);
+        Cloud__2.SetScale(TitlePortBackdropScale(), 1.0f, 1.0f);
         Cloud__2.Draw();
     }
 

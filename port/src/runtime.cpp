@@ -22,6 +22,23 @@
     std::_Exit(kExitGameAssert);
 }
 
+// Retail's libc generator, in place of the host's. The game leans on its exact sequence: a fire
+// reseeds it every tick from a seed it drew the tick before (CFireOmni), so what follows in the
+// tick -- the title's lightning, the light a fire throws on a character -- repeats in a pattern
+// the generator decides. All 32 bits of the state come back but the sign.
+namespace {
+unsigned int g_rand_state = 1;
+}
+
+extern "C" void srand(unsigned int seed) noexcept {
+    g_rand_state = seed;
+}
+
+extern "C" int rand() noexcept {
+    g_rand_state = g_rand_state * 1103515245u + 12345u;
+    return static_cast<int>(g_rand_state & 0x7FFFFFFFu);
+}
+
 // The host runs the static constructors mwInit would have run.
 extern "C" void mwInit(int argc, const char **argv, const char **envp) {}
 

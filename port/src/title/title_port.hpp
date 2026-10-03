@@ -6,6 +6,8 @@
 
 #include "rect.hpp"
 
+class CTexture;
+
 // What the title replacement units share.
 
 // The previous frame drawn over the whole logical frame at alpha (0x80 opaque) through the current
@@ -21,6 +23,16 @@ struct TitleFogBand {
 
 // The fog's bands, softened as the PS2 softened them (see the definition).
 void TitlePortFog(std::span<const TitleFogBand> bands);
+
+// How much larger than retail's the title's backdrops are drawn (the title screen's sky model and
+// its cloud, whose animation keeps the spheres it is not showing just outside the frame's sides;
+// the attract movie's turning title card): they are built to fill the logical frame's width and
+// no more, so a target that shows past the frame takes them scaled by as much as the view is wider.
+float TitlePortBackdropScale();
+
+// The attract movie's title card: retail's 768-texel sprite turned by angle about the frame's
+// centre, at TitlePortBackdropScale.
+void TitlePortCard(CTexture *texture, float angle);
 
 // Constructs the title overlay's objects the port defines with host classes, as the overlay's
 // static constructors did each time retail loaded TITLE.BIN.

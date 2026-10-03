@@ -312,6 +312,8 @@ struct Context {
     bool                         display_pass = false;
     // Errors are reported by the canonical render; display renders of the same list stay quiet.
     bool  quiet = false;
+    // The list being replayed is the host's own 2D, which the full-frame rule leaves as drawn.
+    bool  host_draws = false;
     Image display_color;
     Image display_depth;
     // The newest main_color image is a canonical render no immediate frame has followed.

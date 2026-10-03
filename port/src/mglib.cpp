@@ -51,6 +51,8 @@ std::optional<int> g_pick_pending[16];
 
 gfx::TextureHandle  g_shadow_target = gfx::kNullTexture;
 gfx::TextureHandle  g_last_frame_copy = gfx::kNullTexture;
+unsigned            g_frame_copies = 0;
+gfx::TextureHandle  g_frame_picture = gfx::kNullTexture;
 gfx::TextureHandle  g_shadow_previous = gfx::kMainTarget;
 Draw3DShadowProgram g_shadow_program = Draw3DShadowProgram::Every;
 
@@ -159,6 +161,12 @@ bool IsFrame(const sceGsTex0 &tex0) {
 void Blit(const ResolvedRect &src, const ResolvedRect &dst, gfx::Filter filter) {
     if (src.texture == gfx::kMainTarget && dst.texture != gfx::kMainTarget) {
         g_last_frame_copy = dst.texture;
+        g_frame_copies++;
+        g_frame_picture = gfx::NamedRenderTarget("frame copy picture", static_cast<uint32_t>(gfx::kLogicalWidth),
+                                                 static_cast<uint32_t>(gfx::kLogicalHeight), false, false, true);
+        if (g_frame_picture != gfx::kNullTexture && !gfx::SnapshotFrame(g_frame_picture)) {
+            g_frame_picture = gfx::kNullTexture;
+        }
     }
     if (src.texture == dst.texture) {
         BlitWithin(src.texture, src.rect, dst.rect, filter);
@@ -281,6 +289,17 @@ gfx::TextureHandle Draw3DLastFrameCopy() {
     return g_last_frame_copy;
 }
 
+unsigned Draw3DFrameCopies() {
+    return g_frame_copies;
+}
+
+gfx::TextureHandle Draw3DFramePicture() {
+    if (g_frame_picture != gfx::kNullTexture && !gfx::GetTextureInfo(g_frame_picture)) {
+        g_frame_picture = gfx::kNullTexture;
+    }
+    return g_frame_picture;
+}
+
 bool Draw3DShadowTargetActive() {
     return g_shadow_target != gfx::kNullTexture;
 }
@@ -304,7 +323,8 @@ bool MGPortFrameTarget(std::string_view name) {
     while (name.starts_with('#')) {
         name.remove_prefix(1);
     }
-    return name.starts_with("frame_");
+    return name.starts_with("frame_") || name.starts_with("water_buff") || name == "water" ||
+           name.starts_with("water#");
 }
 
 void Draw3DMul(float out[4][4], const float a[4][4], const float b[4][4]) {
@@ -409,12 +429,15 @@ void Draw3DSceneConstants(gfx::MeshConstants &constants, const RenderInfo &info,
 }
 
 // The scene's ambient alpha is what the game fades models with (dungeonmap distance fades,
-// monster palette alpha), so it scales the material's opacity; 128 leaves it as it is.
+// monster palette alpha), so it scales the material's opacity; 128 leaves it as it is. Vu_prog0f
+// multiplies the ambient colour and every light by the material's first vector alone, so the
+// ambient light takes the diffuse colour; the second vector only tints the specular programs'
+// highlight and never scales the ambient (the cloth's is 0.3 under a diffuse of 1).
 void Draw3DMaterial(gfx::MeshConstants &constants, const RenderInfo &info, const float *diffuse,
                     const float *ambient, const float *specular) {
     for (int channel = 0; channel < 4; channel++) {
         constants.diffuse[channel] = diffuse[channel];
-        constants.ambient_material[channel] = ambient[channel];
+        constants.ambient_material[channel] = diffuse[channel];
         constants.specular[channel] = specular[channel];
     }
     constants.diffuse[3] = diffuse[3] * info.ambient[3] / 128.0f;

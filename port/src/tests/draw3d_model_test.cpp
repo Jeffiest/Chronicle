@@ -38,7 +38,7 @@ constexpr std::array<float, 4> kGreen = {0.0f, 1.0f, 0.0f, 1.0f};
 
 // A quad from (-10, -5) to (10, 5) at depth 100 projects to 320 +- 800 * 10 / 100 and
 // 240 +- 800 * 5 / 100: logical (240, 200) to (400, 280), the full-height frame of what retail's
-// field squeeze put on 120 field rows. The ambient-only light gives the material's ambient in
+// field squeeze put on 120 field rows. The ambient-only light gives the material's diffuse in
 // GS bytes, 0x80 per 1.0.
 TEST(Draw3dModel, LandsAtProjectedPixel) {
     Draw3DFixture fixture;

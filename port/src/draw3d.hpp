@@ -38,6 +38,11 @@ PortTextureRef Draw3DResolveHandle(int handle);
 // The texture the game last copied the frame into (MGMoveImage, MGStretchMoveImage), if it is
 // still alive: the water samples it, as retail's "work" aliased the copy's VRAM.
 gfx::TextureHandle Draw3DLastFrameCopy();
+// How many times the game has copied the frame with MGMoveImage, and the frame as it stood at the
+// last of them, whole and at the frame's own resolution (the game's copy is a field, half its
+// rows): what the water refracts.
+unsigned           Draw3DFrameCopies();
+gfx::TextureHandle Draw3DFramePicture();
 
 // Shadow passes 1 and 2 draw only between MGBeginDrawShadow and MGEndDrawShadow, into the target
 // the former picked; with no target they are dropped rather than brightening the frame.
@@ -96,7 +101,8 @@ private:
     bool           no_interpolation_;
 };
 
-// What SetMaterial uploaded: diffuse (alpha in w), ambient and specular.
+// What SetMaterial uploaded: diffuse (alpha in w), ambient and specular. The diffuse colours the
+// ambient light as well as the lights, as VU1 lit with it; ambient is not used.
 void Draw3DMaterial(gfx::MeshConstants &constants, const RenderInfo &info, const float *diffuse,
                     const float *ambient, const float *specular);
 // Current registers, PRMODE.ABE on, the window scissor on the current target, fog when asked.

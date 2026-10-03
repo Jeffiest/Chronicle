@@ -56,6 +56,27 @@ TEST(TailADof, DepthOfFieldFirstPassAlpha) {
     ASSERT_TRUE(fixture.PixelNear(100, 300, 200, 0, 0));
 }
 
+// What stands nearer than the focus planes stays out of the blur: beside a near red half, the far
+// blue half takes no red, right up to the edge between them.
+TEST(TailADof, DepthOfFieldKeepsNearColourOutOfTheBlur) {
+    TailAFixture fixture;
+    fixture.Placeholders({"#frame_image#640#480#4"});
+    float focus[4] = {200.0f, 500.0f, 0.0f, 0.0f};
+
+    fixture.Frame([&] {
+        Stripes(0.0f, 0.0f, 640.0f, 480.0f, Rgba(0, 0, 200), Rgba(0, 0, 200));
+        Stripes(0.0f, 0.0f, 320.0f, 480.0f, Rgba(200, 0, 0), Rgba(200, 0, 0));
+        uint8_t          unused[4] = {};
+        gfx::LogicalRect near = {0.0f, 0.0f, 320.0f, 480.0f};
+        gfx::Clear(false, unused, true, 1.0f, &near);
+        DepthOfField(focus, 3, 0x80, 0);
+    });
+    for (uint32_t x : {320u, 322u, 326u, 334u}) {
+        ASSERT_TRUE(fixture.PixelNear(x, 100, 0, 0, 200, 4));
+    }
+    ASSERT_TRUE(fixture.PixelNear(318, 100, 200, 0, 0));
+}
+
 // A focus plane beyond everything drawn leaves the whole frame sharp.
 TEST(TailADof, DepthOfFieldFarFocusLeavesFrame) {
     TailAFixture fixture;

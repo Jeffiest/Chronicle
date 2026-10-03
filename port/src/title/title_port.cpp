@@ -9,6 +9,7 @@
 #include <cmath>
 
 #include "draw2d_port.hpp"
+#include "draw3d.hpp"
 #include "mglib.hpp"
 #include "rect.hpp"
 #include "snd.hpp"
@@ -116,6 +117,15 @@ void TitlePortFog(std::span<const TitleFogBand> bands) {
         }
     }
     draw2d::RestoreTestZbuf();
+}
+
+float TitlePortBackdropScale() {
+    return std::max(1.0f, Draw3DVisibleExtent().half_width / (gfx::kLogicalWidth * 0.5f));
+}
+
+void TitlePortCard(CTexture *texture, float angle) {
+    draw2d::TurnedSprite(texture, CRect_i_(320, 224, 768, 768), CRect_i_(0, 0, 768, 768), 384, 384, angle,
+                         TitlePortBackdropScale());
 }
 
 void set2DSprite(sceVif1Packet *packet, CTexture *texture, const CRect<int> &screen, const CRect<int> &texel,

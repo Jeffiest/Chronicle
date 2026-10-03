@@ -8,6 +8,7 @@
 #include "texture_port.hpp"
 
 class CTexture;
+class CRect_i_;
 
 // Shared by the 2D replacement units (snd, gameutil_sprite, clsmes, spritetable, dispctrl,
 // editloop_sprite): sprite state, texture resolution and the mapping into the current target.
@@ -59,5 +60,9 @@ gfx::Vertex2D Vertex(float x, float y, float z, float u, float v, u_char r, u_ch
 void DrawTextured(gfx::Primitive primitive, std::span<gfx::Vertex2D> vertices, u_long tex0, u_long tex1,
                   gfx::DrawState state);
 void DrawUntextured(gfx::Primitive primitive, std::span<gfx::Vertex2D> vertices, const gfx::DrawState &state);
+
+// set2DSprite's turned sprite with its corners scale times as far from where the pivot lands.
+void TurnedSprite(CTexture *texture, const CRect_i_ &screen, const CRect_i_ &texel, int pivot_x, int pivot_y,
+                  float angle, float scale);
 
 } // namespace draw2d

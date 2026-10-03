@@ -21,7 +21,7 @@ namespace dc::test {
 
 // The game's renderer state on a headless window: MGInit, an unbounded clock, retail's
 // MGSetRenderInfo(800, 10, 65535), an identity camera (x right, y down, z forward), no
-// directional light and a full ambient, so a lit material shows its ambient colour.
+// directional light and a full ambient, so a lit material shows its diffuse colour.
 struct Draw3DFixture : GfxFixture {
     explicit Draw3DFixture(int width = 640, int height = 480) : GfxFixture(width, height) {
         MGInit();
@@ -69,10 +69,9 @@ struct MdtBuilder {
     std::vector<MDT_MATERIAL> materials;
     std::vector<Strip>        strips;
 
-    int Material(std::array<float, 4> ambient, const char *texture = "", std::array<float, 4> diffuse = {1, 1, 1, 1}) {
+    int Material(std::array<float, 4> diffuse, const char *texture = "") {
         MDT_MATERIAL material = {};
         std::memcpy(material.diffuse, diffuse.data(), sizeof(material.diffuse));
-        std::memcpy(material.ambient, ambient.data(), sizeof(material.ambient));
         std::strncpy(material.texture, texture, sizeof(material.texture) - 1);
         materials.push_back(material);
         return static_cast<int>(materials.size()) - 1;

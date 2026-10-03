@@ -1,7 +1,10 @@
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <span>
 #include <unordered_map>
+#include <vector>
 
 #include "dataalloc.hpp"
 #include "dataset.hpp"
@@ -92,6 +95,64 @@ void UvScale(const Draw3DStrip &strip, float &su, float &sv) {
     }
     if (texture->height > 0) {
         sv = static_cast<float>(1u << th) / static_cast<float>(texture->height);
+    }
+}
+
+struct TextureRun {
+    uint32_t first_vertex;
+    uint32_t count;
+    int      texture;
+};
+
+// The models map a texture that tiles from one texel inside its near edge to two inside its far
+// one (1 to size - 2), so the GS's clamp never filters past an edge. Where two such panels meet,
+// the texels left out are a step in the picture: the title's sky dome repeats its clouds every
+// quarter turn and shows the joints. A texture whose coordinates span exactly that range along an
+// axis is given edge to edge along it, texel centre to texel centre, which is where it tiles.
+void SpanWholeTexture(Draw3DVisual &visual, std::span<const TextureRun> runs) {
+    for (size_t r = 0; r < runs.size(); r++) {
+        int texture = runs[r].texture;
+        if (texture < 0) {
+            continue;
+        }
+        bool earlier = false;
+        for (size_t k = 0; k < r; k++) {
+            earlier = earlier || runs[k].texture == texture;
+        }
+        if (earlier) {
+            continue;
+        }
+        const CTexture *info = TexManager.GetTexture(texture);
+        const float     size[2] = {static_cast<float>(info->width), static_cast<float>(info->height)};
+        float           low[2] = {INFINITY, INFINITY};
+        float           high[2] = {-INFINITY, -INFINITY};
+        for (const TextureRun &run : runs) {
+            if (run.texture != texture) {
+                continue;
+            }
+            for (uint32_t i = run.first_vertex; i < run.first_vertex + run.count; i++) {
+                for (int axis = 0; axis < 2; axis++) {
+                    low[axis] = std::min(low[axis], visual.vertices[i].uv[axis] * size[axis]);
+                    high[axis] = std::max(high[axis], visual.vertices[i].uv[axis] * size[axis]);
+                }
+            }
+        }
+        for (int axis = 0; axis < 2; axis++) {
+            if (size[axis] < 8.0f || std::fabs(low[axis] - 1.0f) > 0.01f ||
+                std::fabs(high[axis] - (size[axis] - 2.0f)) > 0.01f) {
+                continue;
+            }
+            const float scale = (size[axis] - 1.0f) / (size[axis] - 3.0f);
+            for (const TextureRun &run : runs) {
+                if (run.texture != texture) {
+                    continue;
+                }
+                for (uint32_t i = run.first_vertex; i < run.first_vertex + run.count; i++) {
+                    float &uv = visual.vertices[i].uv[axis];
+                    uv = ((uv * size[axis] - 1.0f) * scale + 0.5f) / size[axis];
+                }
+            }
+        }
     }
 }
 
@@ -277,7 +338,8 @@ int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int
     MdtView       view = View(data);
     visual.vertex_colour = view.colour != nullptr;
 
-    Draw3DStrip current;
+    Draw3DStrip             current;
+    std::vector<TextureRun> runs;
     u_int      *index = view.strip;
     for (int s = 0; s < view.strips; s++) {
         uint32_t count = index[1];
@@ -309,6 +371,7 @@ int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int
             }
             visual.vertices.push_back(vertex);
         }
+        runs.push_back({first_vertex, count, current.texture});
 
         Draw3DStrip strip = current;
         strip.first_index = static_cast<uint32_t>(visual.indices.size());
@@ -323,6 +386,7 @@ int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int
         visual.strips.push_back(strip);
     }
 
+    SpanWholeTexture(visual, runs);
     Draw3DFinishVisual(visual);
     return vu_size;
 }

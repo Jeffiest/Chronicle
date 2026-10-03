@@ -18,7 +18,7 @@ in, so the implementing agents verify, against the Mesa source they build, every
 item marked **[verify]**. The items below were since read from `mesa-26.2.4`
 (the tag `scripts/host/mesa-macos.sh` pins) through the GitHub mirror
 `FireBurn/mesa` (`gitlab.freedesktop.org`, `docs.mesa3d.org` and the
-`Mesa3D/mesa` mirror were not reachable); `docs/MACOS.md` has the details.
+`Mesa3D/mesa` mirror were not reachable).
 Source-read is not run: what only a Mac can show stays **[verify]**.
 
 - **[verified: 1.4]** The Vulkan API version KosmicKrisp reports (1.3, or 1.4 in a
@@ -86,7 +86,7 @@ alternative that may happen to work through the same loader.
 
 | Area | File | Linux assumption | macOS answer |
 |---|---|---|---|
-| Arenas | `port/src/dataset.cpp` | `mmap(MAP_32BIT)` keeps arenas below 2 GiB so the game's `(int)` pointer casts survive; `madvise(MADV_DONTNEED)` zeroes | No `MAP_32BIT`. ~~Shrink `__PAGEZERO` (`-Wl,-pagezero_size,0x1000`) and map with a hint address~~: **not possible on arm64**. XNU refuses to exec a 64-bit arm64 image whose page zero is under 4 GiB (`mach_loader.c`, macOS 13 to 26), so nothing maps below 4 GiB; see `docs/MACOS.md`, "The 4 GiB page zero". Only an x86_64 build under Rosetta can (`DC_MACOS_PAGEZERO_SIZE`, default `0x1000` there) |
+| Arenas | `port/src/dataset.cpp` | `mmap(MAP_32BIT)` keeps arenas below 2 GiB so the game's `(int)` pointer casts survive; `madvise(MADV_DONTNEED)` zeroes | No `MAP_32BIT`. ~~Shrink `__PAGEZERO` (`-Wl,-pagezero_size,0x1000`) and map with a hint address~~: **not possible on arm64**. XNU refuses to exec a 64-bit arm64 image whose page zero is under 4 GiB (`mach_loader.c`, macOS 13 to 26), so nothing maps below 4 GiB. Only an x86_64 build under Rosetta can (`DC_MACOS_PAGEZERO_SIZE`, default `0x1000` there) |
 | Executable path | `port/src/platform/paths.cpp` | `/proc/self/exe` | `_NSGetExecutablePath` + `realpath` |
 | Executable layout | `port/CMakeLists.txt` | `-no-pie` keeps `.data`/`.bss` below 4 GiB | arm64 macOS is PIE-only, loads images above 4 GiB and forbids low mappings; nothing may depend on a 32-bit round trip (section 3) |
 | Weakening | `port/CMakeLists.txt` | `ld.lld -r` then `llvm-objcopy --weaken` on ELF | Apple's `ld -r` (`ld64.lld` has no `-r`); `llvm-objcopy --weaken` on Mach-O **[verified]** with LLVM 20 on an arm64 object (sets `N_WEAK_DEF`, leaves references alone). `tools/weaken` writes the same bytes and is selectable with `DC_MACHO_WEAKEN=tool` |

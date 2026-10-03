@@ -59,3 +59,7 @@ AGENTS.md
 /build-dir/
 /repo/
 /chronicle.flatpak
+
+# MacOS
+.DS_Store
+

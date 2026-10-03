@@ -290,7 +290,14 @@ renders one.
   is carried to the interpolated camera instead: each corner goes back through the projection and
   view of the last mesh drawn on its target to where it stood in the world, and is seen again from
   the interpolated view. Without that a torch's flame stands a tick ahead of its torch in every
-  display frame while the camera moves. The sprite's own movement is not interpolated. Vertex animation (skinning written with `UpdateMeshVertices`) shows the tick's pose.
+  display frame while the camera moves. The sprite's own movement is not interpolated.
+  Vertex animation (skinning written with `UpdateMeshVertices`) is interpolated too: the rewrite a
+  matched draw's mesh took this tick is blended with the one its match's mesh took in the previous
+  tick (the game keeps a mesh per display buffer, so the two differ), positions lerped and normals
+  lerped and normalised, unless a vertex moved further than the draw's teleport distance. The mesh
+  holds the tick's pose again when the display render ends. Left in the tick's pose, a skinned body
+  stood ahead of what hangs from it by matrices or vertices of its own (a weapon, the cloth) by
+  what was left of the tick, every display frame.
   A matched immediate mesh (`DrawMeshImmediate`) tagged `blend_vertices` in both ticks, with as
   many vertices as its predecessor, has them interpolated instead: positions lerped, normals lerped
   and normalised, unless one moved further than the teleport distance. The cloth asks for it: its

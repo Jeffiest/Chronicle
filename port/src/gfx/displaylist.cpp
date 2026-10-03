@@ -431,6 +431,9 @@ struct Overrides {
     std::vector<std::vector<Vertex3D>> vertices;
     // The 3D sprites whose scene's camera moved, as the interpolated camera sees them.
     std::unordered_map<const Draw2DEntry *, std::vector<Vertex2D>> sprites;
+    // The vertex rewrites of meshes a matched draw uses (skinning), between the previous tick's
+    // rewrite and this one's.
+    std::unordered_map<const UpdateMeshEntry *, std::vector<Vertex3D>> poses;
 };
 
 bool Invert(const Mat4 &m, Mat4 &out) {
@@ -530,6 +533,66 @@ void MoveSprites(const DisplayList &list, const std::vector<Mat4> &views, const 
     }
 }
 
+// The last rewrite of each mesh's vertices in a list.
+std::unordered_map<MeshHandle, const UpdateMeshEntry *> LastPoses(const DisplayList &list) {
+    std::unordered_map<MeshHandle, const UpdateMeshEntry *> poses;
+    for (const Entry &entry : list.entries) {
+        if (const UpdateMeshEntry *update = std::get_if<UpdateMeshEntry>(&entry)) {
+            poses[update->mesh] = update;
+        }
+    }
+    return poses;
+}
+
+// A skinned mesh is rewritten every tick in its model's space and drawn under the model's matrix.
+// The matrix is interpolated, and so is everything that hangs from the body by a matrix or vertices
+// of its own (a weapon in the hand, the cloth), so a body left in the tick's pose stands ahead of
+// them by what is left of the tick: the cloth cuts through it and the hand leaves the weapon, the
+// further the faster the pose changes. The rewrite a matched draw's mesh took is blended with the
+// one its match's mesh took in the previous tick (the two are different meshes where the game keeps
+// a buffer per display buffer), unless a vertex moved further than the draw's teleport distance.
+void PosesBetween(const DisplayList &list, const DisplayList &previous, float alpha, Overrides &out) {
+    std::unordered_map<MeshHandle, const UpdateMeshEntry *> now = LastPoses(list);
+    if (now.empty()) {
+        return;
+    }
+    std::unordered_map<MeshHandle, const UpdateMeshEntry *> before = LastPoses(previous);
+    const MatchCache                                       &cache = list.cache;
+    for (size_t i = 0; i < list.records.size(); i++) {
+        const MeshRecord &record = list.records[i];
+        int32_t           match = cache.match[i];
+        if (match < 0) {
+            continue;
+        }
+        const MeshEntry &drawn = std::get<MeshEntry>(list.entries[record.entry]);
+        auto             pose = drawn.mesh != kNullMesh ? now.find(drawn.mesh) : now.end();
+        if (pose == now.end() || out.poses.contains(pose->second)) {
+            continue;
+        }
+        const MeshEntry &earlier = std::get<MeshEntry>(previous.entries[previous.records[match].entry]);
+        auto             old = before.find(earlier.mesh);
+        if (old == before.end() || old->second->first != pose->second->first ||
+            old->second->vertices.size() != pose->second->vertices.size()) {
+            continue;
+        }
+        const std::vector<Vertex3D> &a = old->second->vertices;
+        const std::vector<Vertex3D> &b = pose->second->vertices;
+        bool                         same = true;
+        bool                         teleported = false;
+        for (size_t v = 0; v < b.size() && !teleported; v++) {
+            float dx = b[v].position[0] - a[v].position[0];
+            float dy = b[v].position[1] - a[v].position[1];
+            float dz = b[v].position[2] - a[v].position[2];
+            same = same && dx == 0.0f && dy == 0.0f && dz == 0.0f;
+            teleported = std::sqrt(dx * dx + dy * dy + dz * dz) > record.teleport_distance;
+        }
+        if (same || teleported) {
+            continue;
+        }
+        BlendVertices(a, b, alpha, out.poses[pose->second]);
+    }
+}
+
 void Interpolated(const DisplayList &list, const DisplayList &previous, float alpha, Overrides &out) {
     if (list.cache.previous_serial != previous.serial) {
         BuildMatches(list, previous);
@@ -606,6 +669,8 @@ void Interpolated(const DisplayList &list, const DisplayList &previous, float al
         out.index[mesh->record] = static_cast<int32_t>(out.constants.size());
         out.constants.push_back(constants);
     }
+
+    PosesBetween(list, previous, alpha, out);
 }
 
 // A grab of the frame (a copy or blit out of the main target) is taken by the canonical render at
@@ -768,9 +833,21 @@ void Replay(const DisplayList &list, bool canonical, const Overrides *overrides,
                     }
                 } else if constexpr (std::is_same_v<T, CopyEntry>) {
                     GrabAgain(e);
+                } else if constexpr (std::is_same_v<T, UpdateMeshEntry>) {
+                    if (overrides != nullptr) {
+                        if (auto pose = overrides->poses.find(&e); pose != overrides->poses.end()) {
+                            UpdateMeshVertices(e.mesh, e.first, pose->second);
+                        }
+                    }
                 }
             },
             entry);
+    }
+    // The meshes hold the tick's pose again for whoever draws them next.
+    if (!canonical && overrides != nullptr) {
+        for (const auto &[update, pose] : overrides->poses) {
+            UpdateMeshVertices(update->mesh, update->first, update->vertices);
+        }
     }
     g.replaying = false;
     g.quiet = false;

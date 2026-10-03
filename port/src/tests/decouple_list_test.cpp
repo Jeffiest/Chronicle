@@ -157,6 +157,61 @@ TEST(DecoupleList, MeshInterpolatesBetweenTicks) {
     ASSERT_TRUE(SquareAt(fixture, 480));
 }
 
+// A skinned mesh is rewritten each tick and drawn under one matrix, and the game keeps a mesh per
+// display buffer: the pose a display frame shows lies between the rewrite the previous tick's mesh
+// took and this tick's, and the mesh holds this tick's again afterwards.
+TEST(DecoupleList, RewrittenMeshVerticesInterpolate) {
+    GfxFixture      fixture;
+    gfx::MeshHandle meshes[2] = {Square(), Square()};
+    auto            pose = [](float x) {
+        std::array<gfx::Vertex3D, 4> vertices = {};
+        float                        corners[4][2] = {
+            {-0.1f, -0.1f},
+            {0.1f,  -0.1f},
+            {0.1f,  0.1f },
+            {-0.1f, 0.1f }
+        };
+        for (int i = 0; i < 4; i++) {
+            vertices[i].position[0] = corners[i][0] + x;
+            vertices[i].position[1] = corners[i][1];
+            vertices[i].position[2] = 0.5f;
+            vertices[i].normal[2] = -1.0f;
+            for (uint8_t &c : vertices[i].color) {
+                c = 0x80;
+            }
+        }
+        return vertices;
+    };
+    gfx::DisplayListRef first = Tick([&] {
+        gfx::UpdateMeshVertices(meshes[0], 0, pose(-0.5f));
+        gfx::SetInterpKey(7);
+        Draw(meshes[0], kIdentity);
+    });
+    gfx::DisplayListRef second = Tick([&] {
+        gfx::UpdateMeshVertices(meshes[1], 0, pose(0.5f));
+        gfx::SetInterpKey(7);
+        Draw(meshes[1], kIdentity);
+    });
+    Display(fixture, second, first, 0.5f);
+    ASSERT_TRUE(SquareAt(fixture, 320));
+    Display(fixture, second, first, 0.25f);
+    ASSERT_TRUE(SquareAt(fixture, 240));
+    Display(fixture, second, nullptr, 0.5f);
+    ASSERT_TRUE(SquareAt(fixture, 480));
+    Display(fixture, second, first, 1.0f);
+    ASSERT_TRUE(SquareAt(fixture, 480));
+
+    // A pose further away than the draw's teleport distance is a cut, shown as the tick has it.
+    gfx::DisplayListRef third = Tick([&] {
+        gfx::UpdateMeshVertices(meshes[0], 0, pose(-0.5f));
+        gfx::SetInterpKey(7, false, 0.5f);
+        Draw(meshes[0], kIdentity);
+    });
+    Display(fixture, third, second, 0.5f);
+    ASSERT_TRUE(SquareAt(fixture, 160));
+    gfx::SetInterpKey(0);
+}
+
 // One key drawn at several places (a town's tiles share a frame): when culling drops the first
 // place and brings a new one in, each place is matched with itself, not with the draw that had its
 // position in the order, and a place that moves a step is still interpolated.

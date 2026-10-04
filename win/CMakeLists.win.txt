@@ -1,0 +1,141 @@
+# Windows-native (MinGW ABI, llvm-mingw clang/lld) build of the Chronicle PC port, generated tree.
+# Adapted from port/CMakeLists.txt: no `ld -r` + `llvm-objcopy --weaken` (unsupported on COFF). Instead every ps2/src unit is
+# compiled through win/weakcc.py, which marks its externally visible definitions weak before optimisation, so port/src's
+# strong definitions win at link time and the compiler cannot fold calls to them.
+cmake_minimum_required(VERSION 3.20)
+project(dcdecomp_win NONE)
+enable_language(CXX)
+
+set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(DEPS_ROOT "E:/Chronicle-project-Claude/win-deps" CACHE PATH "Where SDL3 was unpacked")
+set(SDL3_ROOT "${DEPS_ROOT}/SDL3-3.4.18" CACHE PATH "SDL3 VC development package")
+if(NOT DEFINED ENV{VULKAN_SDK})
+    message(FATAL_ERROR "VULKAN_SDK is not set (install the LunarG Vulkan SDK)")
+endif()
+set(VULKAN_ROOT "$ENV{VULKAN_SDK}")
+
+# SDL3 and Vulkan through their import libraries (lld links MSVC-style .lib files).
+add_library(SDL3::SDL3 SHARED IMPORTED)
+set_target_properties(SDL3::SDL3 PROPERTIES
+    IMPORTED_LOCATION "${SDL3_ROOT}/lib/x64/SDL3.dll"
+    IMPORTED_IMPLIB "${SDL3_ROOT}/lib/x64/SDL3.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${SDL3_ROOT}/include")
+add_library(Vulkan::Vulkan SHARED IMPORTED)
+set_target_properties(Vulkan::Vulkan PROPERTIES
+    IMPORTED_LOCATION "$ENV{SystemRoot}/System32/vulkan-1.dll"
+    IMPORTED_IMPLIB "${VULKAN_ROOT}/Lib/vulkan-1.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_ROOT}/Include")
+
+include(FetchContent)
+FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    FIND_PACKAGE_ARGS CONFIG)
+FetchContent_MakeAvailable(nlohmann_json)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_program(GLSLANG_VALIDATOR NAMES glslangValidator HINTS "${VULKAN_ROOT}/Bin" REQUIRED)
+
+set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
+set(PORT_DIR ${CMAKE_SOURCE_DIR}/port/src)
+file(GLOB_RECURSE PS2_SOURCES CONFIGURE_DEPENDS RELATIVE ${PS2_DIR} ${PS2_DIR}/*.cpp)
+file(GLOB_RECURSE PORT_SOURCES CONFIGURE_DEPENDS ${PORT_DIR}/*.cpp)
+list(FILTER PS2_SOURCES EXCLUDE REGEX "(^|/)tmp[^/]*$")
+
+set(PS2_UNITS "")
+foreach(unit IN LISTS PS2_SOURCES)
+    list(APPEND PS2_UNITS ${PS2_DIR}/${unit})
+    string(REGEX REPLACE "\\.cpp$" ".hpp" header ${CMAKE_SOURCE_DIR}/port/include/stubs/${unit})
+    if(EXISTS ${header})
+        set_property(SOURCE ${PS2_DIR}/${unit} APPEND PROPERTY COMPILE_OPTIONS -include ${header})
+        set_property(SOURCE ${PS2_DIR}/${unit} APPEND PROPERTY OBJECT_DEPENDS ${header})
+    endif()
+endforeach()
+
+add_library(dc_options INTERFACE)
+target_compile_definitions(dc_options INTERFACE PORT PAL)
+target_include_directories(dc_options INTERFACE
+    ${CMAKE_SOURCE_DIR}/port/include ${CMAKE_SOURCE_DIR}/ps2/include ${CMAKE_SOURCE_DIR}/ps2/include/sce)
+target_compile_options(dc_options INTERFACE
+    "SHELL:-include ${CMAKE_SOURCE_DIR}/port/include/port.h"
+    -fms-extensions -ffunction-sections -fdata-sections
+    -Wno-register -Wno-c++11-narrowing -Wno-return-mismatch -ffp-contract=off)
+
+# ps2/src through the weakening launcher
+add_library(dc_ps2 OBJECT ${PS2_UNITS})
+target_link_libraries(dc_ps2 PRIVATE dc_options)
+set_target_properties(dc_ps2 PROPERTIES
+    RULE_LAUNCH_COMPILE "${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/win/weakcc.py")
+target_compile_options(dc_ps2 PRIVATE -fwritable-strings -Wno-writable-strings -ftrivial-auto-var-init=zero -fno-strict-return
+    -fno-strict-aliasing -fwrapv)
+target_compile_options(dc_ps2 PRIVATE -Wall -Wno-writable-strings -Wno-unknown-pragmas
+    -Wno-mismatched-tags -Wno-missing-braces -Wno-char-subscripts -Wno-overloaded-virtual
+    -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-int-to-void-pointer-cast
+    -Wno-void-pointer-to-int-cast -Wno-unused-variable -Wno-unused-but-set-variable
+    -Wno-unused-local-typedef -Wno-unused-label -Wno-unused-function -Wno-unused-value
+    -Wno-unused-const-variable -Wno-undefined-internal -Wno-self-assign -Wno-deprecated-volatile)
+
+set(PORT_LIB_SOURCES ${PORT_SOURCES})
+list(FILTER PORT_LIB_SOURCES EXCLUDE REGEX "/main\\.cpp$")
+set(HOST_SOURCES ${PORT_LIB_SOURCES})
+list(FILTER HOST_SOURCES INCLUDE REGEX "/port/src/(platform|gfx|audio)/")
+list(FILTER PORT_LIB_SOURCES EXCLUDE REGEX "/port/src/(platform|gfx|audio)/")
+
+set(SHADER_DIR ${PORT_DIR}/gfx/shaders)
+set(SHADER_HEADER_DIR ${CMAKE_BINARY_DIR}/generated)
+file(GLOB SHADER_SOURCES CONFIGURE_DEPENDS ${SHADER_DIR}/*.vert ${SHADER_DIR}/*.frag)
+set(SHADER_HEADERS "")
+foreach(shader IN LISTS SHADER_SOURCES)
+    get_filename_component(shader_name ${shader} NAME)
+    string(REPLACE "." "_" shader_symbol ${shader_name})
+    set(header ${SHADER_HEADER_DIR}/shaders/${shader_name}.spv.hpp)
+    add_custom_command(OUTPUT ${header}
+        COMMAND ${GLSLANG_VALIDATOR} -V --target-env vulkan1.4 --quiet --vn ${shader_symbol}
+            --depfile ${header}.d -o ${header} ${shader}
+        DEPENDS ${shader}
+        DEPFILE ${header}.d
+        COMMENT "Compiling ${shader_name} to SPIR-V")
+    list(APPEND SHADER_HEADERS ${header})
+endforeach()
+
+add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
+target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
+target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
+target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections)
+
+add_library(dc_port OBJECT ${PORT_LIB_SOURCES})
+target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
+target_include_directories(dc_port PRIVATE ${PORT_DIR})
+target_compile_options(dc_port PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label
+    -Wno-overloaded-virtual -Wno-unused-function)
+
+# Port objects first, then the weakened game: a strong port definition wins in either order.
+add_executable(darkcloud ${PORT_DIR}/main.cpp
+    $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_host> $<TARGET_OBJECTS:dc_ps2>)
+set_target_properties(darkcloud PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+target_link_libraries(darkcloud PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
+target_include_directories(darkcloud PRIVATE ${PORT_DIR})
+target_compile_options(darkcloud PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label
+    -Wno-overloaded-virtual -Wno-unused-function)
+# -static: libc++/libunwind inside the exe (only SDL3.dll beside it).
+# lld's MinGW driver accepts Windows-style options: /alternatename replaces upstream's three --defsym aliases
+# (ItemPutListTbl12_bytes, draw_rect, WorkBuffer__2). /force:unresolved is needed because the weak game bodies that port/src
+# replaces stay in the image and still reference SDK functions nobody defines (sceCd*, sceSif*, Generated*); lld-link
+# reports those even when garbage-collected. win/link_report.py checks that every such reference sits in a replaced body
+# (".weak.*.default") and flags any other, which would be a real missing symbol.
+target_link_options(darkcloud PRIVATE -fuse-ld=lld -static -Wl,--gc-sections -Wl,--error-limit=0
+    -Wl,/force:unresolved
+    -Wl,/alternatename:ItemPutListTbl12_bytes=ItemPutListTbl12
+    -Wl,/alternatename:draw_rect=draw_rect_store
+    -Wl,/alternatename:WorkBuffer__2=WorkBuffer)
+add_custom_command(TARGET darkcloud POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL3_ROOT}/lib/x64/SDL3.dll" $<TARGET_FILE_DIR:darkcloud>)
+
+# The disc extractor (dcdata extract <iso>), optional: not part of the default build.
+add_executable(dcdata EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tools/dcdata/main.cpp)
+set_target_properties(dcdata PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+target_link_options(dcdata PRIVATE -fuse-ld=lld -static)

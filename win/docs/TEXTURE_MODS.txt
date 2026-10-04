@@ -1,0 +1,19 @@
+TEXTURE MODS
+============
+1. Find what to replace: run  .\run_win.ps1 -DumpTextures  and play to the screen you want.
+   Every texture the game loads is written to  mods\_dump\<game file>\<texture name>.png
+   and listed in mods\_dump\textures.csv (game file, name, size, bits, block).
+   Item icons and models live under folders like dun\item\main_data\ - browse the dump like the game's own folders.
+
+2. Make your mod: create  mods\<your mod>\textures\  and copy in the PNGs you want to change.
+   - Keep the file NAME the same as the dump (atwind.png). It then replaces every texture with that name.
+   - To replace it only when it comes from one game file, keep the folders from the dump:
+       mods\<your mod>\textures\dun\item\main_data\atwind.img\<texture name>.png
+   - Folders are just for organising; a PNG in any subfolder still matches by file name.
+
+3. Run the game normally. The console prints "mods: replaced texture <name>".
+
+Notes
+- Your PNG is scaled to the size of the original, so keep the same aspect ratio. Alpha is respected.
+- Mods load in alphabetical order; a later mod wins. A folder starting with "_" is skipped.
+- Put {"enabled": false} in mods\<your mod>\mod.json to switch a mod off.

@@ -668,6 +668,12 @@ share small internal headers:
   placeholder names (`#name#w#h#bpp`) become named render targets; texture
   animation and CLUT swaps are copies. The loading screen draws from the
   idle hook, never inside a frame the game has open.
+  `CleanUpTextureList` does not compact the table: a native visual holds a
+  table index where retail's packet holds a baked TEX0, so entries stay put
+  and a reloaded block fills the first available holes rather than being
+  appended after compaction. A name lookup across all blocks, which prefers
+  the highest entry, can therefore pick differently from retail when two
+  live blocks share a texture name.
 - **`draw2d_port.hpp`** (`snd.cpp`, `gameutil_sprite.cpp`, `clsmes.cpp`,
   `spritetable.cpp`, `dispctrl.cpp`, `editloop_sprite.cpp`): the sprite
   primitives, `SetClut`, message windows, sprite tables and the debug font
@@ -1001,7 +1007,10 @@ renames what the unit takes from MWCC or from the PS2 link alone:
   (`Ps2Lvalue`, `port/include/port.h`): MWCC binds a temporary to the non-const
   references of `DrawMenuColorGradation` and `CEditGround::CheckPartsRect`.
 - `editloop3` gives its static `EdSetVillagerNextPos` a global forwarder,
-  `PortEdSetVillagerNextPos`, for the port's `EdMoveVillager`.
+  `PortEdSetVillagerNextPos`, for the port's `EdMoveVillager`, and declares
+  its static `EdEventScript` `extern` first, for the port's `EdRunEvent`
+  (`port/src/runscript.cpp`): retail's has no return statement and leaves
+  `CRunScript::run`'s result in `v0` for `EdEventInit`.
 - `main` gets an overload of `LoadFileMenuData` for a `const char *`: one call
   names its file with a comma expression ending in a string literal.
 - `mathutil` gets the Metrowerks runtime's own `std::exception` and
@@ -1057,8 +1066,10 @@ linker script rather than through the source. The port reproduces each:
   `MAP_NPC_MODEL::operator=`: weak definitions and forwarders in
   `port/src/linknames.cpp`.
 - **Aliases**, by `--defsym` (ld64's `-alias` on macOS) in
-  `port/CMakeLists.txt`: `ItemPutListTbl12_bytes` = `ItemPutListTbl12`,
-  `draw_rect` = `draw_rect_store` and `WorkBuffer__2` = `WorkBuffer`.
+  `port/CMakeLists.txt`: `draw_rect` = `draw_rect_store` and
+  `WorkBuffer__2` = `WorkBuffer`. `ItemPutListTbl12_bytes` is not an alias:
+  `port/include/stubs/dngstatusdata.hpp` turns `GetItem`'s folded PS2 byte
+  index into a typed `WeaponList` owner lookup.
   `EditGaijiTbl` is `GaijiDataTbl + 0x601C` on the PS2 link. The linker
   script places it inside `EditPartsData`, but the codes `clsmes.cpp`
   indexes it with (-0x300 and up) only ever land on the last word of a

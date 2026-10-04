@@ -88,6 +88,10 @@ PATCHES = [
     ('port/src/texture.cpp', '            return;\n        }\n        tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);',
      '            return;\n        }\n        { bool idx = decoded.format == gfx::TextureFormat::Index8; ModsTextureHook(name, bpp, block, decoded.width, decoded.height, idx, decoded.has_alpha, decoded.four_bit, decoded.palette.data(), decoded.levels); if (!idx) decoded.format = gfx::TextureFormat::Rgba8; }\n        tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);'),
     ('port/src/dataread.cpp', '#include "platform/paths.hpp"', '#include "platform/paths.hpp"\n#include "platform/mods.hpp"'),
+    # Mod framework phases 3/4: Lua scripts + native plugins.
+    ('port/src/gameloop.cpp', '#include "gameloop.hpp"\n\n#include <algorithm>', '#include "gameloop.hpp"\n#include "script.hpp"\n\n#include <algorithm>'),
+    ('port/src/gameloop.cpp', 'void GameRenderTick(gfx::DisplayListRef list) {\n', 'void GameRenderTick(gfx::DisplayListRef list) {\n    ScriptTick();\n'),
+    ('ps2/src/dngstatusdata.cpp', '    printf("GetITEM No === %d\\n", item_id);\n', '    void ScriptItemPickup(int *, int *);\n    ScriptItemPickup(&item_id, &qty);\n    printf("GetITEM No === %d\\n", item_id);\n'),
     ('port/src/dataread.cpp', 'int LoadFile2(char *path, void *buffer, int *out_size, int mode) {\n    if (out_size) {',
      'int LoadFile2(char *path, void *buffer, int *out_size, int mode) {\n    ModsNoteFile(path);\n    if (out_size) {'),
 ]
@@ -131,6 +135,9 @@ def main():
     shutil.copy(WIN / 'crash_win.cpp', DST / 'port/src/platform/crash_win.cpp')
     shutil.copy(WIN / 'mods_win.cpp', DST / 'port/src/platform/mods.cpp')
     shutil.copy(WIN / 'mods.hpp', DST / 'port/src/platform/mods.hpp')
+    shutil.copy(WIN / 'script_win.cpp', DST / 'port/src/script.cpp')
+    shutil.copy(WIN / 'script.hpp', DST / 'port/src/script.hpp')
+    shutil.copy(WIN / 'mod_api.h', DST / 'port/src/mod_api.h')
     shutil.copy(WIN / 'setup_win.cpp', DST / 'port/src/platform/setup.cpp')
     shutil.copy(WIN / 'CMakeLists.win.txt', DST / 'CMakeLists.txt')
     (DST / 'win').mkdir(parents=True, exist_ok=True)

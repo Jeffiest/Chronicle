@@ -107,15 +107,36 @@ target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
 target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
 target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections)
 
+# Lua 5.4 (optional): source from setup_lua.ps1, compiled as C++, without io/os/debug/package libraries.
+file(GLOB LUA_SRC_DIRS "${DEPS_ROOT}/lua-5.4*/src")
+set(LUA_OBJECTS "")
+if(LUA_SRC_DIRS)
+    list(SORT LUA_SRC_DIRS)
+    list(GET LUA_SRC_DIRS -1 LUA_SRC_DIR)
+    file(GLOB LUA_SOURCES "${LUA_SRC_DIR}/*.c")
+    list(FILTER LUA_SOURCES EXCLUDE REGEX "/(lua|luac|linit|liolib|loslib|ldblib|loadlib)\\.c$")
+    set_source_files_properties(${LUA_SOURCES} PROPERTIES LANGUAGE CXX)
+    add_library(dc_lua OBJECT ${LUA_SOURCES})
+    target_compile_options(dc_lua PRIVATE -w)
+    set(LUA_OBJECTS $<TARGET_OBJECTS:dc_lua>)
+    message(STATUS "Lua scripting enabled (${LUA_SRC_DIR})")
+else()
+    message(STATUS "Lua not found in ${DEPS_ROOT}: scripting disabled (run setup_lua.ps1)")
+endif()
+
 add_library(dc_port OBJECT ${PORT_LIB_SOURCES})
-target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
+target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
 target_include_directories(dc_port PRIVATE ${PORT_DIR})
+if(LUA_SRC_DIRS)
+    target_include_directories(dc_port PRIVATE ${LUA_SRC_DIR})
+    target_compile_definitions(dc_port PRIVATE DC_HAVE_LUA)
+endif()
 target_compile_options(dc_port PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label
     -Wno-overloaded-virtual -Wno-unused-function)
 
 # Port objects first, then the weakened game: a strong port definition wins in either order.
 add_executable(darkcloud ${PORT_DIR}/main.cpp
-    $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_host> $<TARGET_OBJECTS:dc_ps2>)
+    $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_host> $<TARGET_OBJECTS:dc_ps2> ${LUA_OBJECTS})
 set_target_properties(darkcloud PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_link_libraries(darkcloud PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
 target_include_directories(darkcloud PRIVATE ${PORT_DIR})

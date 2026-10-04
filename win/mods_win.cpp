@@ -39,6 +39,7 @@ struct State {
     std::map<std::string, std::string> by_stem;   // folded texture name -> png path (utf-8)
     std::map<std::string, std::string> by_scoped; // folded "<game file>/<name>" -> png path
     std::set<std::string>              dumped;
+    std::set<std::string>              dumped_names;
     std::string                        last_file;
     int                                replaced = 0;
 };
@@ -185,6 +186,17 @@ void Dump(const char *name, int bpp, int block, unsigned width, unsigned height,
     if (surface != nullptr) {
         SDL_SavePNG(surface, Utf8(file).c_str());
         SDL_DestroySurface(surface);
+    }
+    // One flat copy per texture name: a mod file named after the texture replaces it wherever the game loads it.
+    if (g.dumped_names.insert(Fold(name)).second) {
+        fs::path flat = g.root / "_dump" / "by_name";
+        fs::create_directories(flat, error);
+        SDL_Surface *copy = SDL_CreateSurfaceFrom(static_cast<int>(width), static_cast<int>(height), SDL_PIXELFORMAT_RGBA32,
+                                                  rgba.data(), static_cast<int>(width) * 4);
+        if (copy != nullptr) {
+            SDL_SavePNG(copy, Utf8(flat / (std::string(name) + ".png")).c_str());
+            SDL_DestroySurface(copy);
+        }
     }
     std::ofstream index(g.root / "_dump" / "textures.csv", std::ios::app);
     index << source << ',' << name << ',' << width << 'x' << height << ',' << bpp << ',' << block << '\n';

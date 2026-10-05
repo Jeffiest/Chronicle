@@ -10,6 +10,7 @@
 #include "clsmes.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 #include "frame.hpp"
 #include "framevu1.hpp"
 #include "gamepad.hpp"
@@ -176,7 +177,8 @@ PC_OVERRIDE void OpeningInit() {
     OP_MainCamera.SetSpeed(0.0f);
     MGSetRenderInfo(800.0f, 6.0f, 65535);
     wait_now_loading_vsync();
-    CScript__2.Load("opdat/opening.pal");
+    // Both discs carry the NTSC timing of the script; opening.pal is PAL's 50 Hz retiming of it.
+    CScript__2.Load("opdat/opening.scr");
     wait_now_loading_vsync();
     LoadMessage();
     wait_now_loading_vsync();
@@ -223,28 +225,54 @@ static void LoadMessage() {
     Mes1.grow_x = 310;
     Mes1.grow_y = 210;
 
-    switch (LanguageCode) {
-        case LANG_JAPANESE:
-            LoadFile("opdat/optext_0.mes", MesBuffer, 0);
-            break;
-        case LANG_ENGLISH_US:
-            LoadFile("opdat/optext_1.mes", MesBuffer, 0);
-            break;
-        case LANG_ENGLISH_UK:
-            LoadFile("opdat/optext_2.mes", MesBuffer, 0);
-            break;
-        case LANG_FRENCH:
-            LoadFile("opdat/optext_3.mes", MesBuffer, 0);
-            break;
-        case LANG_GERMAN:
-            LoadFile("opdat/optext_4.mes", MesBuffer, 0);
-            break;
-        case LANG_ITALIAN:
-            LoadFile("opdat/optext_5.mes", MesBuffer, 0);
-            break;
-        case LANG_SPANISH:
-            LoadFile("opdat/optext_6.mes", MesBuffer, 0);
-            break;
+    if (PortNtscData()) {
+        switch (LanguageCode) {
+            case LANG_JAPANESE:
+                LoadFile("opdat/fconv.bin", MesBuffer, 0);
+                break;
+            case LANG_ENGLISH_US:
+                LoadFile("opdat/usa/fconv.bin", MesBuffer, 0);
+                break;
+            case LANG_ENGLISH_UK:
+                LoadFile("opdat/usa/fconv.bin", MesBuffer, 0);
+                break;
+            case LANG_FRENCH:
+                LoadFile("opdat/optext_3.mes", MesBuffer, 0);
+                break;
+            case LANG_GERMAN:
+                LoadFile("opdat/optext_4.mes", MesBuffer, 0);
+                break;
+            case LANG_ITALIAN:
+                LoadFile("opdat/optext_5.mes", MesBuffer, 0);
+                break;
+            case LANG_SPANISH:
+                LoadFile("opdat/usa/fconv.bin", MesBuffer, 0);
+                break;
+        }
+    } else {
+        switch (LanguageCode) {
+            case LANG_JAPANESE:
+                LoadFile("opdat/optext_0.mes", MesBuffer, 0);
+                break;
+            case LANG_ENGLISH_US:
+                LoadFile("opdat/optext_1.mes", MesBuffer, 0);
+                break;
+            case LANG_ENGLISH_UK:
+                LoadFile("opdat/optext_2.mes", MesBuffer, 0);
+                break;
+            case LANG_FRENCH:
+                LoadFile("opdat/optext_3.mes", MesBuffer, 0);
+                break;
+            case LANG_GERMAN:
+                LoadFile("opdat/optext_4.mes", MesBuffer, 0);
+                break;
+            case LANG_ITALIAN:
+                LoadFile("opdat/optext_5.mes", MesBuffer, 0);
+                break;
+            case LANG_SPANISH:
+                LoadFile("opdat/optext_6.mes", MesBuffer, 0);
+                break;
+        }
     }
 
     Mes1.buff = (short *) MesBuffer;
@@ -696,7 +724,7 @@ static void WaitKeyProcess() {
  * @unknownret
  */
 static void MotionProcess() {
-    // PAL runs at 50 frames a second, so its fade speeds are raised by a fifth.
+    // Faded at the 60 Hz rate.
     switch (CScript__2.fade) {
         case TSFADE_IN_BLACK:
             DispFade.FadeInStart(CScript__2.fade_speed, 0);
@@ -957,28 +985,32 @@ static void DrawProcess() {
         MGFillBox(CRect<int>(0, 0, 10240, SCREEN_HEIGHT * 8), 0, 0, 0, 64);
         TexManager.ReloadTexture(Vif1Packet, 19);
 
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
-            case LANG_ENGLISH_US:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
-            case LANG_ENGLISH_UK:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
-            case LANG_FRENCH:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_f", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
-            case LANG_GERMAN:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_g", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
-            case LANG_ITALIAN:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_i", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
-            case LANG_SPANISH:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_s", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
-                break;
+        if (PortNtscData()) {
+            set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+        } else {
+            switch (LanguageCode) {
+                case LANG_JAPANESE:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+                case LANG_ENGLISH_US:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+                case LANG_ENGLISH_UK:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+                case LANG_FRENCH:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_f", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+                case LANG_GERMAN:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_g", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+                case LANG_ITALIAN:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_i", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+                case LANG_SPANISH:
+                    set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_s", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                    break;
+            }
         }
 
         setbilinear(1);

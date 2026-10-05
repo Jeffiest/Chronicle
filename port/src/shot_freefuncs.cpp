@@ -48,7 +48,8 @@ PC_OVERRIDE void setItemToReserved(char *page_name, int x, int y, char *item_nam
     MoveImageTest(Vif1Packet, sbp, sbw, 0x13, CRect_i_(x, y, 0x20, 0x20), dbp, dbw, 0x13, dsax, dsay, 0);
 }
 
-// Retail's but for the life and weapon bars' fills, PAL's branch only.
+// Retail's but for the life and weapon bars' fills, PAL's branch but for the floor number in the top
+// right, which draws where NTSC's does: under the plate's "Floor", level with the last floor's mark.
 PC_OVERRIDE void topStatusInfo(int y, int selected_item, int floor) {
     int       alpha;
     CTexture *icons;
@@ -260,10 +261,10 @@ PC_OVERRIDE void topStatusInfo(int y, int selected_item, int floor) {
         }
 
         if (floor + 1 >= 10) {
-            set2DSprite(Vif1Packet, frame, CRect_i_(x - 4, y + 0xA, 0xE, 0x11), CRect_i_((floor + 1) / 10 * 12, 0x9E, 0xC, 0x12));
+            set2DSprite(Vif1Packet, frame, CRect_i_(x - 4, y + 0x12, 0xE, 0x11), CRect_i_((floor + 1) / 10 * 12, 0x9E, 0xC, 0x12));
         }
 
-        set2DSprite(Vif1Packet, frame, CRect_i_(x + 9, y + 0xA, 0xE, 0x11), CRect_i_((floor + 1) % 10 * 12, 0x9E, 0xC, 0x12));
+        set2DSprite(Vif1Packet, frame, CRect_i_(x + 9, y + 0x12, 0xE, 0x11), CRect_i_((floor + 1) % 10 * 12, 0x9E, 0xC, 0x12));
     }
 
     selected_item *= 40;

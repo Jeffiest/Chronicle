@@ -142,9 +142,6 @@ PC_OVERRIDE void InitCDFile() {
 }
 
 bool PortNtscData() {
-    if (!data_indexed) {
-        InitCDFile();
-    }
     return data_ntsc;
 }
 

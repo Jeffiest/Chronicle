@@ -312,6 +312,7 @@ PC_OVERRIDE int RushLoop() {
  * @unknownret
  */
 static void MotionProcess() {
+    // Faded at the 60 Hz rate.
     switch (CScript.fade) {
         case TSFADE_IN_BLACK:
             DispFade.FadeInStart(CScript.fade_speed, 0);

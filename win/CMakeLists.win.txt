@@ -138,7 +138,7 @@ target_compile_options(dc_port PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-la
 add_executable(darkcloud ${PORT_DIR}/main.cpp
     $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_host> $<TARGET_OBJECTS:dc_ps2> ${LUA_OBJECTS})
 set_target_properties(darkcloud PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-target_link_libraries(darkcloud PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
+target_link_libraries(darkcloud PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan ws2_32)
 target_include_directories(darkcloud PRIVATE ${PORT_DIR})
 target_compile_options(darkcloud PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label
     -Wno-overloaded-virtual -Wno-unused-function)

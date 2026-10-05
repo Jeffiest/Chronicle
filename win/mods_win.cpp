@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -131,14 +132,7 @@ void Init() {
         }
         return;
     }
-    std::vector<fs::path> mods;
-    for (const auto &entry : fs::directory_iterator(g.root, error)) {
-        std::string name = Utf8(entry.path().filename());
-        if (entry.is_directory(error) && !name.empty() && name[0] != '_' && name[0] != '.') {
-            mods.push_back(entry.path());
-        }
-    }
-    std::sort(mods.begin(), mods.end(), [](const fs::path &a, const fs::path &b) { return Fold(Utf8(a)) < Fold(Utf8(b)); });
+    std::vector<fs::path> mods = ModsLoadOrder(g.root);
     for (const fs::path &mod : mods) {
         if (!ModEnabled(mod)) {
             std::fprintf(stderr, "mods: %s is disabled\n", Utf8(mod.filename()).c_str());
@@ -202,7 +196,194 @@ void Dump(const char *name, int bpp, int block, unsigned width, unsigned height,
     index << source << ',' << name << ',' << width << 'x' << height << ',' << bpp << ',' << block << '\n';
 }
 
+
+// ---- Multiplayer colours -----------------------------------------------------------------------------------------------------
+bool g_local_tunic_blue = false;
+
+// Pixels that are clearly orange/red/yellow (the poncho) are turned to blue; shading and saturation are kept.
+void ShiftToBlue(uint8_t *px) {
+    float r = px[0] / 255.0f, gr = px[1] / 255.0f, b = px[2] / 255.0f;
+    float mx = std::max({r, gr, b}), mn = std::min({r, gr, b});
+    float d = mx - mn;
+    float s = mx > 0.0f ? d / mx : 0.0f;
+    if (s < 0.3f || mx < 0.2f || d <= 0.0f) {
+        return;
+    }
+    float h;
+    if (mx == r) {
+        h = 60.0f * std::fmod((gr - b) / d, 6.0f);
+    } else if (mx == gr) {
+        h = 60.0f * ((b - r) / d + 2.0f);
+    } else {
+        h = 60.0f * ((r - gr) / d + 4.0f);
+    }
+    if (h < 0.0f) {
+        h += 360.0f;
+    }
+    if (h > 55.0f && h < 345.0f) {
+        return; // not poncho-coloured
+    }
+    float rel = h <= 55.0f ? h - 30.0f : h - 390.0f;
+    float nh = 215.0f + rel * 0.4f;
+    float c = mx * s;
+    float x = c * (1.0f - std::fabs(std::fmod(nh / 60.0f, 2.0f) - 1.0f));
+    float m0 = mx - c;
+    float nr = 0, ng = 0, nb = 0;
+    if (nh < 180.0f)      { nr = 0; ng = x; nb = c; }
+    else if (nh < 240.0f) { nr = 0; ng = x; nb = c; }
+    else                  { nr = x; ng = 0; nb = c; }
+    px[0] = static_cast<uint8_t>(std::clamp((nr + m0) * 255.0f, 0.0f, 255.0f));
+    px[1] = static_cast<uint8_t>(std::clamp((ng + m0) * 255.0f, 0.0f, 255.0f));
+    px[2] = static_cast<uint8_t>(std::clamp((nb + m0) * 255.0f, 0.0f, 255.0f));
+}
+
+// "c01d04"/"c01d05" are the poncho front and back. A ghost's renamed copy is "g<n>1d04": g = blue, h = natural.
+bool IsBlueTunic(const char *name) {
+    std::string n = Fold(name);
+    if (n.size() != 6 || (n.compare(2, 4, "1d04") != 0 && n.compare(2, 4, "1d05") != 0)) {
+        return false;
+    }
+    if (n[0] == 'g') {
+        return true;
+    }
+    return g_local_tunic_blue && n[0] == 'c' && n[1] == '0';
+}
+
+bool RecolorTunic(unsigned width, unsigned height, bool &indexed, bool &four_bit, const uint32_t *palette,
+                  std::vector<std::vector<uint8_t>> &levels) {
+    if (levels.empty() || width == 0 || height == 0 || (indexed && palette == nullptr)) {
+        return false;
+    }
+    std::vector<std::vector<uint8_t>> out;
+    for (size_t level = 0; level < levels.size(); level++) {
+        size_t w = std::max<size_t>(1, width >> level), h = std::max<size_t>(1, height >> level);
+        std::vector<uint8_t> rgba(w * h * 4, 0);
+        const std::vector<uint8_t> &src = levels[level];
+        if (indexed) {
+            for (size_t i = 0; i < w * h && i < src.size(); i++) {
+                uint32_t color = palette[src[i]];
+                std::memcpy(&rgba[i * 4], &color, 4);
+            }
+        } else {
+            std::memcpy(rgba.data(), src.data(), std::min(rgba.size(), src.size()));
+        }
+        for (size_t i = 0; i < w * h; i++) {
+            ShiftToBlue(&rgba[i * 4]);
+        }
+        out.push_back(std::move(rgba));
+    }
+    levels = std::move(out);
+    indexed = false;
+    four_bit = false;
+    return true;
+}
+
 } // namespace
+
+std::vector<fs::path> ModsLoadOrder(const fs::path &root) {
+    std::error_code       error;
+    std::vector<fs::path> mods;
+    for (const auto &entry : fs::directory_iterator(root, error)) {
+        std::string name = Utf8(entry.path().filename());
+        if (entry.is_directory(error) && !name.empty() && name[0] != '_' && name[0] != '.') {
+            mods.push_back(entry.path());
+        }
+    }
+    std::vector<std::string> order;
+    {
+        std::ifstream in(root / "load_order.json");
+        auto          json = in ? nlohmann::json::parse(in, nullptr, false, true) : nlohmann::json();
+        if (json.is_object() && json.contains("order") && json["order"].is_array()) {
+            for (const auto &name : json["order"]) {
+                if (name.is_string()) {
+                    order.push_back(Fold(name.get<std::string>()));
+                }
+            }
+        }
+    }
+    // Unlisted mods first (alphabetical), listed mods after, in the listed order: the last one wins a conflict.
+    auto rank = [&](const fs::path &p) {
+        std::string name = Fold(Utf8(p.filename()));
+        auto        at = std::find(order.begin(), order.end(), name);
+        return at == order.end() ? -1 : static_cast<int>(at - order.begin());
+    };
+    std::sort(mods.begin(), mods.end(), [&](const fs::path &a, const fs::path &b) {
+        int ra = rank(a), rb = rank(b);
+        if (ra != rb) {
+            return ra < rb;
+        }
+        return Fold(Utf8(a.filename())) < Fold(Utf8(b.filename()));
+    });
+    return mods;
+}
+
+namespace {
+
+struct FileOverrides {
+    bool                             built = false;
+    std::map<std::string, fs::path>  files; // folded game path -> the mod's file
+    std::map<std::string, std::string> mod; // and which mod it came from
+    std::set<std::string>            warned;
+};
+FileOverrides fo;
+
+} // namespace
+
+const fs::path *ModsFileOverride(const char *key, const fs::path *original) {
+    if (!fo.built) {
+        fo.built = true;
+        fs::path        root = PathsSaveRoot() / "mods";
+        std::error_code error;
+        if (fs::is_directory(root, error)) {
+            for (const fs::path &mod : ModsLoadOrder(root)) {
+                if (!ModEnabled(mod)) {
+                    continue;
+                }
+                fs::path dir = mod / "files";
+                if (!fs::is_directory(dir, error)) {
+                    continue;
+                }
+                int count = 0;
+                for (fs::recursive_directory_iterator it(dir, error), end; !error && it != end; it.increment(error)) {
+                    std::error_code e2;
+                    if (!it->is_regular_file(e2)) {
+                        continue;
+                    }
+                    std::string rel = Fold(Utf8(it->path().lexically_relative(dir)));
+                    std::replace(rel.begin(), rel.end(), '\\', '/');
+                    fo.files[rel] = it->path();
+                    fo.mod[rel] = Utf8(mod.filename());
+                    count++;
+                }
+                if (count > 0) {
+                    std::fprintf(stderr, "mods: %s: %d game file override(s)\n", Utf8(mod.filename()).c_str(), count);
+                }
+            }
+        }
+    }
+    if (fo.files.empty() || key == nullptr) {
+        return nullptr;
+    }
+    auto it = fo.files.find(key);
+    if (it == fo.files.end()) {
+        return nullptr;
+    }
+    if (fo.warned.insert(key).second) {
+        std::error_code e1, e2;
+        auto            mine = fs::file_size(it->second, e1);
+        auto            theirs = original != nullptr ? fs::file_size(*original, e2) : 0;
+        std::fprintf(stderr, "mods: %s overrides game file %s (%llu bytes)\n", fo.mod[key].c_str(), key,
+                     static_cast<unsigned long long>(e1 ? 0 : mine));
+        if (original != nullptr && !e1 && !e2 && mine > theirs) {
+            std::fprintf(stderr, "mods: warning: %s is larger than the game's file (%llu > %llu bytes); the game may not have room for it\n",
+                         key, static_cast<unsigned long long>(mine), static_cast<unsigned long long>(theirs));
+        }
+    }
+    return &it->second;
+}
+
+
+void ModsSetLocalTunicBlue(bool blue) { g_local_tunic_blue = blue; }
 
 void ModsNoteFile(const char *path) {
     if (path != nullptr) {
@@ -217,6 +398,9 @@ void ModsTextureHook(const char *name, int bpp, int block, unsigned width, unsig
     }
     if (g.dump) {
         Dump(name, bpp, block, width, height, indexed, palette, levels);
+    }
+    if (IsBlueTunic(name) && RecolorTunic(width, height, indexed, four_bit, palette, levels)) {
+        return;
     }
     if (g.by_stem.empty() && g.by_scoped.empty()) {
         return;

@@ -1,0 +1,11 @@
+{
+ "meswin/system*.mes": {
+  "248": "Bread of Testing",
+  "101": "Dagger of Testing{-737}",
+  "152": "Fairy's Ring (modded)",
+  "999999": "no such message"
+ },
+ "gedit/e01/e01talk_*.mes": {
+  "10": "Hello!\nHow should I rebuild Nolun?"
+ }
+}

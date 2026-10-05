@@ -1,0 +1,13 @@
+{
+ "_comment": "Weapon descriptions in the menus, matched by their original text in the menu packs and rewritten in place (each fits its original length).",
+ "commenu/*": {
+  "Very powerful double \nhand treasure sword.": "Double damage to the\nundead. Sanctifier.",
+  "Armlet absorbs power\nfrom infinite space\nand time.": "Hits harder the longer\nthe fight goes on.",
+  "Legendary treasure that\nwas revived after many\nyears.": "Sealed against every\naffliction. Each hit\ncures them.",
+  "Belongs to Katanas.Has\nthe strongest potential.": "Hits may leave foes\nstuck in goo.",
+  "Gun made of shell.\nFires magic bolts.": "Shell gun. May goo\nthe target.",
+  "Frozen like a rock.\nYou can't eat it.Use\nit as a weapon.": "Hits can stop foes in\ntheir tracks. Plenty of\nleftovers.",
+  "Pole weapon w{-673}cactus\nball. Smashes enemy.": "Absorbs water from the\ndamage you deal.",
+  "Sword owned by\nlegendary Hero Aga.": "15 less damage\ntaken. Aga's will."
+ }
+}

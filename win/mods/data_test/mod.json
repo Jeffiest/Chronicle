@@ -1,0 +1,6 @@
+{
+ "name": "data_test",
+ "version": "1",
+ "description": "Example for DATA.md and TEXT.md: monster 0, a weapon, an item, shop 0, and two item/dialogue strings. Set enabled to true to try it.",
+ "enabled": false
+}

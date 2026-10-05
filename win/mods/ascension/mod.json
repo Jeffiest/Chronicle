@@ -1,0 +1,6 @@
+{
+ "name": "Ascension",
+ "version": "0.1",
+ "description": "A modern-RPG layer: character levels and XP, crits, enemies that scale by dungeon and floor, elite enemies. Tunables in scripts/config.lua.",
+ "enabled": true
+}

@@ -1,0 +1,8 @@
+{
+ "monsters": { "0": { "_note": "first monster", "hp": 999, "defense": 7, "exp": 50, "damage_from_attacker": [100,100,100,100,100,50] } },
+ "weapons":  { "257": { "attack": 77, "attack_max": 200 } },
+ "items":    { "148": { "vol": 5 } },
+ "shops":    { "0": [148, 145, 177] },
+ "bogus":    { "1": {} },
+ "monsters_typo": {}
+}

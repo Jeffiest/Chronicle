@@ -1,0 +1,6 @@
+{
+ "name": "Dungeon Feats",
+ "version": "0.1",
+ "description": "Floor-clear rewards, kill streaks, a bestiary with milestones and trophies. Progress is saved with your game slot.",
+ "enabled": true
+}

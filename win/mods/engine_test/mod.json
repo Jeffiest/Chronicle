@@ -1,0 +1,6 @@
+{
+ "name": "engine_test",
+ "version": "1",
+ "description": "Demo of API v3: HUD rectangles, floating text, screen positions, held weapon, per-slot store. Set enabled to true to try it.",
+ "enabled": false
+}

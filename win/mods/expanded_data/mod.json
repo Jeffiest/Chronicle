@@ -1,0 +1,6 @@
+{
+ "name": "Expanded Data",
+ "version": "0.1",
+ "description": "Weapon rebalance ported from DarkCloud-Expanded (about 60 weapons: stats, slayers, slots, build-up paths, effects). Applies to weapons you pick up or buy after enabling; weapons already in your save keep their stats.",
+ "enabled": true
+}

@@ -1,0 +1,25 @@
+{
+ "order": [
+  "coop",
+  "dungeon_feats",
+  "dungeon_plus",
+  "expanded_town",
+  "floor_mutators",
+  "harder_ai",
+  "sturdy",
+  "weapon_mastery",
+  "ascension",
+  "expanded_abilities",
+  "expanded_data",
+  "net_test",
+  "engine_test",
+  "anim_test",
+  "combat_demo",
+  "data_test",
+  "files_test",
+  "mymod",
+  "mymodels",
+  "regen_example",
+  "mod_settings"
+ ]
+}

@@ -1,0 +1,6 @@
+{
+ "name": "Floor Mutators",
+ "version": "0.1",
+ "description": "Each dungeon floor may roll a modifier (Glass Cannon, Iron Hide, Bounty, Fountain, Scorched, Lucky Day) with a banner.",
+ "enabled": true
+}

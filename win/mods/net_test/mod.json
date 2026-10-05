@@ -1,0 +1,6 @@
+{
+ "name": "net_test",
+ "description": "Phase 1 transport test. Superseded by coop; disabled.",
+ "net": true,
+ "enabled": false
+}

@@ -1,0 +1,6 @@
+{
+ "name": "Sturdy",
+ "version": "0.1",
+ "description": "Weapons wear more slowly and thirst drains more slowly.",
+ "enabled": true
+}

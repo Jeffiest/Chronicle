@@ -1,0 +1,6 @@
+{
+ "name": "Weapon Mastery",
+ "version": "0.1",
+ "description": "Weapons earn mastery with kills: +2% damage per level, up to +10%, per weapon type. Saved with your slot.",
+ "enabled": true
+}

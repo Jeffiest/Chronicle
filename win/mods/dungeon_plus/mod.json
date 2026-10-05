@@ -1,0 +1,6 @@
+{
+ "name": "Dungeon+",
+ "version": "0.1",
+ "description": "Replay cleared dungeons at tiers 1-5: bigger floors, more and tougher enemies, richer gilda. Tier: L1+R1+Up/Down or the ] and [ keys.",
+ "enabled": true
+}

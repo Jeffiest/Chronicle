@@ -1,0 +1,6 @@
+{
+ "name": "coop",
+ "description": "Online co-op, phase 2: see other players (blue Toan ghosts) and build the host's dungeon floors. Ctrl+H host, Ctrl+J join, Ctrl+K stop.",
+ "net": true,
+ "enabled": true
+}

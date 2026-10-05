@@ -89,3 +89,9 @@ More functions (API 4+): `dc.set_monster_speed(i, m)` (enemy `i` moves and anima
 `dc.set_floor_size(...)` / `dc.floor_reached(d)` / `dc.floor_select()` (bigger floors, the floor-select list), `dc.hurt_monster`, `dc.monster_pos`/`dc.player_pos`,
 `dc.freeze(on)` and `dc.block_input(on)`. Shared settings that are not per save slot (kept in `mods/_shared.json`, readable by any mod):
 `dc.shared_get(mod, key)`, `dc.shared_set(mod, key, value)`, `dc.shared_all()`; the Mod Settings mod edits them.
+
+Co-op world sync (town): `dc.npc_list()` (villagers: id, name, x, y, z, ry, m, fl, sp, on), `dc.npc_puppet(id, x, y, z, ry, motion, flags, speed)` / `dc.npc_puppet_clear()`
+(villager `id` follows those values), `dc.npc_hold(id, ticks)` (stands still), `dc.npc_talking()` (villager id the local player is talking to, or -1).
+Georama: `dc.georama_take()` pops the next local op `kind, map, parts, x, y, z, rot` (1 placed, 2 removed), `dc.georama_apply(kind, map, parts, x, y, z, rot)`
+applies someone else's (true when it changed this town; a part landing on the player forces the Georama view), `dc.georama_map()`.
+Guest world: `dc.world_capture()` (the host's world as a binary string, nil before a game runs), `dc.world_join(blob)` (a guest enters or refreshes it), `dc.world_leave()`, `dc.world_active()`.

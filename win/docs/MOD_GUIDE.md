@@ -10,6 +10,20 @@ connection test, your addresses to give friends), **Mods** tab (turn mods on and
 co-op mod on or off to match, and starts the game; as host or guest the game connects by itself a second after the world loads. The game's
 output goes to `win-save\launcher_run.log`. The **Character** tab sets Toan's tunic: 16 colours (orange original, blue, green, red, purple, teal, pink, yellow, lime, cyan, magenta, brown, white, black, gold, navy) or a **Custom** design: pick your own front (and optional back) picture for the poncho, shrunk to 256x256 and sent to the other players, who see it on your Toan. "Save the template pictures" copies the game's own poncho textures (needs a texture dump once, `run_win.ps1 -DumpTextures`) to paint over. Colours apply the next time the game loads Toan (a door or a dungeon). Everyone in a co-op game needs the same mods in the same order.
 
+## Co-op world sync (host's NPCs, shared Georama)
+In towns the host's villagers are the real ones: a guest sees them walk and turn the way the host does, and a villager a guest talks to stands still
+for the host too. The Georama is shared live: anything one player builds or removes appears in the other's town if they are in the same town map
+(a toast says who did it). If a part is built on top of a player, that player is put into the Georama view and must move the cursor to a free spot and
+leave the view to stand there. Parts built before the other player joined are not copied over; both players only share edits made while connected.
+
+## Joining the host's world (Dark Souls style)
+A guest plays in the **host's world**: the host's story progress, unlocked towns and dungeon floors, Georama and time of day. The guest's own **items,
+gilda, weapons and party stay theirs**: whatever they pick up or spend is theirs when they leave. On join the guest is taken to the host's town (or the
+host's dungeon's floor list); starting a game from the title screen while connected does the same. When they leave, or the connection drops, their own
+world comes back and they are sent to the place their own save resumes on. Anything written to the guest's save during the visit holds the guest's own
+world with the items and gilda they have now, so the visit never overwrites their story progress. The guest does not advance their own story while
+visiting, and the host's world is refreshed every few seconds.
+
 ## Controls at a glance
 
 | Where | Input | Does |

@@ -37,6 +37,26 @@ def rewrite_long(text):
 
 # Windows source patches: (file, old, new). Each `old` must occur; a mismatch means upstream changed and the patch needs review.
 PATCHES = [
+    ('ps2/include/savedata.hpp', '    friend class CMemoryCardAccess;\n',
+     '    friend class CMemoryCardAccess;\n    friend struct GuestWorldAccess;\n'),
+    ('port/src/memorycardaccess.cpp', '    memcpy(this->save_buffer, SaveData, 0x131C0);\n    this->save_buffer->ConvertConfig(&sys_config);',
+     '    memcpy(this->save_buffer, SaveData, 0x131C0);\n    { extern void GwFixSave(CSaveData *); GwFixSave(this->save_buffer); }\n    this->save_buffer->ConvertConfig(&sys_config);'),
+    ('ps2/src/memorycardaccess.cpp', '                memcpy(SaveData, this->load_buffer, sizeof(CSaveData));\n                ((s32 *) SaveData->GetConfigData())[17] = file_no;\n',
+     '                memcpy(SaveData, this->load_buffer, sizeof(CSaveData));\n                ((s32 *) SaveData->GetConfigData())[17] = file_no;\n                { extern void GwAfterLoad(); GwAfterLoad(); }\n'),
+    ('port/src/gameloop.cpp', '            result = ModeLoop(skip_title);\n            GameApplyLoopResult(old_main_mode, result);\n',
+     '            result = ModeLoop(skip_title);\n            GameApplyLoopResult(old_main_mode, result);\n            { extern bool GwTakeJump(); if (GwTakeJump()) { result = 1; } }\n'),
+    ('ps2/src/editloop.cpp', '        int plot = pEditGround->SetMapParts(NowSelectParts, parts_pos[0], parts_pos[1], parts_pos[2], NowSelectAngle);\n\n        if (plot >= 0) {\n',
+     '        int plot = pEditGround->SetMapParts(NowSelectParts, parts_pos[0], parts_pos[1], parts_pos[2], NowSelectAngle);\n\n        if (plot >= 0) {\n            { extern void ModsGeoPlaced(int, const float *, int); ModsGeoPlaced(NowSelectParts, parts_pos, NowSelectAngle); }\n'),
+    ('ps2/src/editloop.cpp', 'pEditGround->DeleteMapParts(&deleted_parts, &deleted_angle, parts_pos[0], parts_pos[1], parts_pos[2]) >= 0) {\n',
+     'pEditGround->DeleteMapParts(&deleted_parts, &deleted_angle, parts_pos[0], parts_pos[1], parts_pos[2]) >= 0) {\n            { extern void ModsGeoRemoved(const float *); ModsGeoRemoved(parts_pos); }\n'),
+    ('ps2/src/editloop.cpp', '            if (pEditGround->DeleteMapParts(&taken_parts, &taken_angle, parts_pos[0], parts_pos[1], parts_pos[2]) >= 0) {\n',
+     '            if (pEditGround->DeleteMapParts(&taken_parts, &taken_angle, parts_pos[0], parts_pos[1], parts_pos[2]) >= 0) {\n                { extern void ModsGeoRemoved(const float *); ModsGeoRemoved(parts_pos); }\n'),
+    ('ps2/src/editloop.cpp', 'EdPadDown(0x100, 2) != 0 && EdCheckViewMode() == 0 && change_time_event == 0) {',
+     '(EdPadDown(0x100, 2) != 0 || ({ extern bool ModsGeoForce(); ModsGeoForce(); })) && EdCheckViewMode() == 0 && change_time_event == 0) {'),
+    ('ps2/src/editloop3.cpp', '    GamePad.MenuModeOn(0x78);\n    ReadBG();\n\n    if (camera != NULL) {\n        camera->FollowOff();\n    }\n\n    EditMes1.Step();\n',
+     '    GamePad.MenuModeOn(0x78);\n    ReadBG();\n\n    if (camera != NULL) {\n        camera->FollowOff();\n    }\n\n    EditMes1.Step();\n    { extern void ModsNpcTalkTick(int); ModsNpcTalkTick(talk_villager__2 != NULL ? talk_villager__2->villager_id : -1); }\n'),
+    ('ps2/src/editloop3.cpp', '                EdVillager[i].SetPosition(position);\n            }\n        }\n    }\n}\n\nvoid EdMoveVillagerSubMap(VILLAGER_INFO *villagers) {',
+     '                EdVillager[i].SetPosition(position);\n            }\n        }\n    }\n    { extern void ModsNpcStep(); ModsNpcStep(); }\n}\n\nvoid EdMoveVillagerSubMap(VILLAGER_INFO *villagers) {'),
     ('ps2/src/runscript_opcodes.cpp', '        if (half_speed) {\n            speed *= 0.5f;\n        }\n',
      '        if (half_speed) {\n            speed *= 0.5f;\n        }\n        { extern float ModsSpeedMul(int); speed *= ModsSpeedMul(monster_no); }\n'),
     ('ps2/src/runscript_opcodes.cpp', '        speed *= 0.5f;\n    }\n\n    NowMonstorUnit->monster[monster_no].movement_speed = speed;',
@@ -47,7 +67,7 @@ PATCHES = [
     ('ps2/src/dun/gameloop.cpp', '    CharaMain.TextureAnime(0x11);\n    CharaMain.Draw();\n',
      '    CharaMain.TextureAnime(0x11);\n    CharaMain.Draw();\n    { extern void GhostDrawDungeon(); GhostDrawDungeon(); }\n'),
     ('ps2/src/edit.cpp', '        player->TextureAnime(8);\n        player->Draw();\n',
-     '        player->TextureAnime(8);\n        player->Draw();\n        { extern void GhostDrawTown(); GhostDrawTown(); }\n'),
+     '        player->TextureAnime(8);\n        player->Draw();\n    }\n    { extern void GhostDrawTown(); GhostDrawTown(); }\n    if (false) {\n'),
     ('ps2/src/monstorunit.cpp', '        float distance = DistVector(player_position, monster_position);\n        monster[i].player_distance = distance;',
      '        extern float MpNearestDistance(const float *, const float *);\n        float distance = MpNearestDistance(player_position, monster_position);\n        monster[i].player_distance = distance;'),
     ('ps2/src/monstorunit.cpp', '            current_monster = i;\n\n            if (monster[current_monster].motion_reset_pending != 0) {',
@@ -261,6 +281,8 @@ def main():
     shutil.copy(WIN / 'modtext.hpp', DST / 'port/src/platform/modtext.hpp')
     shutil.copy(WIN / 'ghost_win.cpp', DST / 'port/src/ghost.cpp')
     shutil.copy(WIN / 'ghost.hpp', DST / 'port/src/ghost.hpp')
+    shutil.copy(WIN / 'guestworld_win.cpp', DST / 'port/src/guestworld.cpp')
+    shutil.copy(WIN / 'guestworld.hpp', DST / 'port/src/guestworld.hpp')
     shutil.copy(WIN / 'net_win.cpp', DST / 'port/src/platform/net.cpp')
     shutil.copy(WIN / 'net.hpp', DST / 'port/src/platform/net.hpp')
     shutil.copy(WIN / 'setup_win.cpp', DST / 'port/src/platform/setup.cpp')

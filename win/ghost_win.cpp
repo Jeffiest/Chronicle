@@ -387,6 +387,9 @@ void DrawScene(int ctx) {
         bool   stale = m.chara != nullptr && (m.epoch != g_epoch || m.color != g.color || m.custom_ver != g.custom_ver || (ctx == CTX_DUNGEON && m.weapon_item != g.weapon_item) ||
                                               !ModelAlive(m));
         if (stale) {
+            if (m.block >= 0 && ModelAlive(m) && m.epoch == g_epoch && (m.color != g.color || m.custom_ver != g.custom_ver)) {
+                TexManager.DeleteTextureBlock(m.block); // a colour change: the old copy's textures are no longer needed
+            }
             m.chara = nullptr; // rebuilt below into the same memory
             m.weapon = nullptr;
             m.failed = false;

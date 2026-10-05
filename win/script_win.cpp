@@ -18,6 +18,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <array>
+#include <deque>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -35,7 +37,11 @@
 #include "dun/gameloop.hpp"
 #include "dungeonmap.hpp"
 #include "camera.hpp"
+#include "edit.hpp"
+#include "editground.hpp"
+#include "editmapscript.hpp"
 #include "editloop.hpp"
+#include "npcharacter.hpp"
 #include "itemdata.hpp"
 #include "mglib.hpp"
 #include "savedata.hpp"
@@ -48,6 +54,7 @@
 #include "platform/modtext.hpp"
 #include "platform/net.hpp"
 #include "ghost.hpp"
+#include "guestworld.hpp"
 #include "platform/clock.hpp"
 #include "platform/paths.hpp"
 #include "userstatus.hpp"
@@ -1293,6 +1300,205 @@ int L_set_tunic(lua_State *L) {
     ModsSetLocalTunicBlue(lua_toboolean(L, 1) != 0);
     return 0;
 }
+// ---- Georama (shared town building) --------------------------------------------------------------------------------------
+// Every part the local player puts down or takes up is queued as an op (dc.georama_take) for the co-op script to send; ops from
+// others are applied with dc.georama_apply. A placed part that lands on the local player forces the Georama view so they have to pick
+// a new spot to stand (leaving the view puts the character at the cursor).
+struct GeoOp {
+    int   kind = 0; // 1 placed, 2 removed
+    int   map = 0;
+    int   parts = 0;
+    float pos[3] = {0, 0, 0};
+    int   rot = 0;
+};
+std::deque<GeoOp> g_geo_ops;
+bool              g_geo_force = false;
+long long         g_geo_force_until = 0;
+
+int L_georama_take(lua_State *L) {
+    if (g_geo_ops.empty()) {
+        return 0;
+    }
+    GeoOp op = g_geo_ops.front();
+    g_geo_ops.pop_front();
+    lua_pushinteger(L, op.kind);
+    lua_pushinteger(L, op.map);
+    lua_pushinteger(L, op.parts);
+    for (int k = 0; k < 3; k++) {
+        lua_pushnumber(L, op.pos[k]);
+    }
+    lua_pushinteger(L, op.rot);
+    return 7;
+}
+// dc.georama_apply(kind, map, parts, x, y, z, rot) -> true when it changed this player's town (kind 1 place, 2 remove).
+int L_georama_apply(lua_State *L) {
+    int   kind = static_cast<int>(luaL_checkinteger(L, 1));
+    int   map = static_cast<int>(luaL_checkinteger(L, 2));
+    int   parts = static_cast<int>(luaL_checkinteger(L, 3));
+    float x = static_cast<float>(luaL_checknumber(L, 4)), y = static_cast<float>(luaL_checknumber(L, 5)), z = static_cast<float>(luaL_checknumber(L, 6));
+    int   rot = static_cast<int>(luaL_checkinteger(L, 7));
+    if (pEditGround == nullptr || pEditGround->map_no != map) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    bool ok = false;
+    if (kind == 1) {
+        int plot = pEditGround->SetMapParts(parts, x, y, z, rot);
+        ok = plot >= 0;
+        if (ok) {
+            pEditGround->SetBuildEffect(plot);
+            if (GameMode == ED_MODE_WALK && Chara != nullptr) {
+                float me[4] = {0, 0, 0, 1};
+                Chara->GetPosition(me);
+                if (pEditGround->GetParts(me[0], me[1], me[2]) == &pEditGround->parts[plot]) {
+                    g_geo_force = true; // it landed on the player
+                    g_geo_force_until = ClockTickCount() + 1800;
+                }
+            }
+        }
+    } else if (kind == 2) {
+        int a = 0, b = 0;
+        ok = pEditGround->DeleteMapParts(&a, &b, x, y, z) >= 0;
+    }
+    lua_pushboolean(L, ok ? 1 : 0);
+    return 1;
+}
+// dc.georama_map() -> the town map number whose ground is loaded, or -1.
+int L_georama_map(lua_State *L) {
+    lua_pushinteger(L, pEditGround != nullptr ? pEditGround->map_no : -1);
+    return 1;
+}
+
+// ---- Town villagers (NPC sync) ---------------------------------------------------------------------------------------------
+// The host's villagers are the real ones; a guest's copies are puppets that follow the host's snapshot. Villagers are matched by
+// their villager_id (the table id), not by slot, because two saves can have different villagers in the same slot.
+struct NpcPuppet {
+    bool  on = false;
+    float pos[3] = {0, 0, 0};
+    float ry = 0;
+    int   motion = 0, flags = 0;
+    float speed = -1.0f;
+};
+std::map<int, NpcPuppet> g_npc_puppets;  // villager_id -> where the host has it
+std::map<int, long long> g_npc_hold;     // villager_id -> tick until which it stands still (someone is talking to it)
+std::map<int, std::array<float, 3>> g_npc_hold_pos;
+
+int FindVillager(int id) {
+    for (int i = 0; i < 10; i++) {
+        if (EdVillager[i].initialized != 0 && EdVillager[i].villager_id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// dc.npc_list() -> { {id=, name=, x=, y=, z=, ry=, m=, fl=, sp=}, ... } for the villagers standing in this town now.
+int L_npc_list(lua_State *L) {
+    lua_newtable(L);
+    int n = 0;
+    for (int i = 0; i < 10; i++) {
+        CNPCharacter &v = EdVillager[i];
+        if (v.initialized == 0) {
+            continue;
+        }
+        float pos[4] = {0, 0, 0, 1}, rot[4] = {0, 0, 0, 1};
+        v.GetPosition(pos);
+        v.GetRotation(rot);
+        lua_newtable(L);
+        lua_pushinteger(L, v.villager_id);
+        lua_setfield(L, -2, "id");
+        char name[0x21] = {0};
+        std::memcpy(name, v.resource_name, 0x20);
+        lua_pushstring(L, name);
+        lua_setfield(L, -2, "name");
+        const char *keys[] = {"x", "y", "z"};
+        for (int k = 0; k < 3; k++) {
+            lua_pushnumber(L, pos[k]);
+            lua_setfield(L, -2, keys[k]);
+        }
+        lua_pushnumber(L, rot[1]);
+        lua_setfield(L, -2, "ry");
+        lua_pushinteger(L, v.motion_no);
+        lua_setfield(L, -2, "m");
+        lua_pushinteger(L, v.motion_flags);
+        lua_setfield(L, -2, "fl");
+        lua_pushnumber(L, v.motion_speed);
+        lua_setfield(L, -2, "sp");
+        lua_pushinteger(L, v.draw_enabled);
+        lua_setfield(L, -2, "on");
+        lua_rawseti(L, -2, ++n);
+    }
+    return 1;
+}
+// dc.npc_puppet(id, x, y, z, ry, motion, flags, speed): from now on villager `id` follows these values (a guest, from the host's snapshot).
+int L_npc_puppet(lua_State *L) {
+    int       id = static_cast<int>(luaL_checkinteger(L, 1));
+    NpcPuppet &p = g_npc_puppets[id];
+    p.on = true;
+    for (int k = 0; k < 3; k++) {
+        p.pos[k] = static_cast<float>(luaL_checknumber(L, 2 + k));
+    }
+    p.ry = static_cast<float>(luaL_checknumber(L, 5));
+    p.motion = static_cast<int>(luaL_optinteger(L, 6, 0));
+    p.flags = static_cast<int>(luaL_optinteger(L, 7, 0));
+    p.speed = static_cast<float>(luaL_optnumber(L, 8, -1.0));
+    return 0;
+}
+// dc.npc_puppet_clear(): villagers go back to their own behaviour.
+int L_npc_puppet_clear(lua_State *) {
+    g_npc_puppets.clear();
+    return 0;
+}
+// dc.npc_hold(id, ticks): villager `id` stands still where it is for that many ticks (someone is talking to it).
+int L_npc_hold(lua_State *L) {
+    int id = static_cast<int>(luaL_checkinteger(L, 1));
+    int ticks = static_cast<int>(luaL_checkinteger(L, 2));
+    int i = FindVillager(id);
+    if (i >= 0 && ticks > 0) {
+        if (g_npc_hold.find(id) == g_npc_hold.end()) {
+            float pos[4] = {0, 0, 0, 1};
+            EdVillager[i].GetPosition(pos);
+            g_npc_hold_pos[id] = {pos[0], pos[1], pos[2]};
+        }
+        g_npc_hold[id] = ClockTickCount() + ticks;
+    } else {
+        g_npc_hold.erase(id);
+    }
+    return 0;
+}
+// dc.npc_talking() -> villager id the local player is in conversation with, or -1. EdTalkMode reports it every step it runs.
+long long g_talk_tick = -1000;
+int       g_talk_id = -1;
+int NpcTalkingNow() { return ClockTickCount() - g_talk_tick <= 3 ? g_talk_id : -1; }
+int L_npc_talking(lua_State *L) {
+    lua_pushinteger(L, NpcTalkingNow());
+    return 1;
+}
+// Guest world. dc.world_capture() -> the host's world as a binary string (nil before a game is loaded); dc.world_join(blob) -> the guest enters or
+// refreshes the host's world; dc.world_leave() -> back to their own world; dc.world_active() -> true while in the host's world.
+int L_world_capture(lua_State *L) {
+    std::string w = GwCapture();
+    if (w.empty()) {
+        lua_pushnil(L);
+    } else {
+        lua_pushlstring(L, w.data(), w.size());
+    }
+    return 1;
+}
+int L_world_join(lua_State *L) {
+    size_t      n = 0;
+    const char *b = luaL_checklstring(L, 1, &n);
+    GwSetHostWorld(std::string(b, n));
+    return 0;
+}
+int L_world_leave(lua_State *) {
+    GwLeave();
+    return 0;
+}
+int L_world_active(lua_State *L) {
+    lua_pushboolean(L, GwActive() ? 1 : 0);
+    return 1;
+}
 // dc.my_tunic(): the local player's tunic colour now (0 natural, 1..15 presets, 16 custom).
 int L_my_tunic(lua_State *L) {
     lua_pushinteger(L, ModsLocalTunic());
@@ -1859,7 +2065,7 @@ void LoadLua(const fs::path &mod, const std::string &name) {
         {"set_weapon", L_set_weapon}, {"store_get", L_store_get}, {"store_set", L_store_set}, {"store_slot", L_store_slot}, {"shared_get", L_shared_get}, {"shared_set", L_shared_set}, {"shared_all", L_shared_all},
         {"freeze", L_freeze}, {"block_input", L_block_input}, {"monster_pos", L_monster_pos}, {"floor_select", L_floor_select}, {"set_floor_size", L_set_floor_size}, {"floor_reached", L_floor_reached}, {"town_pos", L_town_pos}, {"camera", L_camera}, {"ailments", L_ailments}, {"set_ailments", L_set_ailments}, {"set_monster_status", L_set_monster_status}, {"monster_status", L_monster_status}, {"set_monster_scale", L_set_monster_scale}, {"day", L_day}, {"shop_list", L_shop_list}, {"set_shop_list", L_set_shop_list}, {"monster_model", L_monster_model}, {"player_pos", L_player_pos},
         {"hurt_monster", L_hurt_monster}, {"set_monster_speed", L_set_monster_speed}, {"launch", L_launch},
-        {"player_state", L_player_state}, {"ghost", L_ghost}, {"ghost_clear", L_ghost_clear}, {"set_tunic", L_set_tunic}, {"my_tunic", L_my_tunic}, {"launch_file", L_launch_file}, {"ghost_tunic", L_ghost_tunic}, {"floor_seed", L_floor_seed}, {"scene", L_scene}, {"monster_state", L_monster_state}, {"puppet", L_puppet},
+        {"player_state", L_player_state}, {"ghost", L_ghost}, {"ghost_clear", L_ghost_clear}, {"set_tunic", L_set_tunic}, {"my_tunic", L_my_tunic}, {"world_capture", L_world_capture}, {"world_join", L_world_join}, {"world_leave", L_world_leave}, {"world_active", L_world_active}, {"npc_list", L_npc_list}, {"georama_take", L_georama_take}, {"georama_apply", L_georama_apply}, {"georama_map", L_georama_map}, {"npc_puppet", L_npc_puppet}, {"npc_puppet_clear", L_npc_puppet_clear}, {"npc_hold", L_npc_hold}, {"npc_talking", L_npc_talking}, {"launch_file", L_launch_file}, {"ghost_tunic", L_ghost_tunic}, {"floor_seed", L_floor_seed}, {"scene", L_scene}, {"monster_state", L_monster_state}, {"puppet", L_puppet},
         {"puppet_clear", L_puppet_clear}, {"logic_ticks", L_logic_ticks},
         {"remove_chest_monster", L_remove_chest_monster}, {"take_event", L_take_event}, {"run_event", L_run_event}, {"msg_on", L_msg_on}, {"msg", L_msg}, {"menu_open", L_menu_open}, {"frozen", L_frozen},
         {"take_ghost_hit", L_take_ghost_hit}, {"hurt_player", L_hurt_player},
@@ -2175,6 +2381,94 @@ int ModsRoomMax(int original, int dungeon) {
         n = std::atoi(e);
     }
     return std::clamp(n, 2, 14);
+}
+
+// Called where the editor places or removes a part for the local player.
+void ModsGeoPlaced(int parts_no, const float *pos, int rot) {
+    if (g_geo_ops.size() > 64) {
+        return;
+    }
+    GeoOp op;
+    op.kind = 1;
+    op.map = pEditGround != nullptr ? pEditGround->map_no : -1;
+    op.parts = parts_no;
+    for (int k = 0; k < 3; k++) op.pos[k] = pos[k];
+    op.rot = rot;
+    g_geo_ops.push_back(op);
+}
+void ModsGeoRemoved(const float *pos) {
+    if (g_geo_ops.size() > 64) {
+        return;
+    }
+    GeoOp op;
+    op.kind = 2;
+    op.map = pEditGround != nullptr ? pEditGround->map_no : -1;
+    for (int k = 0; k < 3; k++) op.pos[k] = pos[k];
+    g_geo_ops.push_back(op);
+}
+// Called in the editor's walk/Georama toggle test: true once when a remote placement forces this player into the Georama view.
+bool ModsGeoForce() {
+    if (!g_geo_force) {
+        return false;
+    }
+    if (ClockTickCount() > g_geo_force_until || GameMode == ED_MODE_GEORAMA) {
+        g_geo_force = false; // in the view already, or too late
+        return false;
+    }
+    return GameMode == ED_MODE_WALK;
+}
+
+void ModsNpcTalkTick(int villager_id) {
+    g_talk_id = villager_id;
+    g_talk_tick = ClockTickCount();
+}
+
+// Called at the end of EdMoveVillager: villagers that follow the host (or stand still while talked to) are put where they belong.
+void ModsNpcStep() {
+    if (g_npc_puppets.empty() && g_npc_hold.empty()) {
+        return;
+    }
+    long long now = ClockTickCount();
+    int       talking = NpcTalkingNow();
+    for (int i = 0; i < 10; i++) {
+        CNPCharacter &v = EdVillager[i];
+        if (v.initialized == 0) {
+            continue;
+        }
+        int  id = v.villager_id;
+        auto hold = g_npc_hold.find(id);
+        if (hold != g_npc_hold.end()) {
+            if (now > hold->second) {
+                g_npc_hold.erase(hold);
+                g_npc_hold_pos.erase(id);
+            } else {
+                const auto &h = g_npc_hold_pos[id];
+                v.SetPosition(h[0], h[1], h[2]);
+                continue;
+            }
+        }
+        auto it = g_npc_puppets.find(id);
+        if (it == g_npc_puppets.end() || !it->second.on || id == talking) {
+            continue; // the villager the local player talks to keeps its own behaviour
+        }
+        const NpcPuppet &p = it->second;
+        float            pos[4] = {0, 0, 0, 1};
+        v.GetPosition(pos);
+        float dx = p.pos[0] - pos[0], dz = p.pos[2] - pos[2];
+        bool  snap = dx * dx + dz * dz > 250.0f * 250.0f;
+        float k = snap ? 1.0f : 0.35f;
+        v.SetPosition(pos[0] + dx * k, snap ? p.pos[1] : pos[1] + (p.pos[1] - pos[1]) * k, pos[2] + dz * k);
+        float rot[4] = {0, 0, 0, 1};
+        v.GetRotation(rot);
+        float da = p.ry - rot[1];
+        while (da > 3.14159265f) da -= 6.2831853f;
+        while (da < -3.14159265f) da += 6.2831853f;
+        v.SetRotation(rot[0], rot[1] + da * (snap ? 1.0f : 0.4f), rot[2]);
+        if (v.motion_no != p.motion || v.motion_flags != p.flags) {
+            v.SetMotion(p.motion, p.flags, p.speed);
+        }
+        v.sequence_enabled = 0; // its own walking plan must not move it
+    }
 }
 
 // Called where the game places a floor's enemies: scaled by dc.set_floor_size, never past its 16 slots. DC_MONSTER_MULT overrides it.

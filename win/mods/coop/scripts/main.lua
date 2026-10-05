@@ -39,17 +39,25 @@ local function slot_of(id)
   return id
 end
 
+local pending_tunic = nil
+local last_world = nil        -- host: the last world blob sent
+local host_npcs = nil         -- guest: last villager snapshot from the host {scene=, list=, at=}
+local npc_talk_sent = -1
+local first_seen = {}         -- peer id -> tick their ghost was first wanted
 local tunics = {}             -- peer id -> tunic colour (0 natural, 1..15 presets, 16 custom pictures)
 
 local function drop_peer(id)
   if peers[id] then dc.ghost_clear(slot_of(id)) end
   peers[id] = nil
   tunics[id] = nil
+  first_seen[id] = nil
 end
 
 -- Tell others our tunic colour; custom pictures go as one binary message (the launcher already shrank them). to: a peer id or -1.
 local function send_tunic(to, with_pictures)
   if not dc.my_tunic then return end
+  local delay = tonumber(dc.launch and dc.launch("tunic_delay") or 0) or 0
+  if delay > 0 and ticks < delay then pending_tunic = to; return end -- testing aid: pretend the colour message arrives late
   local c = dc.my_tunic()
   net.send(to, "T " .. c)
   if c == 16 and with_pictures then
@@ -59,6 +67,7 @@ local function send_tunic(to, with_pictures)
 end
 
 local function reset_session()
+  if dc.world_leave then dc.world_leave() end -- a guest goes back to their own world (keeping the items and gilda they have)
   dc.set_tunic(false)
   if remote_frozen then dc.freeze(false); remote_frozen = false end
   unmatched = {}
@@ -101,6 +110,28 @@ local function handle(kind, peer, data)
         tunics[peer] = 16
         log("custom tunic pictures from", peer, fl, bl)
       end
+    elseif tag == "V" and peer == 0 then
+      local sc, rest = data:match("^V (%S+) (.*)$")
+      if sc then
+        local list = {}
+        for id, x, y, z, ry, m, fl, sp in rest:gmatch("(%-?%d+),(%S-),(%S-),(%S-),(%S-),(%-?%d+),(%-?%d+),(%S-);") do
+          list[#list + 1] = { id = tonumber(id), x = tonumber(x), y = tonumber(y), z = tonumber(z), ry = tonumber(ry), m = tonumber(m), fl = tonumber(fl), sp = tonumber(sp) }
+        end
+        host_npcs = { scene = sc, list = list, at = ticks }
+      end
+    elseif tag == "W" and peer == 0 and dc.world_join then
+      if not dc.world_active() then dc.toast("ENTERING THE HOST'S WORLD", 4) end
+      dc.world_join(data:sub(2))
+    elseif tag == "G" then
+      local kind, map, parts, x, y, z, rot = data:match("^G (%d) (%-?%d+) (%-?%d+) (%S+) (%S+) (%S+) (%-?%d+)")
+      if kind and dc.georama_apply then
+        if dc.georama_apply(tonumber(kind), tonumber(map), tonumber(parts), tonumber(x), tonumber(y), tonumber(z), tonumber(rot)) then
+          dc.toast("PLAYER " .. peer .. (kind == "1" and " BUILT SOMETHING" or " REMOVED SOMETHING"), 2)
+        end
+      end
+    elseif tag == "N" and net.status() == "hosting" then
+      local id = tonumber(data:match("^N (%-?%d+)"))
+      if id and dc.npc_hold then dc.npc_hold(id, 150) end -- a guest is talking to this villager: it stands still
     elseif tag == "F" then
       local d, f, seed = data:match("^F (%-?%d+) (%-?%d+) (%-?%d+)")
       if d then
@@ -151,6 +182,10 @@ local function handle(kind, peer, data)
   elseif kind == "join" then
     dc.toast("PLAYER " .. peer .. " JOINED", 3)
     send_tunic(peer, true)
+    if net.status() == "hosting" and dc.world_capture then
+      local w = dc.world_capture()
+      if w then net.send(peer, "W" .. w) end -- the new guest plays in this world
+    end
     if net.status() == "hosting" then
       for k, seed in pairs(seeds) do
         local d, f = k:match("^(%-?%d+):(%-?%d+)$")
@@ -250,6 +285,7 @@ dc.msg_on("hub_open", function(id) if id == "coop.menu" then open_coop_menu() en
 local launched = false
 dc.on("tick", function()
   ticks = ticks + 1
+  if pending_tunic and (tonumber(dc.launch and dc.launch("tunic_delay") or 0) or 0) <= ticks then local to = pending_tunic; pending_tunic = nil; send_tunic(to, true) end
   if LAUNCH_MODE and not launched and ticks > 60 then -- started from the launcher: host or join once the game is up
     launched = true
     if LAUNCH_MODE == "host" then
@@ -332,11 +368,58 @@ dc.on("tick", function()
         net.send(-1, "M " .. scene .. " " .. table.concat(parts))
       end
     end
+    -- Dark-Souls style: the host's world (story flags, unlocked places, Georama, time) is sent to guests; their items and gilda stay their own.
+    if status == "hosting" and dc.world_capture and ticks % 180 == 0 and #net.peers() > 0 then
+      local w = dc.world_capture()
+      if w and w ~= last_world then last_world = w; net.send(-1, "W" .. w) end
+    end
+
+    -- Georama: what this player builds or removes goes to everyone in the session (their town applies it if it is the same map).
+    if dc.georama_take then
+      while true do
+        local kind, map, parts, x, y, z, rot = dc.georama_take()
+        if not kind then break end
+        net.send(-1, string.format("G %d %d %d %.3f %.3f %.3f %d", kind, map, parts, x, y, z, rot))
+      end
+    end
+    -- Town villagers: the host's are the real ones; a guest's follow the host's snapshot. A guest talking to one tells the host to hold it still.
+    if dc.npc_list and scene:sub(1, 1) == "T" then
+      if status == "hosting" and #net.peers() > 0 and ticks % SEND_EVERY == 0 then
+        local parts = {}
+        for _, v in ipairs(dc.npc_list()) do
+          parts[#parts + 1] = string.format("%d,%.2f,%.2f,%.2f,%.3f,%d,%d,%.3f;", v.id, v.x, v.y, v.z, v.ry, v.m, v.fl, v.sp)
+        end
+        net.send(-1, "V " .. scene .. " " .. table.concat(parts))
+      elseif status == "connected" then
+        if host_npcs and host_npcs.scene == scene and ticks - host_npcs.at < 120 then
+          for _, v in ipairs(host_npcs.list) do dc.npc_puppet(v.id, v.x, v.y, v.z, v.ry, v.m, v.fl, v.sp) end
+          if ticks % 300 == 0 then
+            local mine, off = dc.npc_list(), {}
+            for _, v in ipairs(host_npcs.list) do
+              for _, m in ipairs(mine) do
+                if m.id == v.id then off[#off + 1] = string.format("%d:%.0f", v.id, math.sqrt((m.x - v.x) ^ 2 + (m.z - v.z) ^ 2)) end
+              end
+            end
+            log("villagers following the host:", #host_npcs.list, "distance from host copy:", table.concat(off, " "))
+          end
+        else
+          dc.npc_puppet_clear()
+        end
+        local talking = dc.npc_talking()
+        if talking >= 0 and ticks % 30 == 0 then net.send(0, "N " .. talking) end
+      end
+    elseif dc.npc_puppet_clear then
+      dc.npc_puppet_clear()
+    end
+
     for id, p in pairs(peers) do
       if ticks - p.at > 600 then
         drop_peer(id)                         -- silent for a while: treat as gone
       elseif scene ~= "-" and p.scene == scene then
-        dc.ghost(slot_of(id), p.x, p.y, p.z, p.rx, p.ry, p.rz, p.m, p.fl, tunics[id] or (id == 0 and 0 or 1), p.weapon or 0)
+        first_seen[id] = first_seen[id] or ticks
+        if tunics[id] or ticks - first_seen[id] >= 180 then -- wait up to 3 s for their tunic colour, so the ghost is built once, in the right colour
+          dc.ghost(slot_of(id), p.x, p.y, p.z, p.rx, p.ry, p.rz, p.m, p.fl, tunics[id] or (id == 0 and 0 or 1), p.weapon or 0)
+        end
       else
         dc.ghost_clear(slot_of(id))
       end

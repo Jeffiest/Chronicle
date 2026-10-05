@@ -1,12 +1,16 @@
 #pragma once
 
+#include <cstddef>
+
 // Remote players drawn in the dungeon and in towns (Windows fork multiplayer). Plain types only; the game headers stay in
 // ghost_win.cpp. Slots 1..3. A ghost is a second Toan model driven by what the other player sent: position, rotation, motion.
 // Each scene (a dungeon floor, a town map) has its own model and coordinates, so a ghost is only drawn in the scene the scripts
 // say it is in; scripts compare GhostScene() strings to decide.
 
-// color: 0 natural (orange tunic), 1 blue tunic. weapon_item: the weapon's item number, drawn in dungeons only (0 = none).
+// color: tunic colour 0 natural (orange), 1..15 presets, 16 custom pictures (see GhostSetTunic and mods.hpp). weapon_item: the weapon's item number, drawn in dungeons only (0 = none).
 void GhostSet(int slot, const float pos[3], const float rot[3], int motion_no, int motion_flags, int color, int weapon_item);
+// Gives ghost `slot` a tunic colour; for 16 the PNG bytes of its poncho front and back (either may be empty). Rebuilds the ghost.
+void GhostSetTunic(int slot, int color, const void *front, std::size_t front_len, const void *back, std::size_t back_len);
 void GhostInvalidate();               // the game reloaded its own player model: rebuild ghosts before the next draw
 void GhostClear(int slot);
 void GhostClearAll();

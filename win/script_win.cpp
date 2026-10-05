@@ -17,6 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -1097,6 +1098,20 @@ int L_set_shop_list(lua_State *L) {
     }
     return 0;
 }
+// dc.launch(key): a value the launcher passed in the environment as DC_LAUNCH_<KEY> (key upper-cased), or nil. Used by co-op to host or join at start.
+int L_launch(lua_State *L) {
+    std::string name = "DC_LAUNCH_";
+    for (const char *c = luaL_checkstring(L, 1); *c != 0; c++) {
+        name += static_cast<char>(std::toupper(static_cast<unsigned char>(*c)));
+    }
+    const char *e = std::getenv(name.c_str());
+    if (e == nullptr || e[0] == 0) {
+        lua_pushnil(L);
+    } else {
+        lua_pushstring(L, e);
+    }
+    return 1;
+}
 // dc.set_monster_speed(i, m): enemy i moves and animates m times as fast (0.3..3). Scripts re-apply it each tick; 1 is normal.
 float g_mon_speed[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 int L_set_monster_speed(lua_State *L) {
@@ -1276,6 +1291,39 @@ int L_ghost(lua_State *L) {
 // dc.set_tunic(blue): paint the local player's tunic blue (a guest) or leave it orange; applies when the game next loads the model.
 int L_set_tunic(lua_State *L) {
     ModsSetLocalTunicBlue(lua_toboolean(L, 1) != 0);
+    return 0;
+}
+// dc.my_tunic(): the local player's tunic colour now (0 natural, 1..15 presets, 16 custom).
+int L_my_tunic(lua_State *L) {
+    lua_pushinteger(L, ModsLocalTunic());
+    return 1;
+}
+// dc.launch_file(key): the bytes of the file named by DC_LAUNCH_<KEY> (a path the launcher set), or nil; at most 400 KB.
+int L_launch_file(lua_State *L) {
+    std::string name = "DC_LAUNCH_";
+    for (const char *c = luaL_checkstring(L, 1); *c != 0; c++) {
+        name += static_cast<char>(std::toupper(static_cast<unsigned char>(*c)));
+    }
+    const char *path = std::getenv(name.c_str());
+    if (path == nullptr || path[0] == 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+    std::ifstream in(path, std::ios::binary);
+    std::string   bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in.is_open() || bytes.empty() || bytes.size() > 400000) {
+        lua_pushnil(L);
+    } else {
+        lua_pushlstring(L, bytes.data(), bytes.size());
+    }
+    return 1;
+}
+// dc.ghost_tunic(slot, color [, front_png, back_png]): another player's tunic; for colour 16 the bytes of their pictures.
+int L_ghost_tunic(lua_State *L) {
+    size_t      fl = 0, bl = 0;
+    const char *front = lua_isstring(L, 3) ? lua_tolstring(L, 3, &fl) : nullptr;
+    const char *back = lua_isstring(L, 4) ? lua_tolstring(L, 4, &bl) : nullptr;
+    GhostSetTunic(static_cast<int>(luaL_checkinteger(L, 1)), static_cast<int>(luaL_checkinteger(L, 2)), front, fl, back, bl);
     return 0;
 }
 int L_ghost_clear(lua_State *L) {
@@ -1810,8 +1858,8 @@ void LoadLua(const fs::path &mod, const std::string &name) {
         {"rect", L_rect}, {"monster_screen", L_monster_screen}, {"player_screen", L_player_screen}, {"weapon", L_weapon},
         {"set_weapon", L_set_weapon}, {"store_get", L_store_get}, {"store_set", L_store_set}, {"store_slot", L_store_slot}, {"shared_get", L_shared_get}, {"shared_set", L_shared_set}, {"shared_all", L_shared_all},
         {"freeze", L_freeze}, {"block_input", L_block_input}, {"monster_pos", L_monster_pos}, {"floor_select", L_floor_select}, {"set_floor_size", L_set_floor_size}, {"floor_reached", L_floor_reached}, {"town_pos", L_town_pos}, {"camera", L_camera}, {"ailments", L_ailments}, {"set_ailments", L_set_ailments}, {"set_monster_status", L_set_monster_status}, {"monster_status", L_monster_status}, {"set_monster_scale", L_set_monster_scale}, {"day", L_day}, {"shop_list", L_shop_list}, {"set_shop_list", L_set_shop_list}, {"monster_model", L_monster_model}, {"player_pos", L_player_pos},
-        {"hurt_monster", L_hurt_monster}, {"set_monster_speed", L_set_monster_speed},
-        {"player_state", L_player_state}, {"ghost", L_ghost}, {"ghost_clear", L_ghost_clear}, {"set_tunic", L_set_tunic}, {"floor_seed", L_floor_seed}, {"scene", L_scene}, {"monster_state", L_monster_state}, {"puppet", L_puppet},
+        {"hurt_monster", L_hurt_monster}, {"set_monster_speed", L_set_monster_speed}, {"launch", L_launch},
+        {"player_state", L_player_state}, {"ghost", L_ghost}, {"ghost_clear", L_ghost_clear}, {"set_tunic", L_set_tunic}, {"my_tunic", L_my_tunic}, {"launch_file", L_launch_file}, {"ghost_tunic", L_ghost_tunic}, {"floor_seed", L_floor_seed}, {"scene", L_scene}, {"monster_state", L_monster_state}, {"puppet", L_puppet},
         {"puppet_clear", L_puppet_clear}, {"logic_ticks", L_logic_ticks},
         {"remove_chest_monster", L_remove_chest_monster}, {"take_event", L_take_event}, {"run_event", L_run_event}, {"msg_on", L_msg_on}, {"msg", L_msg}, {"menu_open", L_menu_open}, {"frozen", L_frozen},
         {"take_ghost_hit", L_take_ghost_hit}, {"hurt_player", L_hurt_player},

@@ -3,6 +3,13 @@
 What is installed, what each mod does, and every control. Everything lives in `win-save\mods\<mod>\`. Turn mods on and off and set the
 load order with `python mod_manager.py`; restart the game after saving. Open the in-game settings screen with **F1** or **L2+R2+Select**.
 
+## Launcher
+`ChronicleLauncher.exe` (build it with `build_launcher.ps1`; keep it beside `win-save` and `Chronicle-win-build`) is the one place to start the game:
+**Game** tab (data and save folders, window size, fullscreen, frame limit, volume), **Multiplayer** tab (Single player / Host / Join, IP, port, a
+connection test, your addresses to give friends), **Mods** tab (turn mods on and off, load order, conflicts). **PLAY** saves everything, turns the
+co-op mod on or off to match, and starts the game; as host or guest the game connects by itself a second after the world loads. The game's
+output goes to `win-save\launcher_run.log`. The **Character** tab sets Toan's tunic: 16 colours (orange original, blue, green, red, purple, teal, pink, yellow, lime, cyan, magenta, brown, white, black, gold, navy) or a **Custom** design: pick your own front (and optional back) picture for the poncho, shrunk to 256x256 and sent to the other players, who see it on your Toan. "Save the template pictures" copies the game's own poncho textures (needs a texture dump once, `run_win.ps1 -DumpTextures`) to paint over. Colours apply the next time the game loads Toan (a door or a dungeon). Everyone in a co-op game needs the same mods in the same order.
+
 ## Controls at a glance
 
 | Where | Input | Does |

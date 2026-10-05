@@ -198,10 +198,39 @@ void Dump(const char *name, int bpp, int block, unsigned width, unsigned height,
 
 
 // ---- Multiplayer colours -----------------------------------------------------------------------------------------------------
-bool g_local_tunic_blue = false;
+// Tunic colour indices: 0 natural (orange), 1..15 presets, 16 custom (the player's own textures). A ghost's renamed copy of the poncho
+// textures ("<letter><digit>1d04" / "...05") carries its colour in the first letter; the player's own are "c01d04" / "c01d05".
+struct TunicPreset { float hue, sat, val; };
+const TunicPreset kTunic[16] = {
+    {0, 1, 1},          // 0 natural (unused)
+    {215, 1, 1},        // 1 blue
+    {125, 1, 0.95f},    // 2 green
+    {2, 1, 1},          // 3 red
+    {275, 1, 0.95f},    // 4 purple
+    {175, 1, 0.95f},    // 5 teal
+    {325, 0.75f, 1.15f},// 6 pink
+    {52, 1, 1.1f},      // 7 yellow
+    {85, 1, 1},         // 8 lime
+    {190, 1, 1},        // 9 cyan
+    {300, 1, 1},        // 10 magenta
+    {25, 0.55f, 0.55f}, // 11 brown
+    {40, 0.06f, 1.35f}, // 12 white
+    {30, 0.25f, 0.3f},  // 13 black
+    {46, 1, 1.15f},     // 14 gold
+    {235, 1, 0.55f},    // 15 navy
+};
+const char kTunicLetters[] = "hgijklmnopqrstuvw"; // first letter of a ghost's renamed texture, by colour index 0..16
 
-// Pixels that are clearly orange/red/yellow (the poncho) are turned to blue; shading and saturation are kept.
-void ShiftToBlue(uint8_t *px) {
+int g_local_tunic = -1; // -1 = not read from the launcher's environment yet
+int g_launch_tunic = 0; // what the launcher chose
+
+struct CustomTunic {
+    std::vector<uint8_t> front, back; // 256x256 RGBA
+};
+std::map<char, CustomTunic> g_custom; // key: the ghost's digit, or 'L' for the player's own
+
+// Pixels that are clearly orange/red/yellow (the poncho) are moved to the preset's hue; shading is kept.
+void ShiftTunic(uint8_t *px, const TunicPreset &t) {
     float r = px[0] / 255.0f, gr = px[1] / 255.0f, b = px[2] / 255.0f;
     float mx = std::max({r, gr, b}), mn = std::min({r, gr, b});
     float d = mx - mn;
@@ -224,34 +253,100 @@ void ShiftToBlue(uint8_t *px) {
         return; // not poncho-coloured
     }
     float rel = h <= 55.0f ? h - 30.0f : h - 390.0f;
-    float nh = 215.0f + rel * 0.4f;
-    float c = mx * s;
+    float nh = std::fmod(t.hue + rel * 0.4f + 720.0f, 360.0f);
+    float v = std::clamp(mx * t.val, 0.0f, 1.0f);
+    float sat = std::clamp(s * t.sat, 0.0f, 1.0f);
+    float c = v * sat;
     float x = c * (1.0f - std::fabs(std::fmod(nh / 60.0f, 2.0f) - 1.0f));
-    float m0 = mx - c;
-    float nr = 0, ng = 0, nb = 0;
-    if (nh < 180.0f)      { nr = 0; ng = x; nb = c; }
-    else if (nh < 240.0f) { nr = 0; ng = x; nb = c; }
-    else                  { nr = x; ng = 0; nb = c; }
+    float m0 = v - c;
+    float nr, ng, nb;
+    int   sector = static_cast<int>(nh / 60.0f);
+    switch (sector) {
+    case 0: nr = c; ng = x; nb = 0; break;
+    case 1: nr = x; ng = c; nb = 0; break;
+    case 2: nr = 0; ng = c; nb = x; break;
+    case 3: nr = 0; ng = x; nb = c; break;
+    case 4: nr = x; ng = 0; nb = c; break;
+    default: nr = c; ng = 0; nb = x; break;
+    }
     px[0] = static_cast<uint8_t>(std::clamp((nr + m0) * 255.0f, 0.0f, 255.0f));
     px[1] = static_cast<uint8_t>(std::clamp((ng + m0) * 255.0f, 0.0f, 255.0f));
     px[2] = static_cast<uint8_t>(std::clamp((nb + m0) * 255.0f, 0.0f, 255.0f));
 }
 
-// "c01d04"/"c01d05" are the poncho front and back. A ghost's renamed copy is "g<n>1d04": g = blue, h = natural.
-bool IsBlueTunic(const char *name) {
+// PNG bytes -> 256x256 RGBA (scaled), or empty.
+std::vector<uint8_t> DecodeTunicPng(SDL_Surface *loaded) {
+    std::vector<uint8_t> out;
+    if (loaded == nullptr) {
+        return out;
+    }
+    SDL_Surface *rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(loaded);
+    if (rgba == nullptr) {
+        return out;
+    }
+    SDL_Surface *scaled = Scaled(rgba, 256, 256);
+    SDL_DestroySurface(rgba);
+    if (scaled == nullptr) {
+        return out;
+    }
+    out.resize(256 * 256 * 4);
+    for (int y = 0; y < 256; y++) {
+        std::memcpy(&out[static_cast<size_t>(y) * 1024], static_cast<const uint8_t *>(scaled->pixels) + static_cast<size_t>(y) * scaled->pitch, 1024);
+    }
+    SDL_DestroySurface(scaled);
+    return out;
+}
+
+void LoadLocalTunic() {
+    g_local_tunic = 0;
+    if (const char *e = std::getenv("DC_LAUNCH_TUNIC"); e != nullptr && e[0] != 0) {
+        g_local_tunic = std::clamp(std::atoi(e), 0, 16);
+    }
+    if (g_local_tunic == 16) {
+        CustomTunic c;
+        if (const char *f = std::getenv("DC_LAUNCH_TUNIC_FRONT"); f != nullptr && f[0] != 0) {
+            c.front = DecodeTunicPng(SDL_LoadPNG(f));
+        }
+        if (const char *k = std::getenv("DC_LAUNCH_TUNIC_BACK"); k != nullptr && k[0] != 0) {
+            c.back = DecodeTunicPng(SDL_LoadPNG(k));
+        }
+        if (c.front.empty() && c.back.empty()) {
+            g_local_tunic = 0; // the pictures could not be read: keep the natural colour
+        } else {
+            g_custom['L'] = std::move(c);
+        }
+    }
+    g_launch_tunic = g_local_tunic;
+}
+
+// Is `name` a poncho texture that needs a colour? Gives the colour index, whether it is the back, and the key into g_custom.
+bool TunicOf(const char *name, int &color, bool &back, char &key) {
     std::string n = Fold(name);
     if (n.size() != 6 || (n.compare(2, 4, "1d04") != 0 && n.compare(2, 4, "1d05") != 0)) {
         return false;
     }
-    if (n[0] == 'g') {
-        return true;
+    back = n.compare(2, 4, "1d05") == 0;
+    if (n[0] == 'c' && n[1] == '0') {
+        if (g_local_tunic < 0) {
+            LoadLocalTunic();
+        }
+        color = g_local_tunic;
+        key = 'L';
+        return color > 0;
     }
-    return g_local_tunic_blue && n[0] == 'c' && n[1] == '0';
+    const char *at = std::strchr(kTunicLetters, n[0]);
+    if (at == nullptr || n[0] == 'h') {
+        return false;
+    }
+    color = static_cast<int>(at - kTunicLetters);
+    key = n[1];
+    return true;
 }
 
-bool RecolorTunic(unsigned width, unsigned height, bool &indexed, bool &four_bit, const uint32_t *palette,
+bool RecolorTunic(int color, unsigned width, unsigned height, bool &indexed, bool &four_bit, const uint32_t *palette,
                   std::vector<std::vector<uint8_t>> &levels) {
-    if (levels.empty() || width == 0 || height == 0 || (indexed && palette == nullptr)) {
+    if (color < 1 || color > 15 || levels.empty() || width == 0 || height == 0 || (indexed && palette == nullptr)) {
         return false;
     }
     std::vector<std::vector<uint8_t>> out;
@@ -261,14 +356,14 @@ bool RecolorTunic(unsigned width, unsigned height, bool &indexed, bool &four_bit
         const std::vector<uint8_t> &src = levels[level];
         if (indexed) {
             for (size_t i = 0; i < w * h && i < src.size(); i++) {
-                uint32_t color = palette[src[i]];
-                std::memcpy(&rgba[i * 4], &color, 4);
+                uint32_t c = palette[src[i]];
+                std::memcpy(&rgba[i * 4], &c, 4);
             }
         } else {
             std::memcpy(rgba.data(), src.data(), std::min(rgba.size(), src.size()));
         }
         for (size_t i = 0; i < w * h; i++) {
-            ShiftToBlue(&rgba[i * 4]);
+            ShiftTunic(&rgba[i * 4], kTunic[color]);
         }
         out.push_back(std::move(rgba));
     }
@@ -383,13 +478,82 @@ const fs::path *ModsFileOverride(const char *key, const fs::path *original) {
 }
 
 
-void ModsSetLocalTunicBlue(bool blue) { g_local_tunic_blue = blue; }
+void ModsSetLocalTunicBlue(bool blue) { // a guest with no colour of their own is shown in blue; any chosen colour stays
+    if (g_local_tunic < 0) {
+        LoadLocalTunic();
+    }
+    g_local_tunic = (blue && g_launch_tunic == 0) ? 1 : g_launch_tunic;
+}
+
+int ModsLocalTunic() {
+    if (g_local_tunic < 0) {
+        LoadLocalTunic();
+    }
+    return g_local_tunic;
+}
+
+bool ModsSetTunicCustom(char key, const void *front, size_t front_len, const void *back, size_t back_len) {
+    CustomTunic c;
+    auto        decode = [](const void *bytes, size_t len) {
+        if (bytes == nullptr || len == 0 || len > (1u << 20)) {
+            return std::vector<uint8_t>();
+        }
+        SDL_IOStream *io = SDL_IOFromConstMem(bytes, len);
+        return io != nullptr ? DecodeTunicPng(SDL_LoadPNG_IO(io, true)) : std::vector<uint8_t>();
+    };
+    c.front = decode(front, front_len);
+    c.back = decode(back, back_len);
+    if (c.front.empty() && c.back.empty()) {
+        g_custom.erase(key);
+        return false;
+    }
+    g_custom[key] = std::move(c);
+    return true;
+}
 
 void ModsNoteFile(const char *path) {
     if (path != nullptr) {
         g.last_file = path; // dumps and scoped overrides both name the game file a texture came from
     }
 }
+
+namespace {
+bool ReplaceLevels(SDL_Surface *rgba, unsigned width, unsigned height, bool &indexed, bool &has_alpha, bool &four_bit,
+                   std::vector<std::vector<uint8_t>> &levels) {
+    int level_count = std::max<int>(1, static_cast<int>(levels.size()));
+    std::vector<std::vector<uint8_t>> out;
+    bool                              translucent = false;
+    for (int level = 0; level < level_count; level++) {
+        int          w = std::max<int>(1, static_cast<int>(width) >> level);
+        int          h = std::max<int>(1, static_cast<int>(height) >> level);
+        SDL_Surface *scaled = Scaled(rgba, w, h);
+        if (scaled == nullptr) {
+            return false;
+        }
+        std::vector<uint8_t> bytes(static_cast<size_t>(w) * h * 4);
+        for (int y = 0; y < h; y++) {
+            const uint8_t *row = static_cast<const uint8_t *>(scaled->pixels) + static_cast<size_t>(y) * scaled->pitch;
+            std::memcpy(&bytes[static_cast<size_t>(y) * w * 4], row, static_cast<size_t>(w) * 4);
+        }
+        if (level == 0) {
+            for (size_t i = 3; i < bytes.size(); i += 4) {
+                if (bytes[i] != 255) {
+                    translucent = true;
+                    break;
+                }
+            }
+        }
+        SDL_DestroySurface(scaled);
+        out.push_back(std::move(bytes));
+    }
+    levels = std::move(out);
+    indexed = false;
+    has_alpha = translucent || has_alpha;
+    four_bit = false;
+    return true;
+}
+
+} // namespace
 
 void ModsTextureHook(const char *name, int bpp, int block, unsigned width, unsigned height, bool &indexed, bool &has_alpha,
                      bool &four_bit, const uint32_t *palette, std::vector<std::vector<uint8_t>> &levels) {
@@ -399,8 +563,31 @@ void ModsTextureHook(const char *name, int bpp, int block, unsigned width, unsig
     if (g.dump) {
         Dump(name, bpp, block, width, height, indexed, palette, levels);
     }
-    if (IsBlueTunic(name) && RecolorTunic(width, height, indexed, four_bit, palette, levels)) {
-        return;
+    {
+        int  tc = 0;
+        bool tback = false;
+        char tkey = 0;
+        if (TunicOf(name, tc, tback, tkey)) {
+            if (tc >= 1 && tc <= 15 && RecolorTunic(tc, width, height, indexed, four_bit, palette, levels)) {
+                return;
+            }
+            if (tc == 16) {
+                auto it = g_custom.find(tkey);
+                if (it != g_custom.end()) {
+                    const std::vector<uint8_t> &px = (tback && !it->second.back.empty()) || it->second.front.empty() ? it->second.back : it->second.front;
+                    if (!px.empty()) {
+                        SDL_Surface *surf = SDL_CreateSurfaceFrom(256, 256, SDL_PIXELFORMAT_RGBA32, const_cast<uint8_t *>(px.data()), 1024);
+                        bool         done = surf != nullptr && ReplaceLevels(surf, width, height, indexed, has_alpha, four_bit, levels);
+                        if (surf != nullptr) {
+                            SDL_DestroySurface(surf);
+                        }
+                        if (done) {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
     }
     if (g.by_stem.empty() && g.by_scoped.empty()) {
         return;
@@ -430,38 +617,11 @@ void ModsTextureHook(const char *name, int bpp, int block, unsigned width, unsig
     if (rgba == nullptr) {
         return;
     }
-    int level_count = std::max<int>(1, static_cast<int>(levels.size()));
-    std::vector<std::vector<uint8_t>> out;
-    bool                              translucent = false;
-    for (int level = 0; level < level_count; level++) {
-        int          w = std::max<int>(1, static_cast<int>(width) >> level);
-        int          h = std::max<int>(1, static_cast<int>(height) >> level);
-        SDL_Surface *scaled = Scaled(rgba, w, h);
-        if (scaled == nullptr) {
-            SDL_DestroySurface(rgba);
-            return;
-        }
-        std::vector<uint8_t> bytes(static_cast<size_t>(w) * h * 4);
-        for (int y = 0; y < h; y++) {
-            const uint8_t *row = static_cast<const uint8_t *>(scaled->pixels) + static_cast<size_t>(y) * scaled->pitch;
-            std::memcpy(&bytes[static_cast<size_t>(y) * w * 4], row, static_cast<size_t>(w) * 4);
-        }
-        if (level == 0) {
-            for (size_t i = 3; i < bytes.size(); i += 4) {
-                if (bytes[i] != 255) {
-                    translucent = true;
-                    break;
-                }
-            }
-        }
-        SDL_DestroySurface(scaled);
-        out.push_back(std::move(bytes));
+    if (!ReplaceLevels(rgba, width, height, indexed, has_alpha, four_bit, levels)) {
+        SDL_DestroySurface(rgba);
+        return;
     }
     SDL_DestroySurface(rgba);
-    levels = std::move(out);
-    indexed = false;
-    has_alpha = translucent || has_alpha;
-    four_bit = false;
     if (g.replaced++ < 50) {
         std::fprintf(stderr, "mods: replaced texture %s (from %s)\n", name, source.c_str());
     }

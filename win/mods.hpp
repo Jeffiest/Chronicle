@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <vector>
@@ -24,3 +25,8 @@ const std::filesystem::path *ModsFileOverride(const char *key, const std::filesy
 // texture is loaded: always for the renamed copies a ghost uses for a blue player, and for the player's own textures while this is
 // on (a guest sees themselves in blue). Takes effect the next time the game loads the player's model (entering a town or dungeon).
 void ModsSetLocalTunicBlue(bool blue);
+
+// Tunic colours (0 natural, 1..15 presets, 16 custom pictures). The player's own comes from the launcher's environment
+// (DC_LAUNCH_TUNIC, DC_LAUNCH_TUNIC_FRONT / _BACK). ModsSetTunicCustom stores PNG bytes (any size, scaled to 256x256) for a ghost's digit.
+int ModsLocalTunic();
+bool ModsSetTunicCustom(char key, const void *front, size_t front_len, const void *back, size_t back_len);

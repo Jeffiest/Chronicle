@@ -224,16 +224,14 @@ def report(mods_dir):
     return mods, cs
 
 
-def gui(mods_dir):
+def panel(parent, mods_dir):
+    """Builds the manager inside `parent` (any tk container). Returns {'dirty': fn, 'save': fn}; the window or launcher owns the mainloop."""
     import tkinter as tk
     from tkinter import ttk, messagebox
 
-    root = tk.Tk()
-    root.title('Chronicle mod manager')
-    root.geometry('860x560')
     state = {'mods': scan(mods_dir), 'dirty': False}
 
-    top = ttk.Frame(root, padding=8)
+    top = ttk.Frame(parent, padding=8)
     top.pack(fill='both', expand=True)
     ttk.Label(top, text=f'{mods_dir}   (later in the list wins a conflict)').pack(anchor='w')
     cols = ('on', 'name', 'what', 'conf')
@@ -322,8 +320,20 @@ def gui(mods_dir):
     tree.bind('<Double-1>', lambda e: toggle())
     refresh()
 
+    return {'dirty': lambda: state['dirty'], 'save': do_save}
+
+
+def gui(mods_dir):
+    import tkinter as tk
+    from tkinter import messagebox
+
+    root = tk.Tk()
+    root.title('Chronicle mod manager')
+    root.geometry('860x560')
+    p = panel(root, mods_dir)
+
     def on_close():
-        if state['dirty'] and not messagebox.askyesno('Unsaved changes', 'Quit without saving?'):
+        if p['dirty']() and not messagebox.askyesno('Unsaved changes', 'Quit without saving?'):
             return
         root.destroy()
 

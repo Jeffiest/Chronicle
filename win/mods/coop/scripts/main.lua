@@ -5,8 +5,9 @@
 -- Phase 3: the host runs the monsters. Guests mirror them (position, animation, life) and their hits are applied on the host, so
 --          everyone fights the same monsters. Guests' monsters do not attack them yet. Both players must be on the same floor.
 local UI = require("listui")
-local PORT = 7777
-local DEFAULT_IP = "127.0.0.1"   -- used until you set the host's Tailscale / LAN IP in the menu
+local LAUNCH_MODE = dc.launch and dc.launch("coop") -- set by the launcher: "host" or "join"
+local PORT = (dc.launch and tonumber(dc.launch("port"))) or 7777
+local DEFAULT_IP = (dc.launch and dc.launch("ip")) or "127.0.0.1"   -- used until you set the host's Tailscale / LAN IP in the menu
 local SEND_EVERY = 3          -- game ticks between state messages (20 per second)
 
 local peers = {}              -- id -> last state received
@@ -38,9 +39,23 @@ local function slot_of(id)
   return id
 end
 
+local tunics = {}             -- peer id -> tunic colour (0 natural, 1..15 presets, 16 custom pictures)
+
 local function drop_peer(id)
   if peers[id] then dc.ghost_clear(slot_of(id)) end
   peers[id] = nil
+  tunics[id] = nil
+end
+
+-- Tell others our tunic colour; custom pictures go as one binary message (the launcher already shrank them). to: a peer id or -1.
+local function send_tunic(to, with_pictures)
+  if not dc.my_tunic then return end
+  local c = dc.my_tunic()
+  net.send(to, "T " .. c)
+  if c == 16 and with_pictures then
+    local front, back = dc.launch_file("tunic_front") or "", dc.launch_file("tunic_back") or ""
+    if #front + #back > 0 then net.send(to, "U" .. string.pack("<I4I4", #front, #back) .. front .. back) end
+  end
 end
 
 local function reset_session()
@@ -75,6 +90,16 @@ local function handle(kind, peer, data)
         peers[peer] = {scene = sc, x = tonumber(x), y = tonumber(y), z = tonumber(z),
                        rx = tonumber(rx), ry = tonumber(ry), rz = tonumber(rz), m = tonumber(m), fl = tonumber(fl),
                        weapon = tonumber(w), paused = pz == "1", at = ticks}
+      end
+    elseif tag == "T" then
+      local c = tonumber(data:match("^T (%d+)"))
+      if c and c >= 0 and c <= 16 then tunics[peer] = c; log("tunic of", peer, "is", c) end
+    elseif tag == "U" and #data >= 9 then
+      local fl, bl = string.unpack("<I4I4", data, 2)
+      if fl <= 400000 and bl <= 400000 and #data >= 9 + fl + bl then
+        dc.ghost_tunic(slot_of(peer), 16, data:sub(10, 9 + fl), data:sub(10 + fl, 9 + fl + bl))
+        tunics[peer] = 16
+        log("custom tunic pictures from", peer, fl, bl)
       end
     elseif tag == "F" then
       local d, f, seed = data:match("^F (%-?%d+) (%-?%d+) (%-?%d+)")
@@ -125,6 +150,7 @@ local function handle(kind, peer, data)
     end
   elseif kind == "join" then
     dc.toast("PLAYER " .. peer .. " JOINED", 3)
+    send_tunic(peer, true)
     if net.status() == "hosting" then
       for k, seed in pairs(seeds) do
         local d, f = k:match("^(%-?%d+):(%-?%d+)$")
@@ -135,8 +161,9 @@ local function handle(kind, peer, data)
     dc.toast("PLAYER " .. peer .. " LEFT", 3)
     drop_peer(peer)
   elseif kind == "connected" then
-    dc.set_tunic(true)
-    dc.toast("CONNECTED AS PLAYER " .. peer .. "   (blue tunic after the next door)", 4)
+    dc.set_tunic(true) -- a guest with no colour of their own shows in blue
+    send_tunic(-1, true)
+    dc.toast("CONNECTED AS PLAYER " .. peer .. "   (tunic colour shows after the next door)", 4)
   elseif kind == "failed" or kind == "disconnected" then
     dc.toast("NET " .. kind .. ": " .. data, 4)
     reset_session()
@@ -220,8 +247,19 @@ end
 dc.msg_on("hub_collect", function() dc.msg("hub_entry", "Co-op", "coop.menu") end)
 dc.msg_on("hub_open", function(id) if id == "coop.menu" then open_coop_menu() end end)
 
+local launched = false
 dc.on("tick", function()
   ticks = ticks + 1
+  if LAUNCH_MODE and not launched and ticks > 60 then -- started from the launcher: host or join once the game is up
+    launched = true
+    if LAUNCH_MODE == "host" then
+      local ok, err = net.host(PORT)
+      dc.toast(ok and ("HOSTING ON PORT " .. PORT) or ("HOST FAILED: " .. tostring(err)), 4)
+    elseif LAUNCH_MODE == "join" then
+      local ok, err = net.join(DEFAULT_IP, PORT)
+      dc.toast(ok and ("JOINING " .. DEFAULT_IP .. ":" .. PORT) or ("JOIN FAILED: " .. tostring(err)), 4)
+    end
+  end
   if ip_edit then tick_ip_editor() else UI.tick() end
   if pressed("ctrl+h", "f8") then
     local ok, err = net.host(PORT)
@@ -298,7 +336,7 @@ dc.on("tick", function()
       if ticks - p.at > 600 then
         drop_peer(id)                         -- silent for a while: treat as gone
       elseif scene ~= "-" and p.scene == scene then
-        dc.ghost(slot_of(id), p.x, p.y, p.z, p.rx, p.ry, p.rz, p.m, p.fl, id == 0 and 0 or 1, p.weapon or 0)
+        dc.ghost(slot_of(id), p.x, p.y, p.z, p.rx, p.ry, p.rz, p.m, p.fl, tunics[id] or (id == 0 and 0 or 1), p.weapon or 0)
       else
         dc.ghost_clear(slot_of(id))
       end

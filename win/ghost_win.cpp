@@ -7,6 +7,7 @@
 // weapon its player sent, loaded the same way and attached to the model's "weapon" joint. A ghost animates once per game tick,
 // counted from the logic clock, from inside the draw hook, so it needs no step hook of its own.
 #include "ghost.hpp"
+#include "platform/mods.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -59,6 +60,7 @@ struct Model {
     int          block = -1;       // texture block this ghost's textures live in
     char         probe[8] = {0};   // name of one of its textures, to check the block was not taken from under it
     int          color = 0;
+    int          custom_ver = 0;
     int          weapon_item = 0;
     u_char      *arena_memory = nullptr;
     unsigned int *pack = nullptr; // this ghost's renamed copy, kept: the loaders may keep pointers into it
@@ -74,7 +76,8 @@ struct Ghost {
     float shown_rot[3] = {0, 0, 0};
     int   motion = 0;
     int   flags = 0;
-    int   color = 0;       // 0 natural (orange), 1 blue
+    int   color = 0;       // tunic colour: 0 natural (orange), 1..15 presets, 16 custom pictures
+    int   custom_ver = 0;  // bumped when the custom pictures change
     int   weapon_item = 0; // dungeon only
     Model model[CTX_COUNT];
 };
@@ -249,7 +252,8 @@ bool Load(Ghost &g, int ctx, int slot) {
     }
     std::memcpy(m.pack, info.data, static_cast<size_t>(info.size));
     static const char *const kSuffix[] = {"01", "02", "03", "04", "05", "11"};
-    char variant = g.color == 1 ? 'g' : 'h';
+    static const char kLetters[] = "hgijklmnopqrstuvw"; // by colour index; mods_win.cpp reads the colour back from this letter
+    char variant = kLetters[std::clamp(g.color, 0, 16)];
     char digit = static_cast<char>('1' + ctx * kSlots + slot);
     int  renamed = RenameTokens(reinterpret_cast<unsigned char *>(m.pack), info.size, "c01d", kSuffix, 6, variant, digit);
 
@@ -302,6 +306,7 @@ bool Load(Ghost &g, int ctx, int slot) {
     m.chara = c;
     m.weapon = nullptr;
     m.color = g.color;
+    m.custom_ver = g.custom_ver;
     m.weapon_item = 0;
     if (ctx == CTX_DUNGEON && g.weapon_item > 0) {
         if (LoadWeapon(g, m, slot, block, alloc)) {
@@ -379,7 +384,7 @@ void DrawScene(int ctx) {
             continue;
         }
         Model &m = g.model[ctx];
-        bool   stale = m.chara != nullptr && (m.epoch != g_epoch || m.color != g.color || (ctx == CTX_DUNGEON && m.weapon_item != g.weapon_item) ||
+        bool   stale = m.chara != nullptr && (m.epoch != g_epoch || m.color != g.color || m.custom_ver != g.custom_ver || (ctx == CTX_DUNGEON && m.weapon_item != g.weapon_item) ||
                                               !ModelAlive(m));
         if (stale) {
             m.chara = nullptr; // rebuilt below into the same memory
@@ -420,8 +425,29 @@ void GhostSet(int slot, const float pos[3], const float rot[3], int motion_no, i
     g.want = true;
     g.motion = motion_no;
     g.flags = motion_flags & 3;
-    g.color = color != 0 ? 1 : 0;
+    g.color = std::clamp(color, 0, 16);
     g.weapon_item = weapon_item > 0 ? weapon_item : 0;
+}
+
+void GhostSetTunic(int slot, int color, const void *front, std::size_t front_len, const void *back, std::size_t back_len) {
+    if (slot < 1 || slot > kSlots) {
+        return;
+    }
+    Ghost &g = g_ghost[slot - 1];
+    color = std::clamp(color, 0, 16);
+    if (color == 16) {
+        bool ok = false;
+        for (int ctx = 0; ctx < CTX_COUNT; ctx++) {
+            ok = ModsSetTunicCustom(static_cast<char>('1' + ctx * kSlots + (slot - 1)), front, front_len, back, back_len) || ok;
+        }
+        if (!ok) {
+            color = 0; // the pictures could not be read
+        }
+    }
+    if (color != g.color || color == 16) {
+        g.custom_ver++;
+    }
+    g.color = color;
 }
 
 void GhostClear(int slot) {

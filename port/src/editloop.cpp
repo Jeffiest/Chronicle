@@ -18,6 +18,7 @@
 #include "collision.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 #include "dataset.hpp"
 #include "debugfont.hpp"
 #include "dngstatusdata.hpp"
@@ -1570,4 +1571,217 @@ PC_OVERRIDE void EdDrawClock(int x, int y) {
         hand_screen.height = 40;
         set2DSpriteRot(GetVif1Packet(), TexManager.GetTexture("dayclock", -1), hand_screen, hand_texel, 12, 40, angle, 128);
     }
+}
+
+// Retail's LoadTexture with the disc's own editor art: the NTSC disc keeps the message window art in
+// one pack and the editor's system art in a pack per language, where PAL splits the system art into
+// a common pack and a per-language image. The frame buffers keep the PAL sizes on either disc.
+PC_OVERRIDE int LoadTexture() {
+    int        entered;
+    int        image;
+    u_long128 *buffer = (u_long128 *) (DataBuffer__2.base + DataBuffer__2.used * 16);
+
+    TexManager.Initialize(0x3FE0);
+    TexManager.SetBuffer(buffer, 0x4E200);
+
+    LOADTEXTURE_INFO2 mes_blocks[8] = {
+        {"#mes_frame_buff#640#" SCREEN_HEIGHT_STR "#4", 0x1A, 0},
+        {"#fukidashibase#640#224#4",                    0x1A, 0},
+        {"#fontbase#512#256#1",                         0x1A, 0},
+        {"meswin/gaiji.img",                            0x1A, 0},
+        {"meswin/fuki256.img",                          0x1A, 0},
+        {"meswin/syst04.img",                           0x1A, 0},
+    };
+    char mes_path[64] = "meswin/mes_tex.pak";
+
+    if (!PortNtscData() && LanguageCode > LANG_JAPANESE) {
+        sprintf(mes_path, "meswin/mes_tex_%d.pak", LanguageCode);
+    }
+
+    LoadFile(mes_path, read_buffer, NULL);
+    wait_now_loading_vsync();
+    mes_blocks[3].name = (char *) GetPackFile(read_buffer, "gaiji.img", NULL);
+    mes_blocks[4].name = (char *) GetPackFile(read_buffer, "fuki256.img", NULL);
+    mes_blocks[5].name = (char *) GetPackFile(read_buffer, "syst04.img", NULL);
+    TexManager.LoadTextureBlock(-1, mes_blocks);
+
+    LOADTEXTURE_INFO2 blocks[64] = {};
+
+    if (PortNtscData()) {
+        char system_path[64] = "gedit/system/esys.pak";
+
+        if (LanguageCode > LANG_JAPANESE) {
+            sprintf(system_path, "gedit/system/esys_%d.pak", LanguageCode);
+        }
+
+        LoadFile(system_path, read_buffer, NULL);
+        wait_now_loading_vsync();
+        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
+        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "cursor.img", NULL), -1, 0, 0);
+
+        LOADTEXTURE_INFO2 system_blocks[] = {
+            {"#water_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",  0x15, 0},
+            {"#shadow_buff#640#" HALF_BUFFER_HEIGHT_STR "#4", 0x16, 0},
+            {"#blender#640#" HALF_BUFFER_HEIGHT_STR "#4",     0x18, 0},
+            {"#font_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",   0x1F, 0},
+            {"img/system.img",                                0x14, 0},
+            {"img/pause.img",                                 0x14, 0},
+            {"s_eff.img",                                     0x14, 0},
+            {"whatsday.img",                                  0x14, 0},
+            {"img/ankfont.img",                               0x1F, 0},
+            {"#frame_image#640#" SCREEN_HEIGHT_STR "#4",      0x13, 0},
+        };
+
+        memcpy(blocks, system_blocks, sizeof(system_blocks));
+        blocks[4].name = (char *) GetPackFile(read_buffer, "system.img", NULL);
+        blocks[5].name = (char *) GetPackFile(read_buffer, "pause.img", NULL);
+        blocks[6].name = (char *) GetPackFile(read_buffer, "s_eff.img", NULL);
+        blocks[7].name = (char *) GetPackFile(read_buffer, "whatsday.img", NULL);
+        blocks[8].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
+    } else {
+        int common_size;
+
+        LoadFile("gedit/system/esys_cmn.pak", read_buffer, &common_size);
+        wait_now_loading_vsync();
+
+        // The language's system image is read into the 1 KiB-aligned space after the common pack.
+        u_int *system_image = read_buffer + ((common_size >> 6) + 1) * 64;
+        char   system_path[64] = "gedit/system/sys.img";
+
+        if (LanguageCode > LANG_JAPANESE) {
+            sprintf(system_path, "gedit/system/sys_%d.img", LanguageCode);
+        }
+
+        LoadFile(system_path, system_image, NULL);
+        wait_now_loading_vsync();
+        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "cursor.img", NULL), -1, 0, 0);
+        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
+
+        LOADTEXTURE_INFO2 system_blocks[] = {
+            {"#water_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",  0x15, 0},
+            {"#shadow_buff#640#" HALF_BUFFER_HEIGHT_STR "#4", 0x16, 0},
+            {"#blender#640#" HALF_BUFFER_HEIGHT_STR "#4",     0x18, 0},
+            {"#font_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",   0x1F, 0},
+            {"img/system.img",                                0x14, 0},
+            {"",                                              0x14, 0},
+            {"s_eff.img",                                     0x14, 0},
+            {"img/ankfont.img",                               0x1F, 0},
+            {"#frame_image#640#" SCREEN_HEIGHT_STR "#4",      0x13, 0},
+        };
+
+        memcpy(blocks, system_blocks, sizeof(system_blocks));
+        blocks[4].name = (char *) GetPackFile(read_buffer, "sys_cmn.img", NULL);
+        blocks[5].name = (char *) system_image;
+        blocks[6].name = (char *) GetPackFile(read_buffer, "s_eff.img", NULL);
+        blocks[7].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
+    }
+
+    TexManager.LoadTextureBlock(-1, blocks);
+    wait_now_loading_vsync();
+
+    CFrameAttr cursor_attr;
+
+    cursor_attr.use_color = true;
+    CharaCursor0 = LoadMDSFile(GetPackFile(read_buffer, "cursor01.mds", NULL), &EtcDataBuffer, 0, NULL, NULL);
+    CharaCursor0->SetAttr(cursor_attr, 1, 0x200);
+    CharaCursor1 = LoadMDSFile(GetPackFile(read_buffer, "cursor02.mds", NULL), &EtcDataBuffer, 0, NULL, NULL);
+    CharaCursor1->SetAttr(cursor_attr, 1, 0x200);
+
+    CharaCursor1->SetScale(2.5f, 2.5f, 2.5f);
+    CharaCursor2 = LoadMDSFile(GetPackFile(read_buffer, "bic.mds", NULL), &EtcDataBuffer, 0, NULL, NULL);
+    CharaCursor2->SetAttr(cursor_attr, 1, 0x200);
+    TreasureCursor = LoadMDSFile(GetPackFile(read_buffer, "ibox_0.mds", NULL), &EtcDataBuffer, 0, NULL, NULL);
+    TreasureCursorOpen = LoadMDSFile(GetPackFile(read_buffer, "ibox_1.mds", NULL), &EtcDataBuffer, 0, NULL, NULL);
+
+    CFrameAttr box_attr;
+
+    box_attr.clip_enable = false;
+    box_attr.fog_enable = true;
+
+    if (TreasureCursor != NULL) {
+        TreasureCursor->SetAttr(box_attr, 1, 0x44);
+    }
+
+    if (TreasureCursorOpen != NULL) {
+        TreasureCursorOpen->SetAttr(box_attr, 1, 0x44);
+    }
+
+    SystemEffect[0].texture = TexManager.GetTexture("s_ef01", -1);
+
+    char             stay_path[128];
+    LOADTEXTURE_INFO map_blocks[64];
+    CRect_i_         effect_rect;
+
+    effect_rect.x = 0;
+    effect_rect.y = 0;
+    effect_rect.width = 0x20;
+    effect_rect.height = 0x20;
+    SystemEffect[0].texel = effect_rect;
+    SystemEffect[0].alpha_blend = true;
+    SystemEffect[0].disable_z_write = true;
+
+    GetEditDataDir(stay_path);
+    strcat(stay_path, "img.pak");
+
+    u_int *menu_data = (u_int *) (EdNPCBuffer.base + EdNPCBuffer.used * 16);
+
+    LoadFileMenuData("stayframe.img", menu_data);
+    wait_now_loading_vsync();
+    TexManager.EnterFixTextureZ((u_char *) menu_data);
+    StayTexture = TexManager.GetTexture("stayframe", -1);
+
+    if (LoadFile2(stay_path, menu_data, NULL, 0) != 0) {
+        wait_now_loading_vsync();
+
+        entered = 0;
+        image = 0;
+
+        while (EditMapInfo->images[image].name[0] != '\0') {
+            blocks[entered].name = (char *) GetPackFile(menu_data, EditMapInfo->images[image].name, NULL);
+            blocks[entered].block_no = EditMapInfo->images[image].type;
+            blocks[entered].mipmap = EditMapInfo->images[image].number;
+            entered++;
+            image++;
+        }
+
+        blocks[entered].name = NULL;
+        blocks[entered].block_no = 0;
+        blocks[entered].mipmap = false;
+        TexManager.LoadTextureBlock(-1, blocks);
+        TexAnime.Initialize(TexAnimeData, 0x40);
+
+        int   anime_size;
+        char *anime_cfg = (char *) GetPackFile(menu_data, "texanime.cfg", &anime_size);
+
+        if (anime_cfg != NULL) {
+            for (int i = 0; i < 64; i++) {
+                TexAnimeData[i].Initialize();
+            }
+
+            TexAnime.LoadCFGFile(anime_cfg, anime_size);
+        }
+    } else {
+        TexAnime.Initialize(NULL, 0);
+
+        entered = 0;
+        image = 0;
+
+        while (EditMapInfo->images[image].name[0] != '\0') {
+            map_blocks[entered].name = EditMapInfo->images[image].name;
+            map_blocks[entered].block_no = EditMapInfo->images[image].type;
+            map_blocks[entered].mipmap = EditMapInfo->images[image].number;
+            image++;
+            entered++;
+        }
+
+        map_blocks[entered].name = EditMapInfo->images[image].name;
+        map_blocks[entered].block_no = EditMapInfo->images[image].type;
+        map_blocks[entered].mipmap = EditMapInfo->images[image].number;
+        TexManager.LoadTextureBlock(-1, map_blocks, read_buffer);
+    }
+
+    TexManager.buffer_size = TexManager.buffer_used;
+    DataBuffer__2.Alloc((int) (TexManager.buffer + TexManager.buffer_size - buffer) + 16);
+    DataBuffer__2.Align64();
+    return 0;
 }

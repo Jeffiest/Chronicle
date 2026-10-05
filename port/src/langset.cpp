@@ -1,5 +1,7 @@
 #include "langset.hpp"
 
+#include "dataread_port.hpp"
+
 #include "fader.hpp"
 #include "mainselect.hpp"
 
@@ -21,7 +23,11 @@ PC_OVERRIDE int LangsetLoop() {
         case LANGSET_FADE_OUT:
             if (Fade.Out() != 0) {
                 // The first two codes are not offered here, so the cursor counts from the third.
+                // English is the UK release's on a PAL disc and the US release's on an NTSC one.
                 LanguageCode = Cursor + 2;
+                if (LanguageCode == LANG_ENGLISH_UK && PortNtscData()) {
+                    LanguageCode = LANG_ENGLISH_US;
+                }
                 return 1;
             }
 

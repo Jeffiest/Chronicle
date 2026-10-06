@@ -436,7 +436,7 @@ const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::player_damage, true>("game.player_damage", "Party Damage", "On|Off", 0x166),
     GameRow<&ConfigGameOptions::enemy_hp, true>("game.enemy_hp", "Enemy HP", "On|Off", 0x167),
     GameRow<&ConfigGameOptions::names, true>("game.names", "Names", "On|Off", 0x168),
-    OnOffRow<&Config::discord_rich_presence>("discord.rich_presence", "Enable Discord Rich Presence",
+    OnOffRow<&Config::discord_rich_presence>("discord.rich_presence", "Enable Discord",
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
 };
 

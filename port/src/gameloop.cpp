@@ -13,6 +13,7 @@
 #include "dataread.hpp"
 #include "dataset.hpp"
 #include "dun/gameloop.hpp"
+#include "editloop.hpp"
 #include "exitcodes.hpp"
 #include "gamemode.hpp"
 #include "gamepad.hpp"
@@ -41,6 +42,7 @@ void SndInit();
 
 extern s32 mode;
 extern s32 gameTask;
+extern int viewMode;
 extern s32 mc_mode;
 extern s32 NextMapNo;
 
@@ -790,7 +792,8 @@ int RunGame(int argc, char **argv) {
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
 
-            InputSetLookOnLeftStick(mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA);
+            InputSetLookOnLeftStick((mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA) ||
+                                    (mode == GAME_MODE_EDIT && viewMode != 0 && EdInteriorFlag == 0));
             GamePad.UpDate();
             GamePad.VibrationEnable(ConfigWords()[kConfigVibrationOff] == 0);
             GamePad.Step();

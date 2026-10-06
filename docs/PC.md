@@ -277,11 +277,13 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   only runs at over 90% tilt, and a round one never on a diagonal.
 - **Gyro.** When `gyro` says (always, only in first-person view, or while
   `gyro_hold` is held), a gamepad's gyroscope turns the camera while the
-  camera stick is centred: the right stick, or the left in first-person view
-  (R2). Turning the pad left or right turns the view and tilting it looks up
+  right stick is centred. Turning the pad left or right turns the view and tilting it looks up
   or down, `gyro_sensitivity` times the rate in radians per second; below 0.03
   is ignored as drift. `gyro_invert_x`/`_y` flip it, and `stick_invert_x`/`_y`
   flip the camera stick the same way.
+- **First-person view.** R2's view, in a dungeon or outdoors in a town, reads
+  only the left stick, so while it is on, the right stick, the mouse and the gyro drive the left stick whenever
+  the left stick itself is centred.
 - **Mouse.** The right stick at each pad read is the motion since the
   previous read, divided by the ticks between them, times
   `mouse_sensitivity` (0.1: ten pixels in one tick is full deflection,

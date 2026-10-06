@@ -161,6 +161,10 @@ std::int64_t                                             g_stick_read_serial = -
 bool                                                     g_stick_live = false;
 bool                                                     g_gamepad_subsystem = false;
 InputKeyboardMouse                                       g_scripted;
+// The mouse is a menu's pointer (InputSetMenuMouse); the motion it has gathered for it.
+bool  g_menu_mouse = false;
+float g_menu_dx = 0.0f;
+float g_menu_dy = 0.0f;
 // Per host action: presses not yet consumed, and whether its non-key sources (mouse and gamepad
 // buttons, the script's keys) were held at the last poll, for their press edges.
 std::array<int, kHostActionCount>  g_host_presses{};
@@ -478,6 +482,9 @@ void InputApplyConfig(const Config &config) {
 
 void InputShutdown() {
     MouseStop();
+    g_menu_mouse = false;
+    g_menu_dx = 0.0f;
+    g_menu_dy = 0.0f;
     g_keys.fill(false);
     g_scripted = {};
     g_host_presses.fill(0);
@@ -532,6 +539,8 @@ void InputHandleEvent(const SDL_Event &event) {
             break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             g_keys.fill(false);
+            g_menu_dx = 0.0f;
+            g_menu_dy = 0.0f;
             break;
         default:
             break;
@@ -553,9 +562,43 @@ void InputLatchPad(int pad) {
     float dx = 0.0f;
     float dy = 0.0f;
     MouseTakeMotion(dx, dy);
+    if (g_menu_mouse) {
+        g_menu_dx += dx;
+        g_menu_dy += dy;
+        dx = 0.0f;
+        dy = 0.0f;
+    }
     g_mouse_dx = dx / static_cast<float>(ticks);
     g_mouse_dy = dy / static_cast<float>(ticks);
     Compose(0);
+}
+
+void InputSetMenuMouse(bool on) {
+    g_menu_mouse = on;
+    g_menu_dx = 0.0f;
+    g_menu_dy = 0.0f;
+    float dx = 0.0f;
+    float dy = 0.0f;
+    MouseTakeMotion(dx, dy);
+    g_mouse_dx = 0.0f;
+    g_mouse_dy = 0.0f;
+    MouseTakeWheel();
+    Compose(0);
+}
+
+InputMenuMouse InputTakeMenuMouse() {
+    float dx = 0.0f;
+    float dy = 0.0f;
+    MouseTakeMotion(dx, dy);
+    InputMenuMouse mouse;
+    // A script's motion is per tick, and a menu takes once a tick.
+    mouse.dx = g_menu_dx + dx + g_scripted.mouse_dx;
+    mouse.dy = g_menu_dy + dy + g_scripted.mouse_dy;
+    mouse.wheel = MouseTakeWheel();
+    mouse.buttons = MouseButtons() | g_scripted.mouse_buttons;
+    g_menu_dx = 0.0f;
+    g_menu_dy = 0.0f;
+    return mouse;
 }
 
 void InputNoteLeftStickRead() { g_stick_read_serial = g_latch_serial; }
@@ -618,9 +661,12 @@ InputPadState InputApplyKeyboardMouse(InputPadState base, const InputKeyboardMou
                     down |= std::ranges::find(held.keys, source.code) != held.keys.end();
                     break;
                 case Source::MouseButton:
-                    down |= (held.mouse_buttons & (1u << (source.code - 1))) != 0;
+                    down |= !g_menu_mouse && (held.mouse_buttons & (1u << (source.code - 1))) != 0;
                     break;
                 case Source::MouseAxis:
+                    if (g_menu_mouse) {
+                        break;
+                    }
                     mouse[kActions[i].axis] +=
                         source.scale * g_mouse.sensitivity * (source.code == 0 ? held.mouse_dx : mouse_y);
                     break;

@@ -14,6 +14,7 @@
 #include "audio/trace.hpp"
 #include "dataread.hpp"
 #include "platform/audio.hpp"
+#include "platform/config.hpp"
 
 // The IOP's MIDI player is the port's audio::Mixer. Banks and sequences are copied into it rather
 // than into IOP and SPU memory, so the SPU address bookkeeping below survives only to keep
@@ -635,10 +636,10 @@ PC_OVERRIDE void CSound::SetVol(int port, int volume) {
     Player().SetVolume(port, volume);
 }
 
-// Assumed from the option menu, whose first (default, zero) choice sends 1: 1 is stereo.
+// The stereo option is config.json's audio.sound, not the one the load screen reads out of a save.
 PC_OVERRIDE void CSound::SetStereoMode(int mode) {
     audio::Trace("SetStereoMode %d", mode);
-    Player().SetStereo(mode != 0);
+    Player().SetStereo(ConfigGet().options.stereo);
 }
 
 PC_OVERRIDE int CSound::LoadHdBd_A(int hd, int hd_size, int bd, int bd_size) {

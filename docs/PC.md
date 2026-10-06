@@ -94,7 +94,16 @@ key is optional; these are the defaults:
 {
     "game": {
         "tick_rate": 60,            // logic ticks (the game's VSyncs) per second
-        "debug_mode": false         // Start with debug controls off; the debug toggle chord enables them
+        "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
+        "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
+        "message_speed": "normal",  // normal or fast
+        "clock": true,              // the town clock
+        "time_speed": "normal",     // normal or fast: how fast the town's day goes
+        "map": 2,                   // the dungeon map's density, 1 to 3; 0: hidden
+        "enemy_damage": true,       // damage numbers over enemies
+        "player_damage": true,      // damage numbers over the party
+        "enemy_hp": true,           // enemies' health gauges
+        "names": true               // people's and monsters' names
     },
     "video": {
         "present_mode": "fifo",     // fifo, mailbox or immediate (each falls back to the next safer one)
@@ -104,13 +113,15 @@ key is optional; these are the defaults:
         "height": 0,                //   monitor, so "aspect": "auto" takes the monitor's shape; headless: 1280x960
         "fullscreen": false,        // fullscreen at a given width and height
         "aspect": "auto",           // auto: the world fills the window, the HUD in its corners, other 2D in the centred 4:3 frame; 4:3: letterboxed
-        "ui_scale": 1.0,            // 0.25 to 4: the HUD scaled about the window's centre
+        "ui_scale": 1.0,            // 0.25 to 4: the HUD and menus scaled about the window's centre (not the Options screen)
         "show_fps": true,           // the FPS counter at the window's top-left corner (headless: --show-fps)
         "detail_distance": 0,       // how far full detail reaches (world units); 0: at any distance
-        "shadow_distance": 0        // how far town parts cast full shadows (world units); 0: at any distance
+        "shadow_distance": 0,       // how far town parts cast full shadows (world units); 0: at any distance
+        "soft_focus": true          // the game's farside soft focus
     },
     "audio": {
-        "master_volume": 1.0        // 0 to 1
+        "master_volume": 1.0,       // 0 to 1
+        "sound": "stereo"           // stereo or mono
     },
     "input": {
         "mouse_sensitivity": 0.1,   // right-stick deflection (1 = full) per pixel moved in one tick
@@ -118,6 +129,7 @@ key is optional; these are the defaults:
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_release": ["Escape"], // keys that give the cursor back in a window ([]: none)
+        "vibration": true,          // the gamepad's rumble
         "bindings": {
             "cross": ["Mouse1", "Space"], // an action: its keys and mouse buttons; replaces the defaults
             "ry": "-MouseY",        // lx ly rx ry take MouseX or MouseY, with a sign and a scale (MouseX*0.5)
@@ -170,7 +182,7 @@ are examples of the form (the defaults are in the table below); a
 `config.ini` from an earlier build is not read, and `darkcloud` says so when
 it finds one without a `config.json`.
 
-The file is read once, at start. A settings screen in the game changes the
+The file is read once, at start. The Options screen (below) changes the
 settings through `ConfigChange(config)` (`platform/config.hpp`): the settings
 are taken as the file would read them back (a bad value is reported and
 becomes its default), saved, and applied to the running game. The file is
@@ -183,8 +195,10 @@ says which, for the screen to show):
 the master volume, the input section (bindings, mouse and stick), the tick
 rate, `interpolation`, `max_fps` and `show_fps`, the present mode (the
 swapchain is recreated), the window's size and fullscreen state, and `aspect`
-and `ui_scale` (at the next pump outside a frame: `gfx::SetFrameLayout`),
-and the `discord` section (Rich Presence stops or starts).
+and `ui_scale` (at the next pump outside a frame: `gfx::SetFrameLayout`;
+while the Options screen is open the interface stays at 100%, and
+`ui_scale` takes over when it closes), and the `discord` section (Rich
+Presence stops or starts).
 `--width`, `--height` and `--show-fps` keep their hold over the file, and a
 headless window keeps its size. The render scale stays the one the window
 had at start, as after a resize by hand. Each part of the game that holds a
@@ -609,8 +623,13 @@ replacement units.
 
 - **Window** (`platform/window`): SDL3 window, resizable, high pixel density,
   optionally fullscreen; `WindowSetMode` changes its size and fullscreen
-  state as the config does at start; `WindowPollEvents` pumps events, reports
-  a close, and forwards pixel-size changes to the renderer.
+  state as the config does at start. It leaves a window already in that
+  mode alone, asks a size only of a window out of fullscreen and not
+  maximized, and gives back the mode it asked for and the mode the window
+  then has, since SDL may refuse a step or not finish it before
+  `SDL_SyncWindow` gives up; `WindowTakeModeEvent` says the window entered or
+  left fullscreen or changed size since. `WindowPollEvents` pumps events,
+  reports a close, and forwards pixel-size changes to the renderer.
   `WindowAddEventHook` lets input see every event.
 - **Input** (`platform/input`, `platform/mouse`, `sce/libpad.cpp`,
   `gamepad.cpp`): two DualShock 2-shaped pads from SDL gamepads, the
@@ -1042,6 +1061,91 @@ without one does. A message file is s16 throughout: an id is -0x8000 to
 0x7FFF. Every message must start within 0x7FFF codes of `&buff[1 + count]`;
 the last message by id may extend beyond that range. `GameTextFile::Set`
 gives back -1 and leaves the file as it was where either would not hold.
+
+## The Options screen
+
+The game's Options screen, from the title, the town menu and the dungeon menu,
+is the port's settings screen (`port/src/menu_option.cpp`, which replaces
+`InitMenuOption`, `MenuOptionKey`, `DrawMenuOption` and
+`OptionMenuFadeOutStart`). It keeps the game's frame, cursor, sounds, EXIT
+button and help window, and draws its rows in the game's message font ("Game
+text"). Four pages, Game, Display, Audio and Controls, are named on a help
+window's plate with L1 and R1 at its ends; L1 and L2, R1 and R2 turn the page,
+and so do left and right on the page names. Each row is a label and a value:
+left and right change the value at once, cross goes round its choices, and a
+value whose setting `ConfigAppliesOnRestart` names ends in ` *`. Every change
+goes through `ConfigChange`, so it applies at once and rewrites `config.json`.
+On EXIT, cross closes. From anywhere, square puts the page's defaults back,
+triangle undoes every change since the screen opened, and circle closes. The
+three shortcuts stay visible below EXIT. If saving fails, the help window
+says the changes apply now but could not be saved; another change or closing
+retries the write. The game's own options keep their help from `allmenu.mes`;
+the port's rows have English
+help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC.
+
+| Page | Rows |
+|---|---|
+| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names |
+| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, soft focus |
+| Audio | volume, sound (stereo or mono) |
+| Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, stick sensitivity |
+
+Resolution choices are the sizes that fit the display (its usable area less
+the window's borders when windowed) and follow changes of mode. Desktop is
+fullscreen at the monitor's size, so Window Mode reads Fullscreen there;
+choosing Windowed from it gives the largest listed size that fits. In
+fullscreen an explicit resolution is kept for the window. Headless runs keep
+the standard size list.
+
+The display fields reach the window through the host's change hook
+(`DisplayChanged`, `platform/display`, which also applies `--width` and
+`--height`). SDL may refuse a change of mode or finish it late, so the window
+is read back: where it is not in the mode asked for, the display fields, in
+`config.json` too, become the mode it is in, and the help window says so
+until a later display change takes. While that stands, or while a fullscreen
+change SDL took is unfinished, the host's pump (`DisplayPump`) follows the
+window, open or closed; otherwise a window resized by hand changes no
+setting. A fullscreen change that finishes after SDL's timeout is not
+cancelled by choosing the mode still shown or by Undo; the settings follow it
+when it finishes. If reading the window back fails while following, the
+fields wait for the next fullscreen or resize event.
+
+Interface size (`ui_scale`) scales the HUD and the game's menus. The
+Options screen itself stays at 100% while it is open (`MenuOptionOpen`, read
+by `main.cpp`'s frame layout), so no size can take its tabs, EXIT or
+shortcuts off the window; the new size shows once it closes.
+
+The screen times its own auto-repeat from the pad as held (`InputGetPad`, the
+left stick read as `MenuModeOn(120)` reads it): a direction fires when pressed,
+then after 30 frames every 5, retail's menu rate, whichever menu opened it.
+
+While the screen is open the mouse is its pointer (`InputSetMenuMouse`): its
+motion and buttons stop pressing pad 1's buttons and turning its stick and
+reach `InputTakeMenuMouse` instead. Capture works as everywhere else, so the
+pointer is the game's own hand, moved by the mouse's relative motion; a
+released cursor (Escape in a window) is taken back by a click as ever. That
+keeps one pointer whether the window is windowed, fullscreen or headless, and
+maps relative motion through the window's logical scale to the
+2D screen. The hand appears when the mouse moves and goes when a key moves the
+cursor. Hovering a row, a page name or EXIT selects it, and hovering L1, R1
+or a scroll arrow puts the brackets round it; a click on a page name
+or on L1 or R1 turns the page, on a value's `<` or `>` steps it, on the value
+goes round its choices, and on EXIT closes; the right button closes; the
+wheel scrolls a long list under the pointer, and the chosen row moves with
+the list as it scrolls. Mouse buttons already held when the screen opens act
+only once let go and pressed again. Eight rows fit at once; a scroll
+bar at the right appears on cursor movement and fades after 75 idle ticks
+(the last 15 ticks fade). The arrow buttons at its ends scroll too. A script's
+`mouse:DX,DY` and `mouseN` drive the pointer as they would the mouse.
+
+The game's own options are global, not per save. Retail keeps them in each
+save (`CSaveData::config`, the dungeon status's `minimap_status` and the menu
+cursors' `reset_pos`), so loading a save brought its own. Here `config.json`
+holds them, and `GameOptionsApply` puts them in the running save before every
+mode starts (`RunGame`, before `ModeInit`), after a new game, and whenever they
+change. `CMemoryCardAccess::SetBuff` zeroes them in the copy it writes, so
+`save.dat` carries no options; its layout is retail's, so their bytes remain,
+as zeros.
 
 ## Arenas
 

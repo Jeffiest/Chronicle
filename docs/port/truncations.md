@@ -32,7 +32,7 @@ a function), **stack**, **arena** (an arena allocation or global), **parameter**
 | round-trip | 0 | 0 | 12 | 1 | 0 | 13 |
 | resolved | 6 | 16 | 37 | 13 | 0 | 72 |
 | escapes | 0 | 1 | 30 | 11 | 0 | 42 |
-| low-bits | 6 | 4 | 12 | 0 | 0 | 22 |
+| low-bits | 5 | 4 | 13 | 0 | 0 | 22 |
 
 Round-trip sites that can run (retail and port), by origin: none.
 
@@ -56,7 +56,7 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 |---|---|---|---|---|---|---|
 | port/src/editloop_parts.cpp:58 | LoadPTS | port | escapes | `reinterpret_cast < std :: uintptr_t >(header->func)` | field | store: parts->func_data |
 
-## Low-bits sites that can run (10)
+## Low-bits sites that can run (9)
 
 | site | function | state | class | expression | origin | use |
 |---|---|---|---|---|---|---|
@@ -69,7 +69,6 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 | ps2/src/gameutil.cpp:302 | MotionProc | retail | low-bits | `(int)list` | parameter | test |
 | ps2/src/gameutil.cpp:315 | MotionProc | retail | low-bits | `(int)list` | parameter | test |
 | ps2/src/main.cpp:387 | LoadSndTxt | retail | low-bits | `(int)buffer` | stack | store: offset |
-| ps2/src/memcard.cpp:3433 | InitMenuOption | retail | low-bits | `(int)buffer` | parameter | test |
 
 ## Round trips resolved where the value comes back (22)
 
@@ -98,7 +97,7 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 | ps2/src/editloop.cpp:5219 | LoadObjectParts | retail | resolved | `(int)parts->frame[0]` | field | store: parts->preview_frame (read back only in CEditGround::DrawPartsCursor) |
 | ps2/src/title/op_d.cpp:673 | OpD_MotionProcess | retail | resolved | `(int)& Wind` | image | store: Chara__3[cloth_actor].wind (read back only in CCharacter::ClothStep) |
 
-## Sites that never run (116)
+## Sites that never run (117)
 
 | site | function | state | class | expression | origin | use |
 |---|---|---|---|---|---|---|
@@ -147,6 +146,7 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 | ps2/src/editloop.cpp:5278 | LoadPTS | replaced | escapes | `(int)header->func` | field | store: parts->func_data |
 | ps2/src/editmapscript.cpp:1072 | CommandWATER_SHAKE | replaced | resolved | `(u_int)info` | global pointer | store: offset (read back only in CommandWATER_SHAKE) |
 | ps2/src/main.cpp:755 | main | replaced | resolved | `(int)Vif1Packet` | global pointer | store: vif1_packet (read back only in main) |
+| ps2/src/memcard.cpp:3433 | InitMenuOption | replaced | low-bits | `(int)buffer` | parameter | test |
 | ps2/src/memorycardaccess.cpp:111 | CMemoryCardAccess::SetBuff | replaced | round-trip | `(int)buffer` | parameter | cast back: (char *)((((int)buffer >> 6)+ 1)<< 6) |
 | ps2/src/memorycardaccess.cpp:132 | CMemoryCardAccess::SetBuff | replaced | round-trip | `(int)sum` | local pointer | cast back: (char *)((((int)sum >> 6)+ 1)<< 6) |
 | ps2/src/menu_draw.cpp:120 | MenuCalcBufAlignment | replaced | resolved | `(int)buffer` | parameter | store: offset (read back only in MenuCalcBufAlignment) |

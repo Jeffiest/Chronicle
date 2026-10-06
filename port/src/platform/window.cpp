@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
 #include <vector>
 
 #include "gfx/gfx.hpp"
@@ -11,6 +12,8 @@
 namespace {
 
 SDL_Window                              *g_window = nullptr;
+bool                                     g_headless = false;
+bool                                     g_mode_event = false;
 std::vector<void (*)(const SDL_Event &)> g_hooks;
 
 [[noreturn]] void Fatal(const char *what) {
@@ -52,6 +55,7 @@ Placement Place(const WindowConfig &config, SDL_DisplayID display) {
 
 void WindowInit(const WindowConfig &config) {
     SDL_SetAppMetadata("Dark Cloud", nullptr, "dcdecomp.darkcloud");
+    g_headless = config.headless;
     if (config.headless) {
 #ifdef _WIN32
         SDL_SetHint(SDL_HINT_VIDEO_DRIVER, config.vulkan ? "windows" : "offscreen");
@@ -91,36 +95,94 @@ void WindowInit(const WindowConfig &config) {
     }
 }
 
-void WindowSetMode(const WindowConfig &config) {
+WindowModeResult WindowSetMode(const WindowConfig &config) {
+    WindowModeResult result;
     if (g_window == nullptr || config.headless) {
-        return;
+        return result;
     }
     SDL_DisplayID display = SDL_GetDisplayForWindow(g_window);
     Placement     placement = Place(config, display);
-    Check(SDL_SetWindowFullscreen(g_window, placement.fullscreen), "SDL_SetWindowFullscreen");
-    Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
-    if (placement.fullscreen) {
-        return;
+    result.requested = {placement.fullscreen, placement.width, placement.height};
+    WindowCurrentMode(result.before);
+    result.observed = result.before;
+    if (result.before == result.requested) {
+        return result;
     }
-    if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_MAXIMIZED) {
+    // SDL may not take a change, or finish it later: each step is read back from the window.
+    auto is = [](SDL_WindowFlags flags) { return (SDL_GetWindowFlags(g_window) & flags) != 0; };
+    if (is(SDL_WINDOW_FULLSCREEN) != placement.fullscreen) {
+        bool asked = SDL_SetWindowFullscreen(g_window, placement.fullscreen);
+        Check(asked, "SDL_SetWindowFullscreen");
+        if (asked) {
+            result.fullscreen_request = placement.fullscreen;
+        }
+        Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
+    }
+    if (!placement.fullscreen && !is(SDL_WINDOW_FULLSCREEN) && is(SDL_WINDOW_MAXIMIZED)) {
         Check(SDL_RestoreWindow(g_window), "SDL_RestoreWindow");
         Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
     }
-    Check(SDL_SetWindowSize(g_window, placement.width, placement.height), "SDL_SetWindowSize");
-    Check(SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display),
-                                SDL_WINDOWPOS_CENTERED_DISPLAY(display)),
-          "SDL_SetWindowPosition");
-    Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
+    if (!placement.fullscreen && !is(SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED)) {
+        Check(SDL_SetWindowSize(g_window, placement.width, placement.height), "SDL_SetWindowSize");
+        Check(SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display),
+                                    SDL_WINDOWPOS_CENTERED_DISPLAY(display)),
+              "SDL_SetWindowPosition");
+        Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
+    }
+    WindowCurrentMode(result.observed);
+    return result;
+}
+
+bool WindowCurrentMode(WindowMode &mode) {
+    if (g_window == nullptr || g_headless) {
+        return false;
+    }
+    mode.fullscreen = (SDL_GetWindowFlags(g_window) & SDL_WINDOW_FULLSCREEN) != 0;
+    return SDL_GetWindowSize(g_window, &mode.width, &mode.height);
+}
+
+bool WindowTakeModeEvent() {
+    return std::exchange(g_mode_event, false);
 }
 
 void WindowShutdown() {
     SDL_DestroyWindow(g_window);
     g_window = nullptr;
+    g_mode_event = false;
     g_hooks.clear();
     SDL_Quit();
 }
 
 SDL_Window *WindowHandle() { return g_window; }
+
+bool WindowSize(int &width, int &height) {
+    return g_window != nullptr && SDL_GetWindowSize(g_window, &width, &height) && width > 0 && height > 0;
+}
+
+bool WindowDisplaySize(int &width, int &height, bool windowed) {
+    if (g_window == nullptr || g_headless) {
+        return false;
+    }
+    const SDL_DisplayMode *desktop = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(g_window));
+    if (desktop == nullptr) {
+        return false;
+    }
+    width = desktop->w;
+    height = desktop->h;
+    if (windowed) {
+        SDL_Rect bounds;
+        if (SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(g_window), &bounds)) {
+            int top = 0;
+            int left = 0;
+            int bottom = 0;
+            int right = 0;
+            SDL_GetWindowBordersSize(g_window, &top, &left, &bottom, &right);
+            width = bounds.w - left - right;
+            height = bounds.h - top - bottom;
+        }
+    }
+    return true;
+}
 
 bool WindowPollEvents() {
     bool      running = true;
@@ -136,6 +198,12 @@ bool WindowPollEvents() {
                 break;
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                 gfx::RendererResize();
+                g_mode_event = true;
+                break;
+            case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+            case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+            case SDL_EVENT_WINDOW_RESIZED:
+                g_mode_event = true;
                 break;
             default:
                 break;

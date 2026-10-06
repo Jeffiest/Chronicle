@@ -129,6 +129,22 @@ void InputSetMouseSettings(const InputMouseSettings &settings);
 
 const InputMouseSettings &InputGetMouseSettings();
 
+// The mouse as a menu's pointer: its motion since the last take, in window pixels (y downward), the
+// wheel's turn in notches (positive away from the user), and the buttons held (bit n-1 for Mouse n).
+struct InputMenuMouse {
+    float         dx = 0.0f;
+    float         dy = 0.0f;
+    float         wheel = 0.0f;
+    std::uint32_t buttons = 0;
+};
+
+// While on, the mouse is a menu's pointer: its motion and buttons reach InputTakeMenuMouse and no
+// longer press pad 0's bound buttons or turn its stick. Capture works as ever.
+void InputSetMenuMouse(bool on);
+
+// Takes the pointer's motion and wheel since the last call, live and scripted.
+InputMenuMouse InputTakeMenuMouse();
+
 // SDL scancode for a key name, any case; `_` stands for a space ("left_shift"), and Grave, Backquote
 // and Backtick name the key left of 1. -1 if unknown.
 int InputScancodeFromName(std::string_view name);

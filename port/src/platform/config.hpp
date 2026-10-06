@@ -23,6 +23,27 @@ struct ConfigKeyBinding {
     bool operator==(const ConfigKeyBinding &) const = default;
 };
 
+// The game's own Options screen settings, which retail keeps in each save: here they hold for every
+// save, and the save's copy follows them. config.json keeps each in the section of the screen's page
+// that shows it: audio.sound, input.vibration, video.soft_focus, the rest under game.
+struct ConfigGameOptions {
+    bool save_cursor_position = true;
+    bool vibration = true;
+    bool fast_messages = false;
+    bool stereo = true;
+    bool clock = true;
+    bool fast_time = false;
+    // The dungeon map's density, 1 to 3; 0 hides it.
+    int  map = 2;
+    bool enemy_damage = true;
+    bool player_damage = true;
+    bool enemy_hp = true;
+    bool names = true;
+    bool soft_focus = true;
+
+    bool operator==(const ConfigGameOptions &) const = default;
+};
+
 struct Config {
     double            tick_rate = 60.0;
     bool              debug_mode = false;
@@ -45,6 +66,7 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     std::vector<std::string>      mouse_release_keys = {"Escape"};
+    ConfigGameOptions             options;
     bool                          discord_rich_presence = true;
 
     bool operator==(const Config &) const = default;

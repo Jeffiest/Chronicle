@@ -2,7 +2,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -17,6 +16,7 @@
 #include "gamemode.hpp"
 #include "gfx/gfx.hpp"
 #include "langset.hpp"
+#include "menu_option.hpp"
 #include "menu_save.hpp"
 #include "mglib.hpp"
 #include "nowload.hpp"
@@ -24,6 +24,7 @@
 #include "platform/clock.hpp"
 #include "platform/config.hpp"
 #include "platform/discord.hpp"
+#include "platform/display.hpp"
 #include "platform/firstrun.hpp"
 #include "platform/input.hpp"
 #include "platform/input_script.hpp"
@@ -57,8 +58,6 @@ struct Options {
 };
 
 Options g_options;
-// A change of video.aspect or video.ui_scale, for the next pump outside a frame.
-std::optional<gfx::FrameLayout> g_pending_layout;
 
 [[noreturn]] void Usage(const char *program) {
     std::fprintf(stderr,
@@ -165,13 +164,26 @@ void RequireData() {
     }
 }
 
+// The Options screen keeps the interface at 100%, so a size that takes the HUD past the window
+// cannot take the screen's own controls with it.
+gfx::FrameLayout Layout(const Config &config) {
+    return {config.aspect == ConfigAspect::Auto ? gfx::AspectMode::Fill : gfx::AspectMode::Letterbox,
+            MenuOptionOpen() ? 1.0f : config.ui_scale};
+}
+
 void PumpHost() {
     if (!WindowPollEvents()) {
         GameRequestStop();
     }
-    if (g_pending_layout && !gfx::InFrame()) {
-        gfx::SetFrameLayout(*g_pending_layout);
-        g_pending_layout.reset();
+    DisplayPump();
+    // A change of video.aspect or video.ui_scale, or the Options screen opening or closing, waits
+    // for a pump outside a frame.
+    if (!gfx::InFrame()) {
+        gfx::FrameLayout layout = Layout(ConfigGet());
+        gfx::FrameLayout current = gfx::CurrentFrameLayout();
+        if (layout.aspect != current.aspect || layout.ui_scale != current.ui_scale) {
+            gfx::SetFrameLayout(layout);
+        }
     }
     InputPoll();
     InputScriptApply(GameFrameCount());
@@ -231,21 +243,6 @@ gfx::PresentMode PresentMode(ConfigPresentMode mode) {
     }
 }
 
-// --width and --height hold over the config's size, and a headless window keeps its own.
-WindowConfig WindowSettings(const Config &config) {
-    WindowConfig window;
-    window.width = g_options.width > 0 ? g_options.width : config.window_width;
-    window.height = g_options.height > 0 ? g_options.height : config.window_height;
-    window.fullscreen = config.fullscreen;
-    window.headless = g_options.headless;
-    return window;
-}
-
-gfx::FrameLayout Layout(const Config &config) {
-    return {config.aspect == ConfigAspect::Auto ? gfx::AspectMode::Fill : gfx::AspectMode::Letterbox,
-            config.ui_scale};
-}
-
 GamePresentSettings PresentSettings(const Config &config) {
     return {.interpolation = config.interpolation,
             .max_fps = config.max_fps,
@@ -260,7 +257,8 @@ void ApplyDiscord(const Config &config) {
     }
 }
 
-// Called mid-tick, from a settings screen: what cannot change inside a frame waits for PumpHost.
+// Called mid-tick, from a settings screen: what cannot change inside a frame (the frame layout)
+// waits for PumpHost.
 void ApplyConfigChange(const Config &before, const Config &after) {
     audio::DefaultMixer().SetMasterGain(after.master_volume);
     InputApplyConfig(after);
@@ -271,14 +269,7 @@ void ApplyConfigChange(const Config &before, const Config &after) {
         after.show_fps != before.show_fps) {
         GameSetPresentSettings(PresentSettings(after));
     }
-    if (after.window_width != before.window_width || after.window_height != before.window_height ||
-        after.fullscreen != before.fullscreen) {
-        WindowSetMode(WindowSettings(after));
-    }
     gfx::SetPresentMode(PresentMode(after.present_mode));
-    if (after.aspect != before.aspect || after.ui_scale != before.ui_scale) {
-        g_pending_layout = Layout(after);
-    }
     if (after.discord_rich_presence != before.discord_rich_presence) {
         ApplyDiscord(after);
     }
@@ -340,7 +331,8 @@ int Run(int argc, const char **argv) {
     ConfigLoad();
     const Config &config = ConfigGet();
 
-    WindowConfig window = WindowSettings(config);
+    DisplaySetOverrides(options.width, options.height, options.headless);
+    WindowConfig window = DisplayWindowConfig(config);
     bool         offscreen = options.offscreen || (options.headless && !gfx::HeadlessSurfaceAvailable());
     window.vulkan = !offscreen;
     WindowInit(window);
@@ -364,6 +356,8 @@ int Run(int argc, const char **argv) {
     ApplyDiscord(config);
     GameSetPresentSettings(PresentSettings(config));
     ConfigAddChangeHook(ApplyConfigChange);
+    ConfigAddChangeHook(DisplayChanged);
+    ConfigAddChangeHook(GameOptionsChanged);
 
     int status = RunGame(argc, const_cast<char **>(argv));
     if (status == kExitOk && options.screenshot != nullptr) {
@@ -371,6 +365,8 @@ int Run(int argc, const char **argv) {
     }
     ReportPresentStats();
 
+    ConfigRemoveChangeHook(GameOptionsChanged);
+    ConfigRemoveChangeHook(DisplayChanged);
     ConfigRemoveChangeHook(ApplyConfigChange);
     ClockRemovePumpHook(PumpHost);
     DiscordStop();

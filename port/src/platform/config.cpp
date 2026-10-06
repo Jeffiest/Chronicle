@@ -144,7 +144,72 @@ bool ApplyBindings(Config &config, const Json &bindings) {
     return true;
 }
 
+bool ReadChoice(const Json &value, std::string_view first, std::string_view second, bool &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    std::string choice = Lower(value.get<std::string>());
+    if (choice != first && choice != second) {
+        return false;
+    }
+    out = choice == second;
+    return true;
+}
+
+// The game's own options, each in the section of the Options screen's page that shows it.
+bool ApplyGameOption(ConfigGameOptions &options, std::string_view name, const Json &value) {
+    if (name == "game.save_cursor_position") {
+        return ReadBool(value, options.save_cursor_position);
+    }
+    if (name == "input.vibration") {
+        return ReadBool(value, options.vibration);
+    }
+    if (name == "game.message_speed") {
+        return ReadChoice(value, "normal", "fast", options.fast_messages);
+    }
+    if (name == "audio.sound") {
+        bool mono = false;
+        if (!ReadChoice(value, "stereo", "mono", mono)) {
+            return false;
+        }
+        options.stereo = !mono;
+        return true;
+    }
+    if (name == "game.clock") {
+        return ReadBool(value, options.clock);
+    }
+    if (name == "game.time_speed") {
+        return ReadChoice(value, "normal", "fast", options.fast_time);
+    }
+    if (name == "game.map") {
+        if (!value.is_number_integer() || value.get<std::int64_t>() < 0 || value.get<std::int64_t>() > 3) {
+            return false;
+        }
+        options.map = value.get<int>();
+        return true;
+    }
+    if (name == "game.enemy_damage") {
+        return ReadBool(value, options.enemy_damage);
+    }
+    if (name == "game.player_damage") {
+        return ReadBool(value, options.player_damage);
+    }
+    if (name == "game.enemy_hp") {
+        return ReadBool(value, options.enemy_hp);
+    }
+    if (name == "game.names") {
+        return ReadBool(value, options.names);
+    }
+    if (name == "video.soft_focus") {
+        return ReadBool(value, options.soft_focus);
+    }
+    return false;
+}
+
 bool Apply(Config &config, std::string_view name, const Json &value) {
+    if (ApplyGameOption(config.options, name, value)) {
+        return true;
+    }
     if (name == "input.mouse_sensitivity") {
         float sensitivity = 0.0f;
         if (!ReadNumber(value, sensitivity) || !(sensitivity > 0.0f) || !std::isfinite(sensitivity)) {
@@ -332,6 +397,16 @@ std::string ConfigSerialize(const Config &config) {
     Json root;
     root["game"]["tick_rate"] = config.tick_rate;
     root["game"]["debug_mode"] = config.debug_mode;
+    const ConfigGameOptions &options = config.options;
+    root["game"]["save_cursor_position"] = options.save_cursor_position;
+    root["game"]["message_speed"] = options.fast_messages ? "fast" : "normal";
+    root["game"]["clock"] = options.clock;
+    root["game"]["time_speed"] = options.fast_time ? "fast" : "normal";
+    root["game"]["map"] = options.map;
+    root["game"]["enemy_damage"] = options.enemy_damage;
+    root["game"]["player_damage"] = options.player_damage;
+    root["game"]["enemy_hp"] = options.enemy_hp;
+    root["game"]["names"] = options.names;
     root["video"]["present_mode"] = PresentModeName(config.present_mode);
     root["video"]["interpolation"] = config.interpolation;
     root["video"]["max_fps"] = config.max_fps;
@@ -343,12 +418,15 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["show_fps"] = config.show_fps;
     root["video"]["detail_distance"] = Shortest(config.detail_distance);
     root["video"]["shadow_distance"] = Shortest(config.shadow_distance);
+    root["video"]["soft_focus"] = options.soft_focus;
     root["audio"]["master_volume"] = Shortest(config.master_volume);
+    root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
     root["input"]["mouse_sensitivity"] = Shortest(config.mouse_sensitivity);
     root["input"]["stick_sensitivity"] = Shortest(config.stick_sensitivity);
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_release"] = config.mouse_release_keys;
+    root["input"]["vibration"] = options.vibration;
     root["input"]["bindings"] = std::move(bindings);
     root["discord"]["rich_presence"] = config.discord_rich_presence;
     return root.dump(4) + "\n";

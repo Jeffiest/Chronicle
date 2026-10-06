@@ -257,7 +257,7 @@ void CDungeonMap::NPCSetMotion(int npc_no, int motion_no, float speed, int motio
     this->npc[npc_no].chara.motion_flags = motion_flags;
     this->npc[npc_no].chara.motion_speed = -1.0f;
     this->npc[npc_no].chara.motion_speed = speed;
-#ifdef PAL
+#ifdef PAL_TIMING
     this->npc[npc_no].chara.motion_speed = 6.0f * speed / 5.0f;
 #endif
 }
@@ -2414,7 +2414,7 @@ found:
 void CDungeonMap::buildEventData(int floor_no, int enabled, int place_atla) {
     float box_pos[4];
     float object_pos[4];
-    int   atra_no[6];
+    int   atra_no[8]; /* BtAtraFloorCyoice fills and counts all eight of a floor's atla slots. */
     int   special;
     int   object_count;
     int   valid;

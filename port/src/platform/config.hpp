@@ -22,7 +22,7 @@ struct ConfigKeyBinding {
 };
 
 struct Config {
-    double                        tick_rate = 50.0;
+    double                        tick_rate = 60.0;
     bool                          debug_mode = false;
     ConfigPresentMode             present_mode = ConfigPresentMode::Fifo;
     bool                          interpolation = true;
@@ -39,6 +39,7 @@ struct Config {
     float                         master_volume = 1.0f;
     std::vector<ConfigKeyBinding> key_bindings;
     float                         mouse_sensitivity = 0.1f;
+    float                         stick_sensitivity = 1.33f;
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     std::vector<std::string>      mouse_release_keys = {"Escape"};

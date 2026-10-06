@@ -147,7 +147,7 @@ void AppendStrip(std::vector<gfx::Vertex2D> &triangles, const std::vector<gfx::V
 // haze instead uses two full-resolution targets sharing the frame's depth buffer. Each target gains
 // coverage over eight depth planes; the bands test at the front edge of that range so nearby
 // objects stay sharp. The two outermost columns do not wander past the edges of the image.
-void DepthOfField(float *focus, int level, int alpha, int blur) {
+PC_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
     int phase;
     int i;
     int j;

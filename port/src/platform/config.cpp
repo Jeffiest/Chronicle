@@ -1,5 +1,7 @@
 #include "config.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -11,8 +13,6 @@
 #include <sstream>
 #include <string>
 #include <utility>
-
-#include <nlohmann/json.hpp>
 
 #include "paths.hpp"
 
@@ -362,7 +362,7 @@ bool ConfigSave() {
 bool ConfigLoad() {
     std::filesystem::path path = PathsSaveRoot() / "config.json";
     std::ifstream         file(path, std::ios::binary);
-    std::error_code error;
+    std::error_code       error;
     if (!file || !std::filesystem::is_regular_file(path, error)) {
         g_config = Config{};
         if (std::filesystem::exists(PathsSaveRoot() / "config.ini")) {

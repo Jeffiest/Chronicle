@@ -62,7 +62,11 @@ public:
     float         step_x; /**< Amount the first component advances each step. */
     float         step_y; /**< Amount the second component advances each step. */
     float         step_z; /**< Amount the third component advances each step. */
-    char          unk_4C[60];
+    float         step_w;
+    sceVu0FVECTOR current;    /**< Current animated value applied to the attached frames. */
+    CFrame       *frames[10]; /**< Frames driven by this animation. */
+    int           completion_flag;
+    int           unk_8C;
 
     void Initialize();
 };
@@ -96,6 +100,10 @@ public:
 /* A frame parented to an object, which is what lets the world transform drive a model. */
 class CObjectFrame : public CObject {
 public:
+    CFrameVu1 *frame[4];         /**< Frame of each level of detail; zero where the object has none. */
+    s32        rotation_changed; /**< Set whenever the angle, its motion or the moment changes. */
+    s32        draw_on;          /**< 1 while the object draws; 0 leaves it out of the scene. */
+
     virtual void FrameObjectOnOff(char *name, int on);
     virtual void Draw();
 
@@ -106,9 +114,10 @@ public:
    through the object dispatch like anything else in the world. */
 class CMapObject : public CObjectFrame {
 public:
-    char       unk_18[36];
+    CFrameVu1 *collision_frame; /**< Frame that collision reads; zero where the object has none. */
     CFrameVu1 *unk_D4;
-    char       unk_4C[8];
+    CFrameVu1 *shade_frame;  /**< Frame that the shade draws from; zero where the object takes none. */
+    CFrameVu1 *camera_frame; /**< Collision frame the camera reads; zero where the object has none. */
     float      unk_E0;
     int        unk_E4;
     int        unk_E8;
@@ -135,12 +144,17 @@ public:
     void Draw();
 };
 
+class CTexture;
+
 /* The movie's one fire, which is a light rather than a model. */
 class CFireOmni {
 public:
     char          unk_18[32];
-    sceVu0FVECTOR position; /**< World position the fire draws at. */
-    char          unk_4C[16];
+    sceVu0FVECTOR position;    /**< World position the fire draws at. */
+    s32           texture_set; /**< Indicates that the textures were supplied rather than looked up. */
+    CTexture     *core;        /**< Bright inner texture of the flame. */
+    CTexture     *glow;        /**< Soft outer texture of the flame. */
+    s32           unk_3C;
 
     CFireOmni();
 

@@ -33,6 +33,7 @@
 #include "framevu1.hpp"
 #include "main.hpp"
 #include "mainselect.hpp"
+#include "mapobject.hpp"
 #include "mathutil.hpp"
 #include "mds.hpp"
 #include "mglib.hpp"
@@ -83,13 +84,6 @@ public:
     CategoryAttr();
 };
 
-class CMapObject {
-public:
-    char unk_00[240];
-
-    CMapObject();
-} __attribute__((aligned(16)));
-
 /* The scene's own map, of which this file keeps three — the ground, the buildings standing on it
    and a second set of buildings nothing here draws. Initialize is called from the constructor
    rather than by the scene, which is why the three are ready before OpA_InitProcess clears them. */
@@ -105,12 +99,17 @@ public:
     void Draw();
 };
 
+class CTexture;
+
 /* The scene's one fire, which is a light rather than a model. */
 class CFireOmni {
 public:
     char          unk_00[32];
-    sceVu0FVECTOR pos; /**< World position DrawFire draws the next fire at. */
-    char          unk_30[16];
+    sceVu0FVECTOR pos;         /**< World position DrawFire draws the next fire at. */
+    s32           texture_set; /**< Indicates that the textures were supplied rather than looked up. */
+    CTexture     *core;        /**< Bright inner texture of the flame. */
+    CTexture     *glow;        /**< Soft outer texture of the flame. */
+    s32           unk_3C;
 
     CFireOmni();
 
@@ -126,7 +125,8 @@ class CEffectParam;
 
 class CEffectGroup {
 public:
-    char unk_00[8];
+    CEffect *effect_table; /**< First effect in the caller-supplied pool. */
+    int      capacity;     /**< Number of effects in the pool. */
 
     CEffectGroup() { Initialize(0, 0); }
 
@@ -204,7 +204,11 @@ public:
     float         step_x;      /**< Amount added to the first component each tick. */
     float         step_y;      /**< Amount added to the second component each tick. */
     float         step_z;      /**< Amount added to the third component each tick. */
-    char          unk_4C[60];
+    float         step_w;
+    sceVu0FVECTOR current;    /**< Current animated value applied to the attached frames. */
+    CFrame       *frames[10]; /**< Frames driven by this animation. */
+    int           completion_flag;
+    int           unk_8C;
 
     OBJ_ANIME_SEQ();
 

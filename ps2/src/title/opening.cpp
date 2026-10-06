@@ -1331,6 +1331,10 @@ void FadeCansel() {
 /* A frame parented to an object, which is what lets the world transform drive a model. */
 class CObjectFrame : public CObject {
 public:
+    CFrameVu1 *frame[4];         /**< Frame of each level of detail; zero where the object has none. */
+    s32        rotation_changed; /**< Set whenever the angle, its motion or the moment changes. */
+    s32        draw_on;          /**< 1 while the object draws; 0 leaves it out of the scene. */
+
     virtual void FrameObjectOnOff(char *name, int on);
     virtual void Draw();
 
@@ -1341,9 +1345,10 @@ public:
    the object dispatch like anything else in the world. */
 class CMapObject : public CObjectFrame {
 public:
-    char       unk_00[36];
+    CFrameVu1 *collision_frame; /**< Frame that collision reads; zero where the object has none. */
     CFrameVu1 *unk_D4;
-    char       unk_28[8];
+    CFrameVu1 *shade_frame;  /**< Frame that the shade draws from; zero where the object takes none. */
+    CFrameVu1 *camera_frame; /**< Collision frame the camera reads; zero where the object has none. */
     float      unk_E0;
     int        unk_34; /**< Category row of the map the object draws with. */
     int        handle; /**< Handle the map gave the object; below zero where the slot is free. */

@@ -80,6 +80,7 @@ struct RECT {
 #include "title/title.hpp"
 #include "title/titleloop.hpp"
 #include "vutext.hpp"
+#include "water.hpp"
 #include "wind.hpp"
 #ifdef PAL
 #include "mainselect.hpp"
@@ -104,24 +105,6 @@ public:
    their own because each is another unit's to type. Only the members this file touches are named;
    the extents are the sizes the executable gives the objects below. */
 
-/* The rippling water plane the outdoor scenes stand on. The frame is where the plane sits in the
-   world. */
-class CWater {
-public:
-    char      unk_00[176];
-    CFrameVu1 frame; /**< Places and draws the water surface. */
-
-    CWater();
-
-    void SetVertex(float *corner0, float *corner1, float *corner2, float *corner3);
-    void SetSize(int row_count, int column_count, CDataAlloc2<1> *arena);
-    void SetParam(float speed, float damping_rate, float scale, float shift);
-    void SetColor(u_char red, u_char green, u_char blue, u_char alpha);
-    void Shake(int x, int y, float height_change);
-    void Hamon();
-    int  DrawVu1(RenderInfo *info, sceVif1Packet *packet, u_long128 *parent_info);
-};
-
 /* Named rather than included, because a unit's include list is a dial on the order a call's
    floating-point arguments are set up in and nothing here needs the definition: adding
    renderinfo.h alone takes RushInit's three-float SetFollow out of the order the image has. */
@@ -129,6 +112,10 @@ public:
 /* A frame parented to an object, which is what lets the world transform drive a model. */
 class CObjectFrame : public CObject {
 public:
+    CFrameVu1 *frame[4];         /**< Frame of each level of detail; zero where the object has none. */
+    s32        rotation_changed; /**< Set whenever the angle, its motion or the moment changes. */
+    s32        draw_on;          /**< 1 while the object draws; 0 leaves it out of the scene. */
+
     virtual void FrameObjectOnOff(char *name, int on);
     virtual void Draw();
 
@@ -139,9 +126,10 @@ public:
    through the object dispatch like anything else in the world. */
 class CMapObject : public CObjectFrame {
 public:
-    char       unk_18[36];
+    CFrameVu1 *collision_frame; /**< Frame that collision reads; zero where the object has none. */
     CFrameVu1 *unk_D4;
-    char       unk_4C[8];
+    CFrameVu1 *shade_frame;  /**< Frame that the shade draws from; zero where the object takes none. */
+    CFrameVu1 *camera_frame; /**< Collision frame the camera reads; zero where the object has none. */
     float      unk_E0;
     int        category_no; /**< Category the map filed the object under. */
     int        handle;      /**< Handle the map gave the object. */
@@ -168,12 +156,17 @@ public:
     void Draw();
 };
 
+class CTexture;
+
 /* The movie's one fire, which is a light rather than a model. */
 class CFireOmni {
 public:
     char          unk_18[32];
-    sceVu0FVECTOR position; /**< World position the fire draws at. */
-    char          unk_4C[16];
+    sceVu0FVECTOR position;    /**< World position the fire draws at. */
+    s32           texture_set; /**< Indicates that the textures were supplied rather than looked up. */
+    CTexture     *core;        /**< Bright inner texture of the flame. */
+    CTexture     *glow;        /**< Soft outer texture of the flame. */
+    s32           unk_3C;
 
     CFireOmni();
 

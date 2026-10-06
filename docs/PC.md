@@ -49,7 +49,7 @@ port/build/pc/darkcloud --data data --save save
 | Option | Meaning |
 |---|---|
 | `--data DIR` | the extracted data (default: `DC_DATA`, then `./data`, then `data/` beside the executable, then `$XDG_DATA_HOME/chronicle/data`) |
-| `--save DIR` | memory cards, `config.json`, the pipeline cache and host files (default: `DC_SAVE`, then `./save`, then `save/` beside the executable, then `save/` beside a local `data/`, then `$XDG_DATA_HOME/chronicle/save`); created on first use |
+| `--save DIR` | saves, `config.json`, the pipeline cache and host files (default: `DC_SAVE`, then `./save`, then `save/` beside the executable, then `save/` beside a local `data/`, then `$XDG_DATA_HOME/chronicle/save`); created on first use |
 | `--headless` | SDL's offscreen video driver with `VK_EXT_headless_surface`, SDL's dummy audio driver, and the game clock unbounded (one tick per pump, no sleeping) |
 | `--offscreen` | `--headless` without a Vulkan surface: frames are drawn to an image only (what `--headless` does by itself when the loader has no `VK_EXT_headless_surface`) |
 | `--frames N` | stop after N frames of the game's main loop |
@@ -260,7 +260,7 @@ before the window opens. `GamePad.Down` fires on a press edge, so a press
 needs a later line that releases it:
 
 ```
-# language select (English), memory check, attract movie, title logo, menu
+# language select (English), attract movie, title logo, menu
 0
 70 cross
 75
@@ -307,9 +307,9 @@ mode. `darkcloud` prints `debug mode on: the developer menu` when it starts
 there.
 
 While `DebugMode` is set, Start and Select on pad 1 go to the developer menu
-at once from every mode: the language select, the memory card check, the
-attract movie, the title, the opening, a town or an interior, the dungeon
-loader, a dungeon and the save screen (`GameDeveloperMenuRequested`,
+at once from every mode: the language select, the attract movie, the
+title, the opening, a town or an interior, the dungeon loader, a dungeon
+and the save screen (`GameDeveloperMenuRequested`,
 `port/src/gameloop.cpp`, after every frame of the main loop). The frame the
 second of the two goes down ends the mode where it stands: there is no fade
 and the town is not saved back to the save data; sound stops, the pad is
@@ -416,6 +416,9 @@ with the hardware taken out, line for line otherwise:
 - The transitions are `GameApplyLoopResult` (what each mode's loop result
   does) and `GameFollowMapJump` (`NextMapNo` into the next mode), exported for
   the tests.
+- The language select goes straight on to the attract movie: retail's memory
+  card check (`GAME_MODE_MEMORY_CHECK`, `MemCheckLoop`) is never entered, as
+  there is no card (see "Saves and host files").
 - Each pass of the loop is one logic tick, recorded and rendered as described
   in "Ticks and display frames" below.
 - `--frames` counts frames of this loop (one per `MGEndFrame` it calls);
@@ -765,11 +768,71 @@ their tone by key range, then split index.
 
 ## Saves and host files
 
-`sce/libmc.cpp` implements libmc on `<save>/mc0/` and `<save>/mc1/`, a
-directory per card, with the game's own directory and file names. Every
-command finishes inside the call that issues it, and the next `sceMcSync`
-reports the function number and result the game checks. The save itself is
-retail's 0x136A7-byte image. `sce/sifdev.cpp` implements `sceOpen`,
+The port has no memory card. Each save is a file of its own directly in the
+save directory, `<save>/darkcloudN` for N = 0, 1, 2 and on, with no upper
+bound, holding retail's 0x136A7-byte image unchanged: `CSaveData` (0x131C0
+bytes), the version string (`darkcloudVer1.9`) in 0x20 bytes, and a checksum
+byte for every 64 bytes of save data. The name is the one the game gives the
+file on the card, so a save copied out of a card export loads as it is.
+`<save>/sysconfig.bin` is the card's 0x40-byte configuration file
+(`SV_CONFIG_SYS`: the options, the last save used, the game clear flag)
+followed by the last save's number as a 32-bit little-endian integer, since
+the image keeps that number in a signed byte, which only holds 0 to 127; a
+0x40-byte file copied out of a card loads too. `icon.sys` and the icons are
+not written.
+
+`port/src/memorycardaccess.cpp` replaces the operations of
+`CMemoryCardAccess` with plain reads and writes of these files
+(`port/src/save_slots.cpp` names and lists them); each finishes in the step
+that starts it. A save is written beside its file and renamed over it. The
+card the save screens still check is always there, formatted and with room,
+and so is its save directory; format, unformat, the write test and the
+conversion of NTSC 1.0 saves do nothing.
+
+The save screens (`port/src/memcard.cpp`, `port/src/menu_save.cpp`) keep
+retail's steps, less the card:
+
+- The card choice is gone: the screen opens on its list.
+- The boards are every readable save in file order, then, on the save
+  screen only, one "New file" board, which saves to the lowest free N. File
+  order keeps each board where it was from one visit to the next and matches
+  the number on it. Saving over a save asks first, as retail did; a new save
+  does not. With no saves the load screen shows no board, Cross is refused
+  and Circle goes back.
+- The chosen board sits where retail's did and the rest scroll past above
+  and below it. Up and down move one board (held, they repeat), L1 and R1
+  jump to the first and the last; Circle closes the screen.
+- The cursor starts on the last save used (config word 17, which a load and
+  a save set); when that file has no board, on the New file board, or on the
+  load screen the first save.
+- No message names the card. Checks and transfers finish within a frame and
+  show none; the save after the ending asks "Want to save?" (message 260 of
+  `allmenu.mes`) where retail asked to save the cleared data to the card
+  (298), and Cross after it closes the screen where retail went back to the
+  card choice; an alert only a card raised reads "Saving failed." (266) or
+  "Loading failed." (274).
+- A save of another version is still offered for deletion (299), as retail
+  did.
+- A file is skipped unless its name is `darkcloud` and a number as `%d`
+  writes it (`darkcloud01` is not file 1), it is at least a save long and
+  its version is this one's. A skipped `darkcloudN` keeps its number from a
+  new save.
+
+Saves in the card layout earlier builds wrote are not moved by the game. By
+hand, in `<save>/mc0/BESCES-50295dkcloud/` (or the same folder of a card
+export):
+
+| File | Goes to |
+|---|---|
+| `darkcloudN` | `<save>/darkcloudN` |
+| `BESCES-50295dkcloud`, the configuration | `<save>/sysconfig.bin` |
+| `icon.sys`, `dkicon.ico`, `dkicon_c.ico`, `dkicon_d.ico` | not used |
+
+`sce/libmc.cpp` still implements libmc on `<save>/mc0/` and `<save>/mc1/`, a
+directory per card, every command finishing inside the call that issues it
+and the next `sceMcSync` reporting the function number and result. The game
+reaches none of it but `MemCheckInit`'s `sceMcInit`, in the boot card check
+the port skips; `tests/platform_mc_test.cpp` covers it. `sce/sifdev.cpp` implements `sceOpen`,
 `sceRead`, `sceWrite`, `sceLseek` and `sceClose` on `<save>/host0/` with the
 device prefix stripped (the debug dump `edit.cpp` writes to `host0:`), and
 `WriteFile` writes there too.
@@ -1019,7 +1082,8 @@ spelled, names and default arguments aside. By convention it goes in the file
 that mirrors its unit: `port/src/mglib.cpp` holds the replacements for
 `ps2/src/mglib.cpp`. A name the unit's stub header renames (below) is tagged
 under its new name. What is replaced has to be a function with its body or a
-variable without constructor arguments, at file scope of a unit, with no
+variable without constructor arguments (a pointer to a function, or an array
+of them, by the name inside its declarator), at file scope of a unit, with no
 preprocessor directive before its body, and an `#if` block in its body has to
 lie wholly inside it with every branch leaving the same braces open. It has to
 be one the port compiles: under `#ifdef` or `#ifndef` of `PORT` or `PAL`, in
@@ -1058,9 +1122,10 @@ renames what the unit takes from MWCC or from the PS2 link alone:
   `__exception_magic`, which MWCC provides inside an exception handler.
 - `menu_save` and `memcard` export statics the other calls: memcard's
   `SaveMenuFunc` table names menu_save's eighteen `SaveMenuKey*` steps and
-  menu_save calls memcard's `ExitSaveSelect`. Each header defines a global
-  forwarder under the external name (an asm label), which also keeps clang
-  from dropping the unused static.
+  menu_save calls memcard's `ExitSaveSelect`. The port's `SaveMenuFunc`
+  (`port/src/memcard.cpp`) names six of memcard's own steps as well. Each
+  header defines a global forwarder under the external name (an asm label),
+  which also keeps clang from dropping the unused static.
 - `title/rushmovi` declares title.cpp's `DataLoad`, `DrawProcA`..`I` and
   `DrawProcTitle` static; its header defines those statics as forwarders to
   the global ones.

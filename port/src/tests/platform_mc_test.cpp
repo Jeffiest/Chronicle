@@ -9,33 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "memorycardaccess.hpp"
 #include "platform/paths.hpp"
 #include "platform_fixture.hpp"
-#include "savedata.hpp"
 
-// Drives CMemoryCardAccess as the save menu does: SetFuncNo, then Step once
-// per frame until the operation finishes, on a save root in a temporary
-// directory.
+// libmc on a save root in a temporary directory. The game itself no longer reaches it: its saves
+// are flat files (save_slots_test.cpp).
 
 namespace fs = std::filesystem;
 
 namespace {
-
-constexpr int         kImageSize = 0x136A7;
-constexpr int         kSaveDataSize = 0x131C0;
-constexpr int         kChecksumOffset = 0x131E0;
-constexpr int         kSaveMapNoOffset = 0x1C8;
-constexpr const char *kSaveDir = "BESCES-50295dkcloud";
-
-// SetBuff and the game's int casts need the buffer below 2 GiB: static
-// storage in the non-PIE executable is.
-alignas(64) char g_menu_buffer[0x30000];
-alignas(64) CSaveData g_save;
-CMemoryCardAccess g_mc;
-CMemoryCardAccess g_boot;
-char              g_icons[3][100];
-char              g_icon_names[3][16] = {"dkicon.ico", "dkicon_c.ico", "dkicon_d.ico"};
 
 fs::path UseTempSaveRoot() {
     fs::path root = fs::temp_directory_path() / ("dc_mc_test_" + std::to_string(dc::test::ProcessId()));
@@ -45,60 +27,12 @@ fs::path UseTempSaveRoot() {
     return root;
 }
 
-int RunOperation(CMemoryCardAccess &mc, int operation) {
-    mc.SetFuncNo(operation);
-    for (int frame = 0; frame < 1000; ++frame) {
-        int result = mc.Step();
-        if (result != 0) {
-            return result;
-        }
-    }
-    ADD_FAILURE() << "operation never finished";
-    return 0;
-}
-
 std::vector<char> ReadFile(const fs::path &path) {
     std::ifstream file(path, std::ios::binary);
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
-s32 &MapNoOf(CSaveData &save) {
-    return *reinterpret_cast<s32 *>(reinterpret_cast<char *>(&save) + kSaveMapNoOffset);
-}
-
-void PrepareSave() {
-    g_save.Initialize();
-    SaveData = &g_save;
-    s16 *name = g_save.GetCharaName(0);
-    for (int i = 0; i < 5; ++i) {
-        name[i] = static_cast<s16>("Toan"[i]);
-    }
-    g_save.AddPlayTime(123456);
-    g_save.QuestDungeon(0, 7);
-    g_save.QuestDungeon(6, 3);
-    MapNoOf(g_save) = 42;
-}
-
-void PrepareAccess(CMemoryCardAccess &mc) {
-    ASSERT_TRUE(mc.InitForMC() == 0);
-    MC_ICON_DATA icon = {
-        {g_icon_names[0], g_icons[0], sizeof(g_icons[0])},
-        {g_icon_names[1], g_icons[1], sizeof(g_icons[1])},
-        {g_icon_names[2], g_icons[2], sizeof(g_icons[2])},
-    };
-    for (int i = 0; i < 3; ++i) {
-        std::memset(g_icons[i], 'a' + i, sizeof(g_icons[i]));
-    }
-    mc.SetBuff(g_menu_buffer);
-    mc.SetIconData(&icon);
-    mc.MakeMcIconSysInfo();
-}
-
 } // namespace
-
-TEST(PlatformMc, SaveDataIsPodSized) {
-    ASSERT_TRUE(sizeof(CSaveData) == kSaveDataSize);
-}
 
 TEST(PlatformMc, SyncReportsCommandCodes) {
     UseTempSaveRoot();
@@ -184,94 +118,6 @@ TEST(PlatformMc, SyncReportsCommandCodes) {
     ASSERT_TRUE(sceMcSync(MC_WAIT, &cmd, &result) == 1 && result == sceMcResNoFormat && formatted == 0);
     ASSERT_TRUE(sceMcFormat(0, 0) == 0);
     ASSERT_TRUE(sceMcSync(MC_WAIT, &cmd, &result) == 1 && cmd == 0x10 && result == 0);
-}
-
-TEST(PlatformMc, SaveLoadCycle) {
-    fs::path root = UseTempSaveRoot();
-    PrepareSave();
-    PrepareAccess(g_mc);
-
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SEARCH_TYPE) == 1);
-    ASSERT_TRUE(g_mc.card[0].present == 1);
-    ASSERT_TRUE(g_mc.card[0].type == sceMcTypePS2);
-    ASSERT_TRUE(g_mc.card[0].formatted == 1);
-
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_GET_DIR) == 1);
-    ASSERT_TRUE(g_mc.card[0].dir_exists == 0);
-
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_MAKE_DIR) == 1);
-    fs::path dir = root / "mc0" / kSaveDir;
-    ASSERT_TRUE(fs::file_size(dir / kSaveDir) == 0x40);
-    ASSERT_TRUE(ReadFile(dir / kSaveDir)[0x11] == 1);
-    std::vector<char> icon_sys = ReadFile(dir / "icon.sys");
-    ASSERT_TRUE(icon_sys.size() == sizeof(sceMcIconSys));
-    ASSERT_TRUE(std::memcmp(icon_sys.data(), "PS2D", 4) == 0);
-    ASSERT_TRUE(ReadFile(dir / "dkicon_c.ico") == std::vector<char>(100, 'b'));
-
-    g_mc.file_no = 3;
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SAVE) == 1);
-    std::vector<char> image = ReadFile(dir / "darkcloud3");
-    ASSERT_TRUE(image.size() == static_cast<std::size_t>(kImageSize));
-    ASSERT_TRUE(std::memcmp(image.data(), g_mc.save_buffer, kImageSize) == 0);
-    ASSERT_TRUE(std::strcmp(image.data() + kSaveDataSize, "darkcloudVer1.9") == 0);
-    char total = 0;
-    for (int i = 0; i < kSaveDataSize; ++i) {
-        total = static_cast<char>(total + image[i]);
-        if (i % 64 == 63) {
-            ASSERT_TRUE(image[kChecksumOffset + i / 64] == total);
-            total = 0;
-        }
-    }
-    ASSERT_TRUE(ReadFile(dir / kSaveDir)[17] == 3);
-
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_GET_ALL_SAVE_FILE_INFO) == 1);
-    for (int file = 0; file < MC_SAVE_FILE_MAX; ++file) {
-        ASSERT_TRUE(g_mc.file_info[file].state == (file == 3));
-    }
-    const SAVEDATA_INFO &info = g_mc.file_info[3];
-    ASSERT_TRUE(info.file_no == 4);
-    ASSERT_TRUE(info.map_no == 42);
-    ASSERT_TRUE(info.play_time == 123456.0f);
-    ASSERT_TRUE(info.quest_total == 10);
-    ASSERT_TRUE(std::memcmp(info.name, g_save.GetCharaName(0), 10) == 0);
-
-    std::vector<char> expected(reinterpret_cast<char *>(g_mc.save_buffer), reinterpret_cast<char *>(g_mc.save_buffer) + kSaveDataSize);
-    g_save.AddPlayTime(99);
-    MapNoOf(g_save) = 7;
-    g_mc.file_no = 3;
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_LOAD) == 1);
-    reinterpret_cast<s32 *>(expected.data() + (static_cast<char *>(g_save.GetConfigData()) - reinterpret_cast<char *>(&g_save)))[17] = 3;
-    ASSERT_TRUE(std::memcmp(&g_save, expected.data(), kSaveDataSize) == 0);
-    ASSERT_TRUE(MapNoOf(g_save) == 42);
-
-    // A flipped byte fails the checksum and leaves the save in memory alone.
-    image[100] ^= 0x40;
-    std::ofstream(dir / "darkcloud3", std::ios::binary).write(image.data(), image.size());
-    MapNoOf(g_save) = 9;
-    g_mc.file_no = 3;
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_LOAD) == -1);
-    ASSERT_TRUE(MapNoOf(g_save) == 9);
-
-    // What InitExistData does at boot, on a fresh library state.
-    CMemoryCardAccess &boot = g_boot;
-    PrepareAccess(boot);
-    ASSERT_TRUE(RunOperation(boot, MC_OPERATION_SEARCH_TYPE) == 1);
-    ASSERT_TRUE(RunOperation(boot, MC_OPERATION_GET_DIR) == 1);
-    ASSERT_TRUE(boot.card[0].dir_exists == 1);
-    ASSERT_TRUE(boot.card[0].dir_entries == 1);
-    ASSERT_TRUE(std::strcmp(SaveFileInfo[0].name, "darkcloud3") == 0);
-    ASSERT_TRUE(GetOpenAttribute((char *) "darkcloud3") == 1);
-    ASSERT_TRUE(RunOperation(boot, MC_OPERATION_LOAD_CONFIG) == 1);
-
-    boot.file_no = 3;
-    ASSERT_TRUE(RunOperation(boot, MC_OPERATION_DELETE) == 1);
-    ASSERT_TRUE(!fs::exists(dir / "darkcloud3"));
-
-    boot.port = 1;
-    ASSERT_TRUE(RunOperation(boot, MC_OPERATION_SEARCH_TYPE) == 1);
-    ASSERT_TRUE(boot.card[1].type == sceMcTypeNoCard);
-
-    fs::remove_all(root);
 }
 
 #ifdef _WIN32

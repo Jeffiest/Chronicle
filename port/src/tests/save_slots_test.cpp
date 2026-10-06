@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <libpad.h>
 
 #include <cstring>
 #include <filesystem>
@@ -7,7 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "../platform/input.hpp"
+#include "gamepad.hpp"
+#include "memcard.hpp"
 #include "memorycardaccess.hpp"
+#include "menu_save.hpp"
 #include "platform/paths.hpp"
 #include "platform_fixture.hpp"
 #include "save_slots.hpp"
@@ -17,6 +22,8 @@
 // SetFuncNo, then Step until the operation finishes, on a save root in a temporary directory.
 
 namespace fs = std::filesystem;
+
+extern int (*SaveMenuFunc[26])();
 
 namespace {
 
@@ -80,6 +87,33 @@ void PrepareSave() {
     MapNoOf(g_save) = 42;
     ASSERT_TRUE(g_mc.InitForMC() == 0);
     g_mc.SetBuff(g_menu_buffer);
+}
+
+unsigned char g_pad_buffer[2][1024];
+
+// As CGamePad::Init leaves the pads, past its wait on sceGsSyncV (platform_pad_test.cpp).
+void OpenPads() {
+    ASSERT_TRUE(scePadInit(0) == 1);
+    ASSERT_TRUE(scePadPortOpen(0, 0, g_pad_buffer[0]) == 1);
+    ASSERT_TRUE(scePadPortOpen(1, 0, g_pad_buffer[1]) == 1);
+    InputPadState released;
+    released.connected = true;
+    InputSetOverride(0, &released);
+    InputSetOverride(1, &released);
+    for (int i = 0; i < 4; ++i) {
+        GamePad.UpDate();
+    }
+}
+
+// One frame with the button newly down.
+void Press(std::uint16_t button) {
+    InputPadState state;
+    state.connected = true;
+    InputSetOverride(0, &state);
+    GamePad.UpDate();
+    state.buttons = button;
+    InputSetOverride(0, &state);
+    GamePad.UpDate();
 }
 
 SAVEDATA_INFO Save(int file_no) {
@@ -164,7 +198,6 @@ TEST(SaveSlots, SaveListAndLoadFlatFiles) {
     ASSERT_TRUE(LastFileNo() == 13);
     ASSERT_TRUE(g_mc.CheckFileNo(13));
     ASSERT_FALSE(fs::exists(root / "mc0"));
-    ASSERT_FALSE(fs::exists(root / "darkcloud13.tmp"));
 
     // A save copied out of a card holds the same bytes.
     WriteFile(root / "darkcloud2", image);
@@ -193,10 +226,10 @@ TEST(SaveSlots, SaveListAndLoadFlatFiles) {
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_LOAD) == -1);
     ASSERT_TRUE(MapNoOf(g_save) == 9);
 
-    // A short file is not listed, but keeps its number from a new save.
+    // Neither the broken save nor a short file is listed, but both keep their numbers.
     WriteFile(root / "darkcloud0", std::vector<char>(100, 'x'));
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_GET_ALL_SAVE_FILE_INFO) == 1);
-    ASSERT_TRUE(SaveSlots.saves.size() == 2);
+    ASSERT_TRUE(SaveSlots.saves.size() == 1 && SaveSlots.saves[0].file_no == 14);
     ASSERT_TRUE(SaveSlotFirstFree(SaveSlots.files) == 1);
 
     g_mc.file_no = 2;
@@ -235,25 +268,77 @@ TEST(SaveSlots, ConfigurationKeepsTheLastFileWhole) {
     fs::remove_all(root);
 }
 
-TEST(SaveSlots, AnotherVersionStopsTheListing) {
+TEST(SaveSlots, UnusableFilesStayAndKeepTheirNumbers) {
     fs::path root = UseTempSaveRoot();
     PrepareSave();
 
     g_mc.file_no = 1;
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SAVE) == 1);
     std::vector<char> image = ReadFile(root / "darkcloud1");
-    std::strcpy(image.data() + kSaveDataSize, "darkcloudVer1.0");
-    WriteFile(root / "darkcloud4", image);
 
-    // The save screen sees the error while the operation runs, and offers to delete the file.
-    g_mc.SetFuncNo(MC_OPERATION_GET_ALL_SAVE_FILE_INFO);
-    ASSERT_TRUE(g_mc.Step() == 0);
-    ASSERT_TRUE(g_mc.error.code == MC_ERROR_VERSION && g_mc.error.file_no == 4);
-    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_DELETE) == 1);
-    ASSERT_FALSE(fs::exists(root / "darkcloud4"));
-    g_mc.error.code = MC_ERROR_NONE;
+    // Another version's save, one whose map word is damaged, a directory, and a whole save whose
+    // map lies past the boards' table of names.
+    std::vector<char> other = image;
+    std::strcpy(other.data() + kSaveDataSize, "darkcloudVer1.0");
+    WriteFile(root / "darkcloud4", other);
+    std::vector<char> damaged = image;
+    *reinterpret_cast<s32 *>(damaged.data() + kSaveMapNoOffset) = 0x7fffffff;
+    WriteFile(root / "darkcloud0", damaged);
+    fs::create_directory(root / "darkcloud2");
+    MapNoOf(g_save) = 0x7fffffff;
+    g_mc.SetBuff(g_menu_buffer);
+    g_mc.file_no = 5;
+    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SAVE) == 1);
+
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_GET_ALL_SAVE_FILE_INFO) == 1);
-    ASSERT_TRUE(SaveSlots.saves.size() == 1);
+    ASSERT_TRUE((SaveSlots.files == std::vector<int>{0, 1, 2, 4, 5}));
+    ASSERT_TRUE(SaveSlots.saves.size() == 2);
+    ASSERT_TRUE(SaveSlots.saves[0].file_no == 2 && SaveSlots.saves[1].file_no == 6);
+    ASSERT_TRUE(SaveSlots.saves[1].map_no == 0);
+    ASSERT_TRUE(SaveSlotFirstFree(SaveSlots.files) == 3);
+    ASSERT_TRUE(ReadFile(root / "darkcloud4") == other && ReadFile(root / "darkcloud0") == damaged);
+    g_mc.file_no = 0;
+    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_LOAD) == -1);
+
+    // A new save never replaces what took its number after the list was read.
+    SaveSlotNew = true;
+    ASSERT_FALSE(g_mc.CheckFileNo(1));
+    g_mc.file_no = 1;
+    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SAVE) == 1);
+    ASSERT_TRUE(g_mc.file_no == 3 && LastFileNo() == 3);
+    ASSERT_TRUE(ReadFile(root / "darkcloud1") == image);
+    g_mc.file_no = 2;
+    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SAVE) == 1);
+    ASSERT_TRUE(g_mc.file_no == 6 && fs::is_directory(root / "darkcloud2"));
+    SaveSlotNew = false;
+    for (const fs::directory_entry &entry : fs::directory_iterator(root)) {
+        ASSERT_TRUE(entry.path().extension() != ".tmp") << entry.path();
+    }
+
+    g_mc.file_no = 7;
+    ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_DELETE) == 1);
+
+    fs::remove_all(root);
+}
+
+TEST(SaveSlots, EndingSaveFailureCanBeLeft) {
+    fs::path root = UseTempSaveRoot();
+    PrepareSave();
+    fs::create_directories(root / "sysconfig.bin" / "taken");
+    OpenPads();
+
+    McAccess.SetFuncNo(MC_OPERATION_IDLE);
+    SaveMenu.mode = SAVE_MENU_MODE_ENDING;
+    SaveMenu.access_kind = SAVE_ACCESS_SAVE;
+    for (int pass = 0; pass < 2; ++pass) {
+        SaveMenu.key_no = SAVE_KEY_SAVE_ENDING;
+        SaveMenuFunc[SaveMenu.key_no]();
+        ASSERT_TRUE(SaveMenu.key_no == SAVE_KEY_ALERT && SaveMenu.alert_no == SAVE_ALERT_SAVE_FAILED);
+        ASSERT_TRUE(GetSaveMenuMsgNo() == 266);
+        Press(pass == 0 ? PAD_CROSS : PAD_CIRCLE);
+        SaveMenuFunc[SaveMenu.key_no]();
+        ASSERT_TRUE(SaveMenu.key_no == (pass == 0 ? SAVE_KEY_AFTER_ENDING : SAVE_KEY_FADE_OUT));
+    }
 
     fs::remove_all(root);
 }

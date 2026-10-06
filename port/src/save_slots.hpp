@@ -16,7 +16,8 @@ std::filesystem::path SaveConfigPath();
 // The N of a file named darkcloudN, or -1 for any other name.
 int SaveSlotFileNo(std::string_view name);
 
-// The N of every darkcloudN in the save root, ascending.
+// The N of every darkcloudN in the save root, ascending, whatever each holds: a directory or an
+// unreadable file keeps its number from a new save too.
 std::vector<int> SaveSlotFiles();
 
 // The lowest N that ascending files does not hold.
@@ -29,6 +30,9 @@ struct SaveSlotList {
 };
 
 extern SaveSlotList SaveSlots;
+
+// Set while the save screen saves to a new file, which then never replaces one.
+extern bool SaveSlotNew;
 
 // The screens' boards: one per readable save and, on the save screen, a last one for a new save.
 int SaveSlotRows(const SaveSlotList &list, bool new_save);

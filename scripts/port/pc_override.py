@@ -47,6 +47,8 @@ C_LINKAGE = re.compile(r'\bextern\s*"C"')
 ATTRIBUTE = re.compile(r"\b__attribute__\s*\(")
 NAME = re.compile(r"((?:[A-Za-z_]\w*(?:<[^<>()]*>)?\s*::\s*)*(?:operator\b.*|~?[A-Za-z_]\w*))\s*$", re.DOTALL)
 TYPE_BODY = re.compile(r"\s*(?:class|struct|union|enum|namespace)\b[^;(]*$")
+# A pointer to a function, or an array of them, named inside its declarator: int (*name[n])(...).
+FUNCTION_POINTER = re.compile(r"[^(]*\(\s*\*\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*\)\s*\(")
 BUILTIN = {"int", "char", "short", "long", "float", "double", "void", "bool", "unsigned", "signed", "wchar_t"}
 NOT_A_TYPE = {"const", "volatile", "register", "struct", "class", "union", "enum"}
 INLINE = re.compile(r"\b(?:__)?inline(?:__)?\b")
@@ -259,11 +261,12 @@ class Definition:
         declaration = text[: len(flat[:end].rstrip())].lstrip(" \t")
         opening = head.find("(")
         if flat[i] == ";":
-            if opening >= 0:
+            pointer = FUNCTION_POINTER.match(head) if init is not None else None
+            if opening >= 0 and pointer is None:
                 raise Error("a declaration, or a variable with constructor arguments")
             if init is None and re.search(r"\bextern\b", head):
                 raise Error("a declaration")
-            name = re.search(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*$", head)
+            name = pointer or re.search(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*$", head)
             if name is None:
                 raise Error("no name")
             self.name = self.spelled = (renames or {}).get(name[1], name[1])

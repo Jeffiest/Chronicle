@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "dngstatusdata.hpp"
+#include "menu_option.hpp"
 #include "platform/files.hpp"
 #include "platform/save_state.hpp"
 #include "save_slots.hpp"
@@ -94,6 +95,7 @@ PC_OVERRIDE void CMemoryCardAccess::SetBuff(char *buffer) {
     buffer = PastNext64(buffer);
     this->save_buffer = (CSaveData *) buffer;
     memcpy(this->save_buffer, SaveData, 0x131C0);
+    GameOptionsClear(*this->save_buffer);
     this->save_buffer->ConvertConfig(&sys_config);
     char *version = (char *) this->save_buffer + 0x131C0;
     strcpy(version, this->version);

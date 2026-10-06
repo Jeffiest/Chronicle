@@ -1,3 +1,4 @@
+#include <SDL3/SDL.h>
 #include <gtest/gtest.h>
 #include <libpad.h>
 
@@ -288,5 +289,45 @@ TEST(PlatformPad, InputWithoutVideo) {
     ASSERT_TRUE(InputGetPad(0).connected);
     ASSERT_TRUE(InputGetPad(0).buttons == 0);
     InputSetRumble(0, {true, 255});
+    InputShutdown();
+}
+
+TEST(PlatformPad, OptionsMouseOwnsMotionButtonsAndWheel) {
+    InputResetBindings();
+    InputMouseSettings settings;
+    settings.capture = false;
+    InputSetMouseSettings(settings);
+    InputKeyboardMouse held;
+    held.mouse_buttons = 1;
+    held.mouse_dx = 12.0f;
+    held.mouse_dy = -8.0f;
+    held.keys.push_back(InputScancodeFromName("Return"));
+    InputSetScriptedDevices(held);
+    InputSetMenuMouse(true);
+
+    InputPadState base;
+    InputPadState pad = InputApplyKeyboardMouse(base, held);
+    ASSERT_EQ(pad.buttons, kInputStart);
+    ASSERT_EQ(pad.right_x, 128);
+    ASSERT_EQ(pad.right_y, 128);
+    InputMenuMouse menu = InputTakeMenuMouse();
+    ASSERT_EQ(menu.buttons, 1u);
+    ASSERT_EQ(menu.dx, 12.0f);
+    ASSERT_EQ(menu.dy, -8.0f);
+
+    SDL_Event event{};
+    event.type = SDL_EVENT_MOUSE_WHEEL;
+    event.wheel.y = 2.0f;
+    event.wheel.direction = SDL_MOUSEWHEEL_FLIPPED;
+    InputHandleEvent(event);
+    ASSERT_EQ(InputTakeMenuMouse().wheel, -2.0f);
+    ASSERT_EQ(InputTakeMenuMouse().wheel, 0.0f);
+    InputHandleEvent(event);
+    event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    InputHandleEvent(event);
+    ASSERT_EQ(InputTakeMenuMouse().wheel, 0.0f);
+
+    InputSetMenuMouse(false);
+    ASSERT_NE(InputApplyKeyboardMouse(base, held).buttons, kInputStart);
     InputShutdown();
 }

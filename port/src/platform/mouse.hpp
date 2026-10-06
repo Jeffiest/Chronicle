@@ -26,3 +26,6 @@ std::uint32_t MouseButtons();
 
 // The motion in pixels since the previous call; y grows downward.
 void MouseTakeMotion(float &dx, float &dy);
+
+// The wheel's turn since the previous call, in notches; positive away from the user.
+float MouseTakeWheel();

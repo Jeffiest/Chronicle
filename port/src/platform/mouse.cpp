@@ -17,6 +17,7 @@ std::uint32_t    g_buttons = 0;
 std::uint32_t g_swallowed = 0;
 float         g_dx = 0.0f;
 float         g_dy = 0.0f;
+float         g_wheel = 0.0f;
 
 void SetCaptured(bool captured) {
     g_captured = captured;
@@ -76,6 +77,7 @@ void MouseStop() {
     g_swallowed = 0;
     g_dx = 0.0f;
     g_dy = 0.0f;
+    g_wheel = 0.0f;
 }
 
 bool MouseHandleEvent(const SDL_Event &event) {
@@ -87,11 +89,18 @@ bool MouseHandleEvent(const SDL_Event &event) {
             g_buttons = 0;
             g_dx = 0.0f;
             g_dy = 0.0f;
+            g_wheel = 0.0f;
             return false;
         case SDL_EVENT_MOUSE_MOTION:
             if (Live()) {
                 g_dx += event.motion.xrel;
                 g_dy += event.motion.yrel;
+            }
+            return false;
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (Live()) {
+                float turn = event.wheel.y;
+                g_wheel += event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -turn : turn;
             }
             return false;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -116,6 +125,7 @@ bool MouseHandleEvent(const SDL_Event &event) {
                 g_buttons = 0;
                 g_dx = 0.0f;
                 g_dy = 0.0f;
+                g_wheel = 0.0f;
                 return true;
             }
             return false;
@@ -127,6 +137,12 @@ bool MouseHandleEvent(const SDL_Event &event) {
 bool MouseCaptured() { return g_captured; }
 
 std::uint32_t MouseButtons() { return g_buttons; }
+
+float MouseTakeWheel() {
+    float wheel = g_wheel;
+    g_wheel = 0.0f;
+    return wheel;
+}
 
 void MouseTakeMotion(float &dx, float &dy) {
     dx = g_dx;

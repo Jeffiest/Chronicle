@@ -19,6 +19,7 @@
 #include "langset.hpp"
 #include "main.hpp"
 #include "mainselect.hpp"
+#include "menu_option.hpp"
 #include "menu_save.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
@@ -227,6 +228,7 @@ void StartNewGame() {
         std::memcpy(names[i], g_save_data.GetCharaName(i), sizeof(names[i]));
     }
     ResetSaveKeepingConfig(g_save_data);
+    GameOptionsApply(ConfigGet().options);
     for (int i = 0; i < 6; ++i) {
         std::memcpy(g_save_data.GetCharaName(i), names[i], sizeof(names[i]));
     }
@@ -754,6 +756,8 @@ int RunGame(int argc, char **argv) {
             LoadSystemMessage();
         }
 
+        // A save loaded since the last mode brought its own options.
+        GameOptionsApply(ConfigGet().options);
         ModeInit(title_ran, exist_data, skip_title);
 
         NextMapNo = -1;

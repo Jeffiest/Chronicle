@@ -360,26 +360,29 @@ void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
                       SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY),
                       SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX),
                       SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY)};
-    int    look = g_look_left ? 0 : 2;
-    if (g_stick_invert_x) {
-        axes[look] = Flip(axes[look]);
-    }
-    if (g_stick_invert_y) {
-        axes[look + 1] = Flip(axes[look + 1]);
+    auto invert = [&](int x) {
+        if (g_stick_invert_x) {
+            axes[x] = Flip(axes[x]);
+        }
+        if (g_stick_invert_y) {
+            axes[x + 1] = Flip(axes[x + 1]);
+        }
+    };
+    invert(2);
+    if (g_look_left) {
+        invert(0);
     }
     StickPairToBytes(axes[0], axes[1], state.left_x, state.left_y);
     StickPairToBytes(axes[2], axes[3], state.right_x, state.right_y);
-    std::uint8_t &x = g_look_left ? state.left_x : state.right_x;
-    std::uint8_t &y = g_look_left ? state.left_y : state.right_y;
-    float         rate[3];
-    if (!GyroActive() || Deflected(x) || Deflected(y) || !SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_GYRO, rate, 3)) {
+    float rate[3];
+    if (!GyroActive() || Deflected(state.right_x) || Deflected(state.right_y) ||
+        !SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_GYRO, rate, 3)) {
         return;
     }
     float yaw = std::fabs(rate[1]) > kGyroDeadband ? -rate[1] * g_gyro_sensitivity : 0.0f;
     float pitch = std::fabs(rate[0]) > kGyroDeadband ? -rate[0] * g_gyro_sensitivity : 0.0f;
-    x = InputStickByte(g_gyro_invert_x ? -yaw : yaw);
-    pitch = g_gyro_invert_y ? -pitch : pitch;
-    y = InputStickByte(g_look_left ? -pitch : pitch);
+    state.right_x = InputStickByte(g_gyro_invert_x ? -yaw : yaw);
+    state.right_y = InputStickByte(g_gyro_invert_y ? -pitch : pitch);
 }
 
 void EnableGyro(SDL_Gamepad *gamepad) {
@@ -403,6 +406,11 @@ InputKeyboardMouse LiveKeyboardMouse() {
 
 void Compose(int pad) {
     g_state[pad] = pad == 0 ? InputApplyKeyboardMouse(g_device[pad], LiveKeyboardMouse()) : g_device[pad];
+    InputPadState &state = g_state[pad];
+    if (pad == 0 && g_look_left && !Deflected(state.left_x) && !Deflected(state.left_y)) {
+        state.left_x = state.right_x;
+        state.left_y = state.right_y;
+    }
 }
 
 void SyncGamepads() {

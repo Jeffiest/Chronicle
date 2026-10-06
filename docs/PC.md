@@ -2,8 +2,10 @@
 
 `PLATFORM=PC` builds the game's code as a native x64 Linux program with clang
 20, as C++26, on SDL3 and Vulkan 1.4 (`docs/MACOS.md` covers macOS on Apple
-Silicon). The port is always the PAL release;
-there is no region setting. `docs/PC_PORT_PLAN.md` is the plan it was built
+Silicon, `docs/WINDOWS.md` x64 Windows). The port is always the PAL release;
+there is no region setting. Its timing is NTSC's, though: the game runs 60 ticks a
+second, and the code that sped PAL up for its 50 Hz (`#ifdef PAL_TIMING` in
+ps2/src, which only the PS2 PAL build defines) is left out. `docs/PC_PORT_PLAN.md` is the plan it was built
 to and records the phases; this document describes what is built.
 
 ## Building and running
@@ -27,8 +29,7 @@ it.
 with `cmake --build --preset` and `ctest --preset` of the same name does the
 same.
 
-It needs clang 20 with lld and the LLVM binary tools (`llvm-objcopy`,
-`llvm-nm`, `llvm-objdump`, `llvm-readobj`, `llvm-lipo`), Python 3, CMake 3.28, Ninja,
+It needs clang 20 with lld, Python 3, CMake 3.28, Ninja,
 `glslangValidator`, SDL3 (3.4) and the Vulkan 1.4 headers and loader, and at
 run time a device with Vulkan 1.3 or later, `dualSrcBlend` and `shaderClipDistance`
 (any desktop driver; Mesa's lavapipe in CI; `port/src/gfx/README.md`, "Device", has the whole list). `.github/workflows/pc.yml` is a
@@ -86,7 +87,7 @@ key is optional; these are the defaults:
 ```jsonc
 {
     "game": {
-        "tick_rate": 50,            // logic ticks (the game's VSyncs) per second
+        "tick_rate": 60,            // logic ticks (the game's VSyncs) per second
         "debug_mode": false         // Start with debug controls off; the debug toggle chord enables them
     },
     "video": {
@@ -107,6 +108,7 @@ key is optional; these are the defaults:
     },
     "input": {
         "mouse_sensitivity": 0.1,   // right-stick deflection (1 = full) per pixel moved in one tick
+        "stick_sensitivity": 1.33,  // gamepad stick scale before the game's dead zone (PCSX2's default)
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_release": ["Escape"], // keys that give the cursor back in a window ([]: none)
@@ -204,6 +206,11 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   `AxisCalibration` (a dead zone of 49 above and 50 below the centre, then
   78 steps for 128), so a deflection reaches the game exactly and small
   mouse motion is not lost in the dead zone.
+- **Gamepad sticks.** Each stick's deflection is scaled by `stick_sensitivity`
+  (1.33, PCSX2's default) and stretched from the circle a modern stick reports
+  onto the DualShock 2's square, keeping its direction: the game's dead zone
+  takes 38% of the travel and the town runs past 0.85, so an unscaled stick
+  only runs at over 90% tilt, and a round one never on a diagonal.
 - **Mouse.** The right stick at each pad read is the motion since the
   previous read, divided by the ticks between them, times
   `mouse_sensitivity` (0.1: ten pixels in one tick is full deflection,
@@ -879,7 +886,7 @@ widens it against the image's own address.
 
 ## What is still a stub
 
-`port/src/stubs/sce/` holds the only stubs left: libdma, libgraph (all but
+`port/src/stubs/sce/` holds the remaining SDK stubs: libdma, libgraph (all but
 `sceGsSyncV`, which is `port/src/sce/libgraph.cpp`) and libpkt. Each calls
 `PS2_UNIMPLEMENTED()` (`port/include/port.h`), which prints the function,
 file and line and aborts. They stay stubs by design: the port does not
@@ -890,22 +897,27 @@ Everything else from the SDK is implemented in `port/src/sce/`: libvu0 in
 C++ (static constructors call it before `main`), libpad, libmc, sifdev,
 eekernel (`FlushCache` and friends do nothing, `Exit` exits), libcdvd's
 `sceCdInit`/`sceCdMmode` and sifrpc's IOP boot and module loads (no-ops).
-The Metrowerks runtime calls are in `port/src/runtime.cpp`: `mwInit` and
-`LoadOverlay` do nothing, `mwLoadOverlay` succeeds, `__assert` prints and
-exits with status 4, `exit__2` exits.
+The Metrowerks runtime calls are in `port/src/runtime.cpp`: `mwInit` does
+nothing; `LoadOverlay` reconstructs selected title objects when switching to
+the title overlay; `mwLoadOverlay` succeeds, `__assert` prints and exits with
+status 4, `exit__2` exits. The same file replaces the stand-ins in `ps2/src`
+for what the PS2 runtime generated that use names only the PS2 link defines:
+four constructors and `__unexpected` become functions that call
+`PS2_UNIMPLEMENTED()`, and `std::exception`'s virtual table and the overlay
+address table become empty tables. Nothing in the port reaches them, but a
+COFF link wants every name an object uses defined.
 
-None of the 39 stubbed functions is linked into `darkcloud`, and neither is
+None of the 44 aborting stub functions is linked into `darkcloud`, and neither is
 `Ps2Unimplemented` itself: `--gc-sections` keeps only what `main` reaches,
-and no function it reaches calls a stub. `darkcloud_tests` still links some
-through the units the tests call directly. To check after a change,
+and no function it reaches calls a stub. To check after a change,
 disassemble `port/build/pc/darkcloud` (`llvm-objdump -d`), collect the functions
 with a `call` to a stub's address and map them to their source with
 `llvm-addr2line`; static helpers inlined into a caller show under that
 caller.
 
-At the last count the final link held 249 `ps2/src` definitions displaced
-by a strong one in `port/src` and 3,912 that survive as the game's own
-(`nm` of `dc_ps2.o`'s weak definitions against the port's objects and the
+At the last count `port/src` tagged 330 definitions `PC_OVERRIDE`, each
+replacing one of `ps2/src`'s, and the final link held 4,145 of the game's own
+(`llvm-nm` of the `dc_ps2` objects' external definitions against the
 executable's symbols).
 
 ## Known gaps
@@ -978,12 +990,13 @@ reader's state) and op_d's `OpD_InitProcess`, `OpD_InitProcess2` and
 gives them. The smoke pools are sized from the host `CEffect` (288 bytes,
 where retail asked for fifty 256-byte ones).
 
-The title units' static constructors still run after the port's, over the
-port's objects, at the PS2 strides and through op_a's inline `CMap`
-constructor. `LoadOverlay` (`port/src/runtime.cpp`) therefore does what
-retail's overlay loader did when a mode needs TITLE.BIN and DUN.BIN (or
-nothing) was loaded before: `TitleOverlayConstruct` zeroes those objects and
-constructs them again (and initialises the maps, as op_a's constructor did).
+The port's definitions of those objects are tagged `PC_OVERRIDE`, so the
+title units' own are left out and only the port's constructors run over them
+at start-up, never the title units' at the PS2 strides. `LoadOverlay`
+(`port/src/runtime.cpp`) does what retail's overlay loader did when a mode
+needs TITLE.BIN and DUN.BIN (or nothing) was loaded before:
+`TitleOverlayConstruct` zeroes those objects and constructs them again (and
+initialises the maps, as op_a's constructor did).
 
 ## Layout
 
@@ -1011,29 +1024,57 @@ The root `CMakeLists.txt` only picks the platform:
 
 ## How `port/src` takes precedence
 
-`port/CMakeLists.txt` builds the two halves like this:
+`port/src` tags every definition that replaces one of `ps2/src`'s with
+`PC_OVERRIDE`, which `port/include/port.h` defines as nothing:
 
-1. Every unit in `ps2/src` is compiled as it is, with `PORT` defined.
-2. The objects are merged into one relocatable object, `port/build/pc/dc_ps2.o`,
-   and `llvm-objcopy --weaken` makes every definition in it weak. Two units
-   defining the same strong name fail the merge. References
-   stay strong, so a missing function is still a link error.
-3. The units in `port/src` are compiled and linked with it. Their definitions
-   are strong, so any function or variable `port/src` defines replaces the
-   `ps2/src` one. `--gc-sections` then drops the `ps2/src` body.
+```cpp
+PC_OVERRIDE void MGClearScreen(u_char r) {
+```
 
-`ps2/src` units are compiled with `-fPIC -fsemantic-interposition`. That stops
-clang from inlining or folding a call to a function `port/src` may replace, so
-calls inside a `ps2/src` unit reach the replacement too. `ps2_interposition_check`
-(`tools/weaken/interposition_check.py`, part of every build) disassembles
-`dc_ps2.o` and fails if a call to a replaced function was bound inside it or
-a definition in it is still strong. macOS does the same with other tools
-(`docs/MACOS.md`).
+`ps2/src` carries no mark of it. `port/CMakeLists.txt` builds the two halves
+like this, on every platform:
 
-To replace a function, define it with the same signature in `port/src`. By
-convention it goes in the file that mirrors its unit: `port/src/mglib.cpp`
-holds the replacements for `ps2/src/mglib.cpp`. A `static` function cannot be
-replaced this way; it keeps the body `ps2/src` gives it.
+1. `scripts/port/pc_override.py list` reads the tags in `port/src` and writes
+   the name each tagged definition links under to
+   `port/build/pc/pc_overrides.txt`: a function's qualified name and
+   parameter types, or the name alone for a variable and for a function with
+   C linkage.
+2. `pc_override.py strip` writes a copy of every unit in `ps2/src` under
+   `port/build/pc/ps2_src` without its definitions of those names. A function
+   becomes its declaration, a member function is removed (its class declares
+   it; an explicit specialization keeps its declaration) and a variable
+   becomes an `extern` declaration. Lines keep their numbers and a `#line`
+   directive names the original, so diagnostics and debug information point
+   into `ps2/src`.
+3. `pc_override.py check` stops the build if a listed name is defined by no
+   unit of `ps2/src`.
+4. The copies are compiled, with `PORT` defined.
+5. The units in `port/src` are compiled and linked with them.
+
+Each name then has one definition. A replacement without a tag leaves the
+`ps2/src` definition in, and the link fails on the duplicate symbol, unless
+that definition is `inline` or Apple's linker drops it as dead code first. A tag
+whose signature `ps2/src` does not have fails the check: the two would be
+different symbols, both would link, and the game would go on calling
+`ps2/src`'s.
+
+To replace a function, define it in `port/src` with `PC_OVERRIDE` in front and
+the signature `ps2/src` gives it: the parameter types are compared as they are
+spelled, names and default arguments aside. By convention it goes in the file
+that mirrors its unit: `port/src/mglib.cpp` holds the replacements for
+`ps2/src/mglib.cpp`. A name the unit's stub header renames (below) is tagged
+under its new name. What is replaced has to be a function with its body or a
+variable without constructor arguments, at file scope of a unit, with no
+preprocessor directive before its body, and an `#if` block in its body has to
+lie wholly inside it with every branch leaving the same braces open. It has to
+be one the port compiles: under `#ifdef` or `#ifndef` of `PORT` or `PAL`, in
+the branch the port takes; under any other condition, in every branch. The
+script stops the build on a definition it cannot take out whole, on an
+`inline` one it cannot read, which the link would not catch, and on a unit
+with a line continued by a backslash outside a preprocessor directive. A
+`static` function cannot be replaced this way; it keeps the body `ps2/src`
+gives it. Nor can one defined in a class body, a namespace or a header: the
+check finds nothing to replace.
 
 
 ## Per-unit adjustments

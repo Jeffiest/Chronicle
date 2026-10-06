@@ -150,7 +150,7 @@ static int           BgmOff;
 static int           BgmVol;
 static int           BgmNo;
 
-void OpeningInit() {
+PC_OVERRIDE void OpeningInit() {
     wait_now_loading_vsync();
     InitializeDataBuffer();
     SetDataBuffer(&VisualData, 7500);
@@ -279,7 +279,7 @@ static void LoadScene() {
     }
 }
 
-void LoadSceneBG() {
+PC_OVERRIDE void LoadSceneBG() {
     CDataAlloc2<1> *buffer;
     int             slot;
     char           *files[126][2] = {
@@ -451,7 +451,7 @@ void LoadSceneBG() {
     }
 }
 
-int OpeningLoop() {
+PC_OVERRIDE int OpeningLoop() {
     ReadBG();
     PauseProcess();
 
@@ -699,19 +699,19 @@ static void MotionProcess() {
     // PAL runs at 50 frames a second, so its fade speeds are raised by a fifth.
     switch (CScript__2.fade) {
         case TSFADE_IN_BLACK:
-            DispFade.FadeInStart(1.2f * CScript__2.fade_speed, 0);
+            DispFade.FadeInStart(CScript__2.fade_speed, 0);
             CScript__2.fade = TSFADE_NONE;
             break;
         case TSFADE_OUT_BLACK:
-            DispFade.FadeOutStart(1.2f * CScript__2.fade_speed, 0);
+            DispFade.FadeOutStart(CScript__2.fade_speed, 0);
             CScript__2.fade = TSFADE_NONE;
             break;
         case TSFADE_IN_WHITE:
-            DispFade.FadeInStart(1.2f * CScript__2.fade_speed, 1);
+            DispFade.FadeInStart(CScript__2.fade_speed, 1);
             CScript__2.fade = TSFADE_NONE;
             break;
         case TSFADE_OUT_WHITE:
-            DispFade.FadeOutStart(1.2f * CScript__2.fade_speed, 1);
+            DispFade.FadeOutStart(CScript__2.fade_speed, 1);
             CScript__2.fade = TSFADE_NONE;
             break;
     }
@@ -838,7 +838,6 @@ static void SoundProcess() {
     if (CScript__2.bgm_fade != 0) {
         switch (CScript__2.se_kind) {
             case TSSE_ALL:
-                CScript__2.bgm_fade = 1.2f * CScript__2.bgm_fade;
                 CSnd.Fade(MIDI_PORT_BGM, (float) CScript__2.bgm_fade / 2.0f, CScript__2.se_fade_time);
                 CSnd.Fade(MIDI_PORT_AMBIENT, (float) CScript__2.bgm_fade, CScript__2.se_fade_time);
                 CSnd.Fade(MIDI_PORT_UNK_2, (float) CScript__2.bgm_fade, CScript__2.se_fade_time);
@@ -1101,7 +1100,7 @@ static void DrawMess() {
     Mes1.DrawMesWin();
 }
 
-void OpBgmPlay() {
+PC_OVERRIDE void OpBgmPlay() {
     int volumes[8] = {82, 106, 64, 69, 91, 92, 95, 108};
 
     if (BgmOff == 0) {

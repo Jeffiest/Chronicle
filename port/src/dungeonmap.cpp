@@ -23,7 +23,7 @@
 
 // Retail's, with the cell picked for a character's key door addressed on the whole pointer.
 
-void CDungeonMap::BuildCharaSpecialParts() {
+PC_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
     int          list[128];
     int          roll;
     int          num;
@@ -254,7 +254,7 @@ void CDungeonMap::BuildCharaSpecialParts() {
     }
 }
 
-int CDungeonMap::SetCharaDoor(int chara_no) {
+PC_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
     int          list[128];
     int          num;
     int          pick;
@@ -337,7 +337,7 @@ int CDungeonMap::SetCharaDoor(int chara_no) {
 
 // Draw every populated dungeon cell and let each frame's bounds reject geometry outside the view.
 // A cell-origin distance or facing test can clip terrain that still reaches the camera.
-void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) {
+PC_OVERRIDE void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) {
     float           cam_pos[4];
     float           cam_ref[4];
     float           view_delta[4];
@@ -526,7 +526,7 @@ void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) {
     }
 }
 
-void CDungeonMap::DrawDummyModel(CCamera *) {
+PC_OVERRIDE void CDungeonMap::DrawDummyModel(CCamera *) {
     if (this->dummy_num == 0) {
         return;
     }
@@ -540,7 +540,7 @@ void CDungeonMap::DrawDummyModel(CCamera *) {
 }
 
 // Moon Sea places Atla across an open field, so distance from the player does not hide them.
-void CDungeonMap::DrawAtraBoll(float *pos) {
+PC_OVERRIDE void CDungeonMap::DrawAtraBoll(float *pos) {
     float draw_pos[4];
 
     if (this->atra_model == NULL) {

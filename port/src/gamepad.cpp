@@ -11,7 +11,7 @@
 
 constexpr int kDebugButtonsModifier = PAD_SELECT | PAD_L2;
 
-int pad_button_read(PAD_STATUS *status, int port, int slot) {
+PC_OVERRIDE int pad_button_read(PAD_STATUS *status, int port, int slot) {
     unsigned char data[32];
     InputLatchPad(port);
     if (!scePadRead(port, slot, data)) {
@@ -30,17 +30,17 @@ int pad_button_read(PAD_STATUS *status, int port, int slot) {
     return mode;
 }
 
-int CGamePad::GetLX() {
+PC_OVERRIDE int CGamePad::GetLX() {
     InputNoteLeftStickRead();
     return AxisCalibration(pad[0].input.status.left_x);
 }
 
-int CGamePad::GetLY() {
+PC_OVERRIDE int CGamePad::GetLY() {
     InputNoteLeftStickRead();
     return AxisCalibration(pad[0].input.status.left_y);
 }
 
-int CGamePad::On(int mask) {
+PC_OVERRIDE int CGamePad::On(int mask) {
     if (key_lock) {
         return 0;
     }
@@ -48,11 +48,11 @@ int CGamePad::On(int mask) {
     return (pad[0].input.status.button & mask) != 0;
 }
 
-int CGamePad::On2(int mask) {
+PC_OVERRIDE int CGamePad::On2(int mask) {
     return DebugMode && (pad[0].input.status.button & kDebugButtonsModifier) == kDebugButtonsModifier && On(mask);
 }
 
-int CGamePad::Down(int mask) {
+PC_OVERRIDE int CGamePad::Down(int mask) {
     if (key_lock) {
         return 0;
     }
@@ -68,7 +68,7 @@ int CGamePad::Down(int mask) {
     return (mask & (pad[0].input.status.button & ~previous_pad[0].input.status.button)) != 0;
 }
 
-int CGamePad::Down2(int mask) {
+PC_OVERRIDE int CGamePad::Down2(int mask) {
     if (key_lock || !DebugMode || (pad[0].input.status.button & kDebugButtonsModifier) != kDebugButtonsModifier) {
         return 0;
     }

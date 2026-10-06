@@ -521,7 +521,16 @@ void Draw3DDrawVisual(const Draw3DVisual &visual, const float model[4][4], const
 
         gfx::TextureBinding binding;
         if (lit && strip.texture >= 0) {
-            PortTextureRef ref = Draw3DResolveHandle(strip.texture);
+            int handle = strip.texture;
+            if (strip.texture_name[0] != 0 && std::strcmp(TexManager.GetTexture(handle)->name, strip.texture_name) != 0) {
+                char name[sizeof(strip.texture_name)];
+                std::memcpy(name, strip.texture_name, sizeof(name));
+                int moved = TexManager.GetTextureHandle(name, -1);
+                if (moved >= 0) {
+                    handle = moved;
+                }
+            }
+            PortTextureRef ref = Draw3DResolveHandle(handle);
             if (ref.valid) {
                 binding = ref.binding;
                 // SetEnv sends CLAMP_1 = 5 every frame; TEX1's MMAG picks the filter.
@@ -567,13 +576,13 @@ void Draw3DDrawVisual(const Draw3DVisual &visual, const float model[4][4], const
 
 // ---- CVisualVu1 ------------------------------------------------------------------------------
 
-int CVisualVu1::DrawVu1(sceVif1Packet *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
-                        u_long128 *draw_state, int unknown1, int unknown2) {
+PC_OVERRIDE int CVisualVu1::DrawVu1(sceVif1Packet *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
+                                    u_long128 *draw_state, int unknown1, int unknown2) {
     return CVisualVu1::DrawVu1(static_cast<u_int *>(nullptr), matrix, info, program, draw_state, unknown1, unknown2);
 }
 
-int CVisualVu1::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
-                        u_long128 *draw_state, int unknown1, int unknown2) {
+PC_OVERRIDE int CVisualVu1::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
+                                    u_long128 *draw_state, int unknown1, int unknown2) {
     if (vu_data == nullptr || vu_size == 0) {
         return 0;
     }
@@ -586,7 +595,7 @@ int CVisualVu1::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, VU1
 // Every {v, n, uv[, colour]} entry of a strip becomes one vertex; strips (GS prim 4) become lists
 // wound as their first triangle, other prims are lists already. A strip whose material is -1 keeps
 // the previous strip's material and texture, as VU1's memory did.
-int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int unknown1) {
+PC_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int unknown1) {
     vu_data = block;
     vu_size = kDraw3DBlockQuads;
     Draw3DVisual &visual = Draw3DRegisterVisual(block, false);
@@ -606,6 +615,8 @@ int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int
             MDT_MATERIAL &entry = view.materials[material];
             int           handle = TexManager.GetTextureHandle(entry.texture, -1);
             current.texture = handle;
+            std::strncpy(current.texture_name, handle >= 0 ? TexManager.GetTexture(handle)->name : "",
+                         sizeof(current.texture_name) - 1);
             current.tex0 = TexManager.GetTexture(handle)->tex0;
             current.tex1 = TexManager.GetTexture(handle)->tex1;
             TakeMaterial(current, entry);
@@ -657,7 +668,7 @@ int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int
 
 // Retail rewrites positions, colours and materials in place after skinning, morphs and material
 // animation; normals and UVs stay as built.
-int CVisualVu1::CreateVUdataFromMDTRemake(u_int *block, u_int *data, int unknown0) {
+PC_OVERRIDE int CVisualVu1::CreateVUdataFromMDTRemake(u_int *block, u_int *data, int unknown0) {
     vu_data = block;
     vu_size = kDraw3DBlockQuads;
     Draw3DVisual *visual = Draw3DFindVisual(block);
@@ -704,21 +715,21 @@ int CVisualVu1::CreateVUdataFromMDTRemake(u_int *block, u_int *data, int unknown
 
 // copy_on_draw kept a private copy of the block for each draw because the DMA read it at the end
 // of the frame; the renderer orders a remake after a draw of the same frame by itself.
-int CVisualMDTVu1::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
-                           u_long128 *draw_state, int unknown1, int unknown2) {
+PC_OVERRIDE int CVisualMDTVu1::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
+                                       u_long128 *draw_state, int unknown1, int unknown2) {
     vu_data = vu_data_buffer[DBuffID];
     int result = CVisualVu1::DrawVu1(packet, matrix, info, program, draw_state, unknown1, unknown2);
     vu_data = vu_data_buffer[DBuffID];
     return result;
 }
 
-int CVisualMDTVu1::DrawVu1(sceVif1Packet *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
-                           u_long128 *draw_state, int unknown1, int unknown2) {
+PC_OVERRIDE int CVisualMDTVu1::DrawVu1(sceVif1Packet *packet, float (*matrix)[4], RenderInfo *info, VU1_PROGRAM program,
+                                       u_long128 *draw_state, int unknown1, int unknown2) {
     vu_data = vu_data_buffer[DBuffID];
     return CVisualVu1::DrawVu1(static_cast<u_int *>(nullptr), matrix, info, program, draw_state, unknown1, unknown2);
 }
 
-int CVisualMDTVu1::RemakeData(u_int *block) {
+PC_OVERRIDE int CVisualMDTVu1::RemakeData(u_int *block) {
     if (data == nullptr) {
         return 0;
     }

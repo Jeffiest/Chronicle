@@ -153,7 +153,7 @@ static OBJ_ANIME_SEQ Fuusya[2];
 static CWind         Wind;
 static CFrame       *TaimatsuFrame[12];
 static OBJ_ANIME_SEQ Taimatsu[12];
-CWater               Water;
+PC_OVERRIDE CWater   Water;
 static CMapObject    OP_NornMapObj3[4];
 static CBombEffect   CBomb[3];
 static CFrameVu1    *DoransFuusya[2];
@@ -177,7 +177,7 @@ static int   SndCnt;
    for. The cache is flushed on both sides of the two transfers because the plate is a texture the
    previous tick drew from and the next one will. */
 // op_c's FaceChange, under the name op_b's scene calls it by (FaceChange__Fi__2 in the PS2 build).
-void FaceChangeC(int actor_no) {
+PC_OVERRIDE void FaceChangeC(int actor_no) {
     static FACE_INFO face[21] = {
         {0,        0,            42, 40, 87, 35, 0, 0, 256, 2, 0},
         {0,        0,            42, 40, 87, 35, 0, 0, 320, 2, 0},
@@ -234,7 +234,7 @@ void FaceChangeC(int actor_no) {
         CScript__2.obj[actor_no].mouth_time -= CScript__2.motion_step;
 
         if (CScript__2.obj[actor_no].talk) {
-            if (rand() % 5 == 0) {
+            if ((int) (100.0f * CScript__2.obj[actor_no].mouth_time) % 6 == 0) {
                 CScript__2.obj[actor_no].mouth = rand() % 4;
             }
         }
@@ -248,7 +248,6 @@ void FaceChangeC(int actor_no) {
     CRect<int> mouth(128, face[actor_no].strip_bottom - face[actor_no].mouth_height * (face[actor_no].mouth + 1), 128, face[actor_no].mouth_height);
 
     MoveImageTest(Vif1Packet, sbp, sbw, SCE_GS_PSMT8, mouth, dbp, dbw, SCE_GS_PSMT8, 0, 128 - face[actor_no].mouth_height - face[actor_no].mouth_bottom, 0);
-
 }
 
 /* The background loads are one wrapper per file because the script names them by index: each waits
@@ -259,7 +258,7 @@ void FaceChangeC(int actor_no) {
    from a configuration file rather than a table of this file's own, and its images filled into a
    manifest whose first six rows are the registry's fixed surfaces. The second manifest is the same
    array written over again, because the second pack is read only once the first block is entered. */
-void OpC_InitProcess() {
+PC_OVERRIDE void OpC_InitProcess() {
     while (ReadBGSync())
         ;
 
@@ -548,7 +547,7 @@ void OpC_InitProcess() {
 /* The dancers, which is a texture load rather than a scene: the shadow model all sixteen actors
    share, then the five villagers who join the dance, each loaded straight after the block its
    images went into. */
-void OpC_InitProcess2() {
+PC_OVERRIDE void OpC_InitProcess2() {
     while (ReadBGSync())
         ;
 
@@ -681,7 +680,7 @@ void OpC_InitProcess2() {
 /* The demon's arrival: the two halves of it the scene animates, the beam it fires, and the four
    pieces of sky and moonlight the rest of the scene is drawn against. The sky is given an attribute
    mask of its own because it is drawn behind everything rather than lit with it. */
-void OpC_InitProcess3() {
+PC_OVERRIDE void OpC_InitProcess3() {
     while (ReadBGSync())
         ;
 
@@ -821,7 +820,7 @@ void OpC_InitProcess3() {
 
 /* The burning village: the ruined map, the smoke pool the fires feed, and the five actors who walk
    through it. The cloth Toan carries is driven by this file's own wind rather than the scene's. */
-void OpC_InitProcess5() {
+PC_OVERRIDE void OpC_InitProcess5() {
     while (ReadBGSync())
         ;
 
@@ -1527,7 +1526,7 @@ static void MapLoad2() {
    The last camera of the scene is the one the fire and the windmill are timed against: while it
    runs, the motion step drops to a twentieth and the camera shakes by a random amount whose spread
    narrows as the shot goes on. */
-void OpC_MotionProcess() {
+PC_OVERRIDE void OpC_MotionProcess() {
     for (int i = 0; i < 23; i++) {
         if (CScript__2.obj[i].disp) {
             if (CScript__2.obj[i].motion_end != -1) {
@@ -1650,18 +1649,18 @@ void OpC_MotionProcess() {
 
     switch (CScript__2.camera_start) {
         case 96:
-            Fuusya[1].step[2] = -0.12f * 1.2f;
+            Fuusya[1].step[2] = -0.12f;
             break;
 
         case 97:
             d = 2.0f;
-            Fuusya[1].step[2] = -0.04f * 1.2f;
+            Fuusya[1].step[2] = -0.04f;
             break;
 
         case 100:
             if (Cam__2[SceneNp__2].motion_type.state.time < 258.0f) {
-                step = 0.025f * 1.2f;
-                Fuusya[1].step[2] = -0.0048f * 1.2f;
+                step = 0.025f;
+                Fuusya[1].step[2] = -0.0048f;
 
                 if (FireStep >= 1.0f) {
                     FireStep = 0.0f;
@@ -1682,8 +1681,8 @@ void OpC_MotionProcess() {
                     OP_MainCamera.SetRef(ref);
                 }
 
-                step = 0.5f * 1.2f;
-                Fuusya[1].step[2] = -10.0f * 1.2f;
+                step = 0.5f;
+                Fuusya[1].step[2] = -10.0f;
                 FireStep = 1.0f;
             }
 
@@ -1741,7 +1740,7 @@ static void LoadCharaMajin() {
    with a wait behind them, so a motion that stalls inside a window plays the step once. Which of
    the two footfall samples the first actor takes is decided by which camera is running and how far
    its motion has gone, because the ground under him changes part way through the scene. */
-void OpC_SoundProcess() {
+PC_OVERRIDE void OpC_SoundProcess() {
     [[maybe_unused]] static float vol = 40.0f;
     static int   cnt = 0;
 
@@ -1752,7 +1751,7 @@ void OpC_SoundProcess() {
             DanceBgmCnt = DanceBgmCnt + 1;
         }
 
-        if (DanceBgmCnt == 53) {
+        if (DanceBgmCnt == 63) {
             OpBgmSqPort = 0;
             OpBgmPlay();
         }
@@ -1842,8 +1841,7 @@ void OpC_SoundProcess() {
     }
 
     for (int i = 0; i < 43; i++) {
-        // The table counts 60 Hz ticks; the 50 Hz count reaches the same moment at five sixths.
-        if (SndCnt == SndInfo[i].count * 5 / 6) {
+        if (SndCnt == SndInfo[i].count) {
             OpPlayVolSE(SndInfo[i].group, SndInfo[i].no, SndInfo[i].voice, 1.0f);
         }
     }
@@ -1871,7 +1869,7 @@ void OpC_SoundProcess() {
         motion_frame = (int) Chara__3[11].motion_type.state.time;
 
         if (wait == 0) {
-            if (motion_frame > 73.0f && motion_frame < 76.0f) {
+            if (motion_frame > 73.0f && motion_frame < 75.0f) {
                 if (footstep_ground == 40) {
                     OpPlayVolPanSE(position, 10.0f, 400.0f, MIDI_PORT_SE_DEFAULT, 21, 20);
                 } else {
@@ -1879,7 +1877,7 @@ void OpC_SoundProcess() {
                 }
 
                 wait = 4;
-            } else if (motion_frame > 83.0f && motion_frame < 86.0f) {
+            } else if (motion_frame > 83.0f && motion_frame < 85.0f) {
                 if (footstep_ground == 40) {
                     OpPlayVolPanSE(position, 10.0f, 400.0f, MIDI_PORT_SE_DEFAULT, 21, 21);
                 } else {
@@ -1902,10 +1900,10 @@ void OpC_SoundProcess() {
         motion_frame = (int) Chara__3[11].motion_type.state.time;
 
         if (wait == 0) {
-            if (motion_frame > 258.0f && motion_frame < 261) {
+            if (motion_frame > 258.0f && motion_frame < 260.0f) {
                 OpPlayVolPanSE(position, 10.0f, 400.0f, MIDI_PORT_SE_DEFAULT, 21, 20);
                 wait = 4;
-            } else if (motion_frame > 268.0f && motion_frame < 271) {
+            } else if (motion_frame > 268.0f && motion_frame < 270.0f) {
                 OpPlayVolPanSE(position, 10.0f, 400.0f, MIDI_PORT_SE_DEFAULT, 21, 21);
                 wait = 4;
             }
@@ -1923,10 +1921,10 @@ void OpC_SoundProcess() {
         motion_frame = (int) Chara__3[13].motion_type.state.time;
 
         if (wait == 0) {
-            if (motion_frame > 123.0f && motion_frame < 126.0f) {
+            if (motion_frame > 123.0f && motion_frame < 125.0f) {
                 OpPlayVolPanSE(position, 10.0f, (float) (wait - wait + 300), MIDI_PORT_SE_DEFAULT, 21, 20);
                 wait = 4;
-            } else if (motion_frame > 133.0f && motion_frame < 136.0f) {
+            } else if (motion_frame > 133.0f && motion_frame < 135.0f) {
                 OpPlayVolPanSE(position, 10.0f, (float) (wait - wait + 300), MIDI_PORT_SE_DEFAULT, 21, 21);
                 wait = 4;
             }
@@ -1944,10 +1942,10 @@ void OpC_SoundProcess() {
         motion_frame = (int) Chara__3[12].motion_type.state.time;
 
         if (wait == 0) {
-            if (motion_frame > 33.0f && motion_frame < 36.0f) {
+            if (motion_frame > 33.0f && motion_frame < 35.0f) {
                 OpPlayVolPanSE(position, 10.0f, (float) (wait - wait + 300), MIDI_PORT_SE_DEFAULT, 21, 20);
                 wait = 4;
-            } else if (motion_frame > 43.0f && motion_frame < 46.0f) {
+            } else if (motion_frame > 43.0f && motion_frame < 45.0f) {
                 OpPlayVolPanSE(position, 10.0f, 300.0f, MIDI_PORT_SE_DEFAULT, 21, 21);
                 wait = 4;
             }
@@ -1963,7 +1961,7 @@ void OpC_SoundProcess() {
    the fires, the beam and the explosions. The light and the ambient colour are saved on the way in
    and put back on the way out, because every object in the scene is lit from its own position by
    LightSet rather than from one light for the whole frame. */
-void OpC_DrawProcess() {
+PC_OVERRIDE void OpC_DrawProcess() {
     sceVu0FMATRIX light_save;
     sceVu0FVECTOR ambient_save;
     float         far_fog;
@@ -2712,9 +2710,9 @@ static void MajinBeemProcess() {
         float speed;
 
         if (CScript__2.scene == OP_SCENE_MAJIN) {
-            speed = 5.4f;
+            speed = 4.5f;
         } else {
-            speed = 9.6f;
+            speed = 8.0f;
         }
 
         int beam = CScript__2.beem_no;

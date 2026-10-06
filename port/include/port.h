@@ -19,6 +19,10 @@
 
 #define PS2_UNIMPLEMENTED() Ps2Unimplemented(__func__, __FILE__, __LINE__)
 
+// Marks a definition in port/src that replaces the one ps2/src gives the same name. The port
+// compiles ps2/src without that one (scripts/port/pc_override.py, docs/PC.md).
+#define PC_OVERRIDE
+
 /**
  * The Metrowerks runtime's assertion failure.
  */
@@ -42,7 +46,15 @@ template <class T> T &Ps2Lvalue(T &&value) {
 #pragma clang diagnostic ignored "-Wmacro-redefined"
 #pragma push_macro("NULL")
 #define size_t ps2_size_t
+#ifdef _WIN32
+// Windows uses LLP64; the GS register bitfields require the PS2's 64-bit u_long.
+#define u_long ps2_native_u_long
+#endif
 #include "types.h"
+#ifdef _WIN32
+#undef u_long
+#define u_long u64
+#endif
 #undef size_t
 #pragma pop_macro("NULL")
 #pragma clang diagnostic pop

@@ -32,7 +32,7 @@ std::string_view StripDevice(std::string_view path) {
     std::fprintf(stderr,
                  "no game data: %s %s; extract the disc with `dcdata extract <disc image> %s` "
                  "or pass --data <dir>\n",
-                 root.c_str(), why, root.c_str());
+                 PathsDisplay(root).c_str(), why, PathsDisplay(root).c_str());
     std::abort();
 }
 
@@ -50,10 +50,10 @@ void CheckAgainstIndex(const fs::path &root) {
             std::fprintf(stderr,
                          "%s: %zu of the %zu files data.hd2 lists are missing or the wrong size; "
                          "run dcdata extract again\n",
-                         root.c_str(), bad, records.size());
+                         PathsDisplay(root).c_str(), bad, records.size());
         }
     } catch (const std::exception &error) {
-        std::fprintf(stderr, "%s: %s\n", root.c_str(), error.what());
+        std::fprintf(stderr, "%s: %s\n", PathsDisplay(root).c_str(), error.what());
     }
 }
 
@@ -72,12 +72,12 @@ int ReadWhole(const fs::path &file, void *buffer) {
     std::uintmax_t  size = fs::file_size(file, error);
     std::ifstream   stream(file, std::ios::binary);
     if (error || !stream || size > INT32_MAX) {
-        std::fprintf(stderr, "cannot read %s\n", file.c_str());
+        std::fprintf(stderr, "cannot read %s\n", PathsDisplay(file).c_str());
         std::abort();
     }
     stream.read(static_cast<char *>(buffer), static_cast<std::streamsize>(size));
     if (static_cast<std::uintmax_t>(stream.gcount()) != size) {
-        std::fprintf(stderr, "short read on %s\n", file.c_str());
+        std::fprintf(stderr, "short read on %s\n", PathsDisplay(file).c_str());
         std::abort();
     }
     std::size_t padded = dcdata::SectorsFor(size) * dcdata::kSector;
@@ -87,7 +87,7 @@ int ReadWhole(const fs::path &file, void *buffer) {
 
 } // namespace
 
-void InitCDFile() {
+PC_OVERRIDE void InitCDFile() {
     const fs::path &root = PathsDataRoot();
     std::error_code error;
     data_index.clear();
@@ -106,7 +106,7 @@ void InitCDFile() {
         }
     }
     if (error) {
-        std::fprintf(stderr, "%s: %s\n", root.c_str(), error.message().c_str());
+        std::fprintf(stderr, "%s: %s\n", PathsDisplay(root).c_str(), error.message().c_str());
     }
     if (data_index.empty()) {
         NoData(root, "is empty");
@@ -115,7 +115,7 @@ void InitCDFile() {
     CheckAgainstIndex(root);
 }
 
-int LoadFile(char *path, void *buffer, int *out_size) {
+PC_OVERRIDE int LoadFile(char *path, void *buffer, int *out_size) {
     if (!LoadFile2(path, buffer, out_size, 0)) {
         printf("File open error \"%s\"\n \n \n", path);
         __assert("etc.cpp", 753, "FALSE");
@@ -124,7 +124,7 @@ int LoadFile(char *path, void *buffer, int *out_size) {
     return 1;
 }
 
-int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
+PC_OVERRIDE int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
     if (out_size) {
         *out_size = 0;
     }
@@ -139,23 +139,23 @@ int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
     return 1;
 }
 
-void InitReadBG() {
+PC_OVERRIDE void InitReadBG() {
     for (BG_READ_INFO &info : bg_read_info) {
         info.busy = false;
     }
 }
 
-void StartReadBG() {
+PC_OVERRIDE void StartReadBG() {
     InitReadBG();
 }
 
-void BreakReadBG() {
+PC_OVERRIDE void BreakReadBG() {
     InitReadBG();
 }
 
 // The read happens here rather than a vertical sync later, so the slot is handed out already
 // complete: issued (id) and done, as retail's ReadBG leaves it.
-int LoadFileBG(char *name, u_long128 *buffer, int *out_size) {
+PC_OVERRIDE int LoadFileBG(char *name, u_long128 *buffer, int *out_size) {
     if (out_size) {
         *out_size = 0;
     }
@@ -194,17 +194,17 @@ int LoadFileBG(char *name, u_long128 *buffer, int *out_size) {
     return 1;
 }
 
-BG_READ_INFO *GetReadBGFile(int index) {
+PC_OVERRIDE BG_READ_INFO *GetReadBGFile(int index) {
     if (index < 0 || index >= 32) {
         return 0;
     }
     return bg_read_info[index].busy ? &bg_read_info[index] : 0;
 }
 
-void ReadBG() {
+PC_OVERRIDE void ReadBG() {
 }
 
-int ReadBGSync() {
+PC_OVERRIDE int ReadBGSync() {
     for (const BG_READ_INFO &info : bg_read_info) {
         if (info.busy && (info.id == 0 || info.done == 0)) {
             return 1;
@@ -215,7 +215,7 @@ int ReadBGSync() {
 
 // Only development builds wrote files, to the host PC's drive; the device and any drive letter
 // after it are dropped so the path lands under save/host0/.
-int WriteFile(char *path, void *buffer, int size) {
+PC_OVERRIDE int WriteFile(char *path, void *buffer, int size) {
     std::string_view name = path;
     if (std::size_t colon = name.rfind(':'); colon != std::string_view::npos) {
         name = name.substr(colon + 1);

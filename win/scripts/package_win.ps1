@@ -34,7 +34,7 @@ Later
 Mods (Lua scripts, PNG textures, 3D models): see win/docs/SCRIPTING.md, MODELS.md and TEXTURE_MODS.txt in the source repository below.
 
 This is a native Windows build of the open-source Chronicle port.  Source and build instructions:
-https://github.com/Jeffie-Rose/Chronicle-Windows   (branch: windows)
+https://github.com/jeffiest/Chronicle-Windows   (branch: windows)
 "@ | Set-Content "$dist\README.txt" -Encoding UTF8
 $zip = "$root\dist\DarkCloud-Windows.zip"
 Remove-Item $zip -Force -ErrorAction SilentlyContinue

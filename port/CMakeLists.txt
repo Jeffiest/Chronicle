@@ -168,6 +168,14 @@ foreach(shader IN LISTS SHADER_SOURCES)
     list(APPEND SHADER_HEADERS ${header})
 endforeach()
 
+# port/icon/chronicle-128.rgba, the window icon's raw 128x128 RGBA pixels, as a byte array.
+set(ICON_RGBA ${CMAKE_SOURCE_DIR}/port/icon/chronicle-128.rgba)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ICON_RGBA})
+file(READ ${ICON_RGBA} icon_hex HEX)
+string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_hex}")
+file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/icon/chronicle.hpp
+    CONTENT "#pragma once\n#include <cstdint>\ninline constexpr int kIconSize = 128;\ninline constexpr std::uint8_t kIconRgba[] = {${icon_bytes}};\n")
+
 add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
 target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
 target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
@@ -218,6 +226,8 @@ set_target_properties(darkcloud PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINA
 dc_link_game(darkcloud)
 if(WIN32)
     target_link_options(darkcloud PRIVATE -municode)
+    enable_language(RC)
+    target_sources(darkcloud PRIVATE ${CMAKE_SOURCE_DIR}/port/icon/chronicle.rc)
 endif()
 
 include(GNUInstallDirs)

@@ -2,12 +2,14 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <utility>
 #include <vector>
 
 #include "gfx/gfx.hpp"
+#include "icon/chronicle.hpp"
 
 namespace {
 
@@ -92,6 +94,12 @@ void WindowInit(const WindowConfig &config) {
     SDL_DestroyProperties(props);
     if (g_window == nullptr) {
         Fatal("SDL_CreateWindow");
+    }
+    SDL_Surface *icon = SDL_CreateSurfaceFrom(kIconSize, kIconSize, SDL_PIXELFORMAT_RGBA32,
+                                              const_cast<std::uint8_t *>(kIconRgba), kIconSize * 4);
+    if (icon != nullptr) {
+        SDL_SetWindowIcon(g_window, icon);
+        SDL_DestroySurface(icon);
     }
 }
 

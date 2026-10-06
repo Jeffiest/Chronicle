@@ -1,5 +1,5 @@
 -- Expanded Town: a bird's-eye camera in towns, after DarkCloud-Expanded's town overhead camera (BSD-2-Clause).
--- Press L1+Select (or the O key) in a town to look straight down at the player; press it again to go back.
+-- Press L1+L3 (or the O key) in a town to look straight down at the player; press it again to go back.
 local HEIGHT, BACK = 90, 22 -- how high above the player and how far behind (a little tilt so the view has an up direction)
 local active = false
 
@@ -13,7 +13,7 @@ dc.on("tick", function(t)
     if active then dc.camera(); active = false end
     return
   end
-  if (dc.key_pressed("l1+select") and not dc.key_down("r1")) or dc.key_pressed("o") then
+  if (dc.key_pressed("l1+l3") and not dc.key_down("r1")) or dc.key_pressed("o") then
     active = not active
     if not active then dc.camera() end
   end
@@ -23,4 +23,4 @@ dc.on("tick", function(t)
   end
 end)
 
-dc.log("Expanded Town loaded: L1+Select toggles the overhead camera")
+dc.log("Expanded Town loaded: L1+L3 toggles the overhead camera")

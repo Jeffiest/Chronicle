@@ -1,6 +1,6 @@
 {
   "name": "Hub",
   "version": "0.1",
-  "description": "One menu (L1+R1+Select or K) for everything the mods add: skill tree, bestiary, trophies, weapon mastery, co-op.",
+  "description": "One menu (L1+R1+R3 or K) for everything the mods add: skill tree, bestiary, trophies, weapon mastery, co-op.",
   "enabled": true
 }

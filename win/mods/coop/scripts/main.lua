@@ -111,13 +111,13 @@ local function handle(kind, peer, data)
         log("custom tunic pictures from", peer, fl, bl)
       end
     elseif tag == "V" and peer == 0 then
-      local sc, rest = data:match("^V (%S+) (.*)$")
+      local sc, clk, rest = data:match("^V (%S+) (%S+) (.*)$")
       if sc then
         local list = {}
         for id, x, y, z, ry, m, fl, sp in rest:gmatch("(%-?%d+),(%S-),(%S-),(%S-),(%S-),(%-?%d+),(%-?%d+),(%S-);") do
           list[#list + 1] = { id = tonumber(id), x = tonumber(x), y = tonumber(y), z = tonumber(z), ry = tonumber(ry), m = tonumber(m), fl = tonumber(fl), sp = tonumber(sp) }
         end
-        host_npcs = { scene = sc, list = list, at = ticks }
+        host_npcs = { scene = sc, list = list, at = ticks, clock = tonumber(clk) }
       end
     elseif tag == "W" and peer == 0 and dc.world_join then
       if not dc.world_active() then dc.toast("ENTERING THE HOST'S WORLD", 4) end
@@ -389,9 +389,11 @@ dc.on("tick", function()
         for _, v in ipairs(dc.npc_list()) do
           parts[#parts + 1] = string.format("%d,%.2f,%.2f,%.2f,%.3f,%d,%d,%.3f;", v.id, v.x, v.y, v.z, v.ry, v.m, v.fl, v.sp)
         end
-        net.send(-1, "V " .. scene .. " " .. table.concat(parts))
+        net.send(-1, string.format("V %s %.4f ", scene, dc.town_clock()) .. table.concat(parts))
       elseif status == "connected" then
         if host_npcs and host_npcs.scene == scene and ticks - host_npcs.at < 120 then
+          local mine = dc.town_clock()
+          if host_npcs.clock and math.abs(host_npcs.clock - mine) > 0.02 and math.abs(host_npcs.clock - mine) < 6 then dc.town_clock(host_npcs.clock) end -- same time of day as the host
           for _, v in ipairs(host_npcs.list) do dc.npc_puppet(v.id, v.x, v.y, v.z, v.ry, v.m, v.fl, v.sp) end
           if ticks % 300 == 0 then
             local mine, off = dc.npc_list(), {}
@@ -400,7 +402,7 @@ dc.on("tick", function()
                 if m.id == v.id then off[#off + 1] = string.format("%d:%.0f", v.id, math.sqrt((m.x - v.x) ^ 2 + (m.z - v.z) ^ 2)) end
               end
             end
-            log("villagers following the host:", #host_npcs.list, "distance from host copy:", table.concat(off, " "))
+            log("villagers following the host:", #host_npcs.list, "mode", dc.edit_mode and dc.edit_mode() or "?", "distance from host copy:", table.concat(off, " "))
           end
         else
           dc.npc_puppet_clear()

@@ -1,7 +1,7 @@
 # Chronicle mod guide
 
 What is installed, what each mod does, and every control. Everything lives in `win-save\mods\<mod>\`. Turn mods on and off and set the
-load order with `python mod_manager.py`; restart the game after saving. Open the in-game settings screen with **F1** or **L2+R2+Select**.
+load order with `python mod_manager.py`; restart the game after saving. Open the in-game settings screen with **F1** or **L2+R2+R3**.
 
 ## Launcher
 `ChronicleLauncher.exe` (build it with `build_launcher.ps1`; keep it beside `win-save` and `Chronicle-win-build`) is the one place to start the game:
@@ -24,15 +24,27 @@ world comes back and they are sent to the place their own save resumes on. Anyth
 world with the items and gilda they have now, so the visit never overwrites their story progress. The guest does not advance their own story while
 visiting, and the host's world is refreshed every few seconds.
 
+## Native Menu and Controls (Modernization Core)
+The game's own main menu has a **MODS** entry in the slot the Manuals used to have (same art style, redrawn from the game's menu sheet). It opens one page
+listing everything the mods add; the last row, **Manuals (how to play)**, opens the original manuals. The **Controls** mod adds 1-3 quick items,
+4-9 party members, the mouse wheel, and **Hub or MODS > Controls** to remap every key in the game (Cross replaces, Square adds a second key).
+Default layout: WASD move, mouse look, left click or F attack/talk/open/confirm, E or Space or Ctrl lock on (and Back), right click guard, G use item,
+Tab menu, Esc or Enter pause, Q camera behind, R first-person look, Z next target, 1-3 quick items, 4-9 party, wheel = choose item / move in menus.
+
+## The mouse
+In every menu the game's pointing hand is the mouse: it follows the pointer anywhere on screen, the item under it becomes the selected one, a left click confirms and a
+right click goes back. In play the mouse turns the camera directly (Settings > controls.mouse_look scales it). On the title screen any key or click starts. Button
+prompts in the game's messages show your keys (a key cap for F, Tab, G ..., a mouse for a click); set DC_PAD_PROMPTS=1 to see the pad glyphs again.
+
 ## Controls at a glance
 
 | Where | Input | Does |
 |---|---|---|
-| Dungeon | **K** or **L1+R1+Select** | Open the skill tree (Ascension). The world freezes. |
+| Anywhere | **K** or **L1+R1+R3** (click the right stick) | Open the Hub menu: skill tree, bestiary, trophies, mastery, co-op. Select is not used because the game uses it to switch characters. |
 | Dungeon | hold **L2** + **Square / Triangle / Circle** | Cast Shockwave / Second Wind / Berserk. A panel lists them while L2 is held. |
 | Floor-select list | **Square** / **Triangle** | Raise / lower the Dungeon+ tier of the floor under the cursor (`]` and `[` on a keyboard). |
-| Town | **L1+Select** or **O** | Bird's-eye camera on and off (Expanded Town). |
-| Anywhere | **F1** or **L2+R2+Select** | Mod Settings screen. |
+| Town | **L1+L3** or **O** | Bird's-eye camera on and off (Expanded Town). |
+| Anywhere | **F1** or **L2+R2+R3** | Mod Settings screen. |
 | Anywhere | **F3** | FPS counter (the game's own). |
 
 Inside the skill tree: d-pad moves, **Cross** buys a rank, **Square** respecs (costs gilda), **Circle** closes.

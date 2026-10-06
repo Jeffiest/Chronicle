@@ -20,6 +20,8 @@
   "mymod",
   "mymodels",
   "regen_example",
+  "native_menu",
+  "controls",
   "mod_settings"
  ]
 }

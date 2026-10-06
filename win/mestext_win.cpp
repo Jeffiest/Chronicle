@@ -37,6 +37,7 @@ constexpr int kNewline = -0x100;
 constexpr int kSpace = -0xFE;
 constexpr int kPage = -0xFD;
 constexpr int kMaxAppend = 12000; // words added to one file, at most
+bool          g_no_grow = false; // the file sits inside a pack: its messages may be rewritten in place but never lengthened
 
 // Known glyphs. Anything else is written/read as {code}.
 //   A-Z -735..-710, a-z -709..-684, 0-9 -657..-648
@@ -427,7 +428,7 @@ int ModTextPatch(const char *path, void *buffer, int size) {
             continue;
         }
         size_t start = words + add.size() - table.base;
-        if (start > 32000 || add.size() + codes.size() > static_cast<size_t>(kMaxAppend)) {
+        if (g_no_grow || start > 32000 || add.size() + codes.size() > static_cast<size_t>(kMaxAppend)) {
             Warn(chosen[id]->mod, "'" + folded + "': message " + std::to_string(id) + " is longer than the original and this file has no room to grow it; skipped (shorten it)");
             continue;
         }
@@ -448,4 +449,26 @@ int ModTextPatch(const char *path, void *buffer, int size) {
         }
     }
     return new_size;
+}
+
+// The menu message set (a message file cut out of a menu pack by the game): replace texts in place only, the file cannot grow here.
+void ModTextPatchMenu(void *buffer) {
+    auto *w = static_cast<int16_t *>(buffer);
+    if (w == nullptr || w[0] < 4 || w[0] > 4000) {
+        return;
+    }
+    size_t count = static_cast<size_t>(w[0]), base = 1 + count, end = base;
+    for (size_t i = 2; i + 1 <= count + 1; i += 2) {
+        if (w[i + 1] < 0) {
+            return;
+        }
+        size_t at = base + static_cast<size_t>(w[i + 1]), len = 0;
+        while (len < 4000 && w[at + len] != kEnd) {
+            len++;
+        }
+        end = std::max(end, at + len + 1);
+    }
+    g_no_grow = true;
+    ModTextPatch("commenu/allmenu.mes", buffer, static_cast<int>(end * 2));
+    g_no_grow = false;
 }

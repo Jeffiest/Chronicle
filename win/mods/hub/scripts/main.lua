@@ -1,4 +1,4 @@
--- Hub: one menu for everything the mods add. Open it with L1+R1+Select (or K on the keyboard). Other mods put themselves on it:
+-- Hub: one menu for everything the mods add. Open it with L1+R1+R3 (or K on the keyboard). Other mods put themselves on it:
 --   dc.msg_on("hub_collect", function() dc.msg("hub_entry", "Title shown", "my.id") end)
 --   dc.msg_on("hub_open", function(id) if id == "my.id" then ... open the screen ... end end)
 -- The hub asks everyone ("hub_collect"), lists the answers, and tells the chosen owner ("hub_open").
@@ -25,7 +25,7 @@ end
 
 dc.on("tick", function()
   if UI.tick() then return end
-  if dc.key_pressed("l1+r1+select") or dc.key_pressed("k") then open_hub() end
+  if dc.key_pressed("l1+r1+r3") or dc.key_pressed("k") then open_hub() end
 end)
 
-dc.log("Hub loaded: L1+R1+Select or K")
+dc.log("Hub loaded: L1+R1+R3 or K")

@@ -1,0 +1,6 @@
+{
+ "name": "Autosave",
+ "version": "1.0",
+ "description": "Saves automatically into the top slot of the Save/Load list (AUTOSAVE) a few seconds after you arrive in a town and every few minutes while you are in the open town. No memory card needed.",
+ "enabled": true
+}

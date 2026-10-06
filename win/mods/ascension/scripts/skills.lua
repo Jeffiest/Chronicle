@@ -1,5 +1,5 @@
 -- Ascension skill tree: passives, three active skills, the Focus resource and the tree screen. main.lua wires it into combat.
--- Open the tree with  L1+R1+Select  (controller) or  K  (keyboard). Move with the d-pad/arrows, Cross buys a rank,
+-- Open the tree with  L1+R1+R3  (controller; via the Hub menu) or  K  (keyboard). Move with the d-pad/arrows, Cross buys a rank,
 -- Square respecs (costs gilda), Circle closes. Active skills: hold L2 and press Square / Triangle / Circle.
 local cfg = require("config")
 local S = {}
@@ -231,9 +231,10 @@ function S.tick(now, c, level, a, dmg_mult)
         message, message_until = "Respec costs " .. cost .. " gilda", now + 120
       end
     end
-    if dc.key_pressed("circle") or not in_dungeon then
+    if dc.key_pressed("circle") then
       open = false
       dc.freeze(false)
+      dc.block_input(false)
       clear_ui()
     else
       draw_tree(c, level, now)
@@ -241,13 +242,10 @@ function S.tick(now, c, level, a, dmg_mult)
     end
   elseif want_open then
     want_open = false
-    if not in_dungeon then
-      dc.toast("The skill tree opens inside a dungeon", 2)
-    elseif dc.freeze(true) then
-      open = true
-      cur_b, cur_i = 1, 1
-      return true
-    end
+    if not dc.freeze(true) then dc.block_input(true) end -- a town or a menu the world cannot be frozen in: at least the pad goes to the tree
+    open = true
+    cur_b, cur_i = 1, 1
+    return true
   end
 
   -- active skills: hold L2, press a face button. While L2 is held the game does not see the face buttons.

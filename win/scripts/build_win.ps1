@@ -15,3 +15,7 @@ cmake --build $bld -- -k 0 2>&1 | Tee-Object "$root\win-build.log" | Select-Obje
 Select-String -Path "$root\win-build.log" -Pattern 'error:|undefined symbol|duplicate symbol|FAILED:' | Select-Object -First 40 | ForEach-Object { $_.Line }
 python "$root\Chronicle-src\win\link_report.py" "$root\win-build.log"
 "error count: " + (Select-String -Path "$root\win-build.log" -Pattern 'error:' | Measure-Object).Count
+# A call to an unresolved weak symbol links silently and crashes at run time (a patch's helper hidden in an anonymous namespace did this once):
+# every call that lands on address 0x100000000 is such a call, and the pass line is 0.
+$nulls = (& "$mingw\llvm-objdump.exe" -d --no-show-raw-insn "$bld\darkcloud.exe" 2>$null | Select-String 'callq.*0x100000000' | Measure-Object).Count
+"unresolved weak calls: $nulls"

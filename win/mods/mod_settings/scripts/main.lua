@@ -1,4 +1,4 @@
--- Mod Settings: an in-game screen for the tunables of the other mods. Open it with F1 or L2+R2+Select. Up/Down choose a row, Left/Right change
+-- Mod Settings: an in-game screen for the tunables of the other mods. Open it with F1 or L2+R2+R3. Up/Down choose a row, Left/Right change
 -- the value, Cross applies the highlighted preset, Circle (or the open key again) closes it. Changes take effect at once and are kept in
 -- mods/_shared.json, not per save slot. A mod that has no value set here uses its own default.
 if not (dc.shared_get and dc.shared_set and dc.block_input) then
@@ -126,8 +126,69 @@ local function draw()
   dc.text("ms" .. (3 + VISIBLE * 2), dc.ticks() < message_until and message or "", 84, 428, 1.5, 0xFFB040FF, false)
 end
 
+
+-- The same settings in the game's own manual screen (the MODS entry of the main menu): Left/Right change the highlighted value or preset, Cross applies
+-- a preset, Circle goes back to the MODS list.
+local NS = { on = false, cur = 1, top = 1, last = nil, since = 0 }
+local NVIS = 5
+
+local function native_rows()
+  local rows = { { text = "Preset:  < " .. PRESETS[preset_i].name .. " >", help = "Left/Right choose, Cross applies.", kind = "preset" } }
+  for _, row in ipairs(S) do rows[#rows + 1] = { text = row[3] .. ":  " .. fmt(row, current(row)), help = row[9], row = row } end
+  rows[#rows + 1] = { text = "Back", help = "Return to the MODS list.", kind = "back" }
+  return rows
+end
+
+local function native_tick()
+  if not NS.on then return false end
+  if not dc.nui_ready() then NS.on = false; return false end
+  local rows = native_rows()
+  local n = #rows
+  local settled = dc.ticks() - NS.since > 20
+  if settled and dc.key_pressed("down") then NS.cur = NS.cur % n + 1 end
+  if settled and dc.key_pressed("up") then NS.cur = (NS.cur - 2) % n + 1 end
+  if NS.cur < NS.top then NS.top = NS.cur end
+  if NS.cur > NS.top + NVIS - 1 then NS.top = NS.cur - NVIS + 1 end
+  local row = rows[NS.cur]
+  if settled then
+    local dir = (dc.key_pressed("right") and 1) or (dc.key_pressed("left") and -1) or 0
+    if dc.key_pressed("circle") then NS.on = false; dc.nui_release(); return true end
+    if row.kind == "preset" then
+      if dir ~= 0 then preset_i = ((preset_i - 1 + dir) % #PRESETS) + 1 end
+      if dc.key_pressed("cross") then apply_preset(PRESETS[preset_i]); dc.toast("Preset applied: " .. PRESETS[preset_i].name, 2) end
+    elseif row.kind == "back" then
+      if dc.key_pressed("cross") then NS.on = false; dc.nui_release(); return true end
+    elseif row.row then
+      if dir ~= 0 then change(row.row, dir) end
+      if dc.key_pressed("cross") and row.row[4] == "bool" then change(row.row, 1) end
+    end
+  end
+  row = rows[NS.cur]
+  local sig = NS.cur .. ":" .. NS.top .. ":" .. row.text
+  if sig ~= NS.last or dc.nui_owner() ~= "mod_settings" then
+    NS.last = sig
+    local shown = {}
+    for i = NS.top, math.min(n, NS.top + NVIS - 1) do shown[#shown + 1] = rows[i].text end
+    dc.nui_set({ rows = shown, cursor = NS.cur - NS.top + 1, help = row.help or "" })
+  end
+  return true
+end
+
+dc.msg_on("hub_collect", function() dc.msg("hub_entry", "Settings", "settings.page") end)
+dc.msg_on("hub_open", function(id)
+  if id ~= "settings.page" then return end
+  if dc.nui_ready() then
+    NS.on, NS.cur, NS.top, NS.last, NS.since = true, 1, 1, nil, dc.ticks()
+  else
+    open = true
+    cur, offset = 1, 0
+    if not dc.freeze(true) then dc.block_input(true) end
+  end
+end)
+
 dc.on("tick", function(t)
-  local want = dc.key_pressed("f1") or dc.key_pressed("l2+r2+select")
+  if native_tick() then return end
+  local want = dc.key_pressed("f1") or dc.key_pressed("l2+r2+r3")
   if open then
     if want or dc.key_pressed("circle") then
       open = false
@@ -159,4 +220,4 @@ dc.on("tick", function(t)
   end
 end)
 
-dc.log("Mod Settings loaded: F1 or L2+R2+Select")
+dc.log("Mod Settings loaded: F1 or L2+R2+R3")

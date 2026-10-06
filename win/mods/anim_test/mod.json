@@ -1,6 +1,0 @@
-{
- "name": "anim_test",
- "version": "1",
- "description": "Example: Toan body 35% wider, still animated. Set enabled to true to see it.",
- "enabled": false
-}

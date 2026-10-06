@@ -367,7 +367,7 @@ local function draw_hud(now, c, a)
   local label = string.format("%s  Lv %d%s", name(c), lv, lv >= cfg.max_level and string.format("  MAX  Paragon %d   %d / %d", paragon(c), x, paragon_need(paragon(c))) or string.format("   %d / %d", x, need))
   dc.text("xp_label", label, centered(label, 1.5), 446, 1.5, 0xE0E0E0FF, false)
   if pts > 0 then
-    local hint = pts .. " skill points   (K  or  L1+R1+Select)"
+    local hint = pts .. " skill points   (K  or  L1+R1+R3)"
     dc.text("xp_points", hint, centered(hint, 1.2), 422, 1.2, 0xFFE070FF, false)
   else
     dc.text("xp_points", "")
@@ -378,6 +378,7 @@ end
 dc.on("tick", function(t)
   if not seeded then math.randomseed(t + 4242); seeded = true end
   local c = dc.chara()
+  if c < 0 or c > 5 then c = 0 end -- a town reports no party member: it is Toan
   local lv = level(c)
   local a = S.agg(c)
   local owns_screen = S.tick(t, c, lv, a, level_damage(c))

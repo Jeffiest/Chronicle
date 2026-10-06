@@ -95,3 +95,13 @@ Co-op world sync (town): `dc.npc_list()` (villagers: id, name, x, y, z, ry, m, f
 Georama: `dc.georama_take()` pops the next local op `kind, map, parts, x, y, z, rot` (1 placed, 2 removed), `dc.georama_apply(kind, map, parts, x, y, z, rot)`
 applies someone else's (true when it changed this town; a part landing on the player forces the Georama view), `dc.georama_map()`.
 Guest world: `dc.world_capture()` (the host's world as a binary string, nil before a game runs), `dc.world_join(blob)` (a guest enters or refreshes it), `dc.world_leave()`, `dc.world_active()`.
+
+
+## Autosave
+`dc.autosave()` -> true when a save was started (town only, not while one is running). It writes the town into save slot 0 (the AUTOSAVE board at the top of the Save/Load list), moving older saves down one slot the first time. `dc.autosave_state()` -> "idle", "saving", "saved" or "failed". See the `autosave` mod for the triggers.
+
+## First person
+`dc.first_person([on[, pitch]])` -> true when first person is on; with an argument it switches it (pitch in radians, up is positive). Dungeon and town. The Controls mod binds V.
+
+## Play as another character in towns
+`dc.town_chara([n])` -> body in use in towns (0 Toan, 1 Xiao, 2 Goro, 3 Ruby, 4 Ungaga, 5 Osmond); with an argument it switches (only to party members who have joined). The Controls mod binds 4-9 (pick) and Backspace (next).

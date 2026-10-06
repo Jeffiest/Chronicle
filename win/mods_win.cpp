@@ -27,6 +27,8 @@
 #include <string>
 #include <vector>
 
+#include "input.hpp"
+#include "overlay.hpp"
 #include "paths.hpp"
 
 namespace fs = std::filesystem;
@@ -555,6 +557,157 @@ bool ReplaceLevels(SDL_Surface *rgba, unsigned width, unsigned height, bool &ind
 
 } // namespace
 
+
+namespace {
+// ---- Button prompts as keys ----------------------------------------------------------------------------------------------------
+// The game's messages show pad buttons as glyphs of its "gaiji" sheet (a circle, a triangle, L1 ...). When the player plays with the keyboard
+// and mouse those cells are redrawn as key caps showing what is bound to the action now (F, Tab, a mouse with the right button lit ...).
+struct CapCell {
+    const char *action;
+    int         x, y, w, h;
+};
+const CapCell kCapCells[] = {
+    {"circle", 0, 22, 22, 22},   {"triangle", 22, 22, 22, 22}, {"square", 44, 22, 22, 22}, {"cross", 66, 22, 22, 22},
+    {"l2", 0, 132, 32, 22},      {"l1", 32, 132, 32, 22},      {"r1", 64, 132, 32, 22},    {"r2", 96, 132, 32, 22},
+};
+
+std::string CapLabel(const std::string &action, int &mouse_button) {
+    mouse_button = 0;
+    std::string text = InputBindingText(action);
+    std::string first = text.substr(0, text.find(','));
+    while (!first.empty() && first.front() == ' ') {
+        first.erase(first.begin());
+    }
+    if (first.rfind("Mouse", 0) == 0 && first.size() == 6) {
+        mouse_button = first[5] - '0';
+        return {};
+    }
+    std::string up;
+    for (char c : first) {
+        up += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    static const std::map<std::string, std::string> kShort = {
+        {"LEFT CTRL", "CTL"}, {"RIGHT CTRL", "CTL"}, {"LEFT SHIFT", "SHF"}, {"RIGHT SHIFT", "SHF"}, {"LEFT ALT", "ALT"}, {"RIGHT ALT", "ALT"},
+        {"SPACE", "SPC"},     {"RETURN", "ENT"},     {"ESCAPE", "ESC"},     {"BACKSPACE", "BSP"},   {"TAB", "TAB"},       {"DELETE", "DEL"},
+        {"UP", "UP"},         {"DOWN", "DN"},        {"LEFT", "LT"},        {"RIGHT", "RT"},        {"CAPS LOCK", "CAP"}, {"PAGE UP", "PGU"},
+        {"PAGE DOWN", "PGD"}, {"HOME", "HOM"},       {"END", "END"},        {"INSERT", "INS"}};
+    if (auto it = kShort.find(up); it != kShort.end()) {
+        return it->second;
+    }
+    return up.size() > 3 ? up.substr(0, 3) : up;
+}
+
+int NearestIndex(const uint32_t *palette, int limit, int r, int g, int b, bool opaque_only) {
+    int best = 0, best_d = 1 << 30;
+    for (int i = 0; i < limit; i++) {
+        uint8_t px[4];
+        std::memcpy(px, &palette[i], 4);
+        if (opaque_only && px[3] < 0x40) {
+            continue;
+        }
+        int d = (px[0] - r) * (px[0] - r) + (px[1] - g) * (px[1] - g) + (px[2] - b) * (px[2] - b);
+        if (d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+void ComposeKeyCaps(unsigned width, unsigned height, bool four_bit, const uint32_t *palette, std::vector<std::vector<uint8_t>> &levels) {
+    if (levels.empty() || levels[0].size() < static_cast<size_t>(width) * height || width < 128 || height < 160) {
+        return;
+    }
+    const int limit = four_bit ? 16 : 256;
+    int       clear = 0;
+    for (int i = 0; i < limit; i++) { // the transparent index
+        uint8_t px[4];
+        std::memcpy(px, &palette[i], 4);
+        if (px[3] == 0) {
+            clear = i;
+            break;
+        }
+    }
+    const uint8_t light = static_cast<uint8_t>(NearestIndex(palette, limit, 222, 222, 226, true));
+    const uint8_t mid = static_cast<uint8_t>(NearestIndex(palette, limit, 150, 150, 160, true));
+    const uint8_t dark = static_cast<uint8_t>(NearestIndex(palette, limit, 30, 30, 38, true));
+    const uint8_t hot = static_cast<uint8_t>(NearestIndex(palette, limit, 240, 150, 30, true));
+    std::vector<uint8_t> &px = levels[0];
+    auto put = [&](int x, int y, uint8_t v) {
+        if (x >= 0 && y >= 0 && x < static_cast<int>(width) && y < static_cast<int>(height)) {
+            px[static_cast<size_t>(y) * width + x] = v;
+        }
+    };
+    for (const CapCell &cell : kCapCells) {
+        int         mouse = 0;
+        std::string label = CapLabel(cell.action, mouse);
+        if (label.empty() && mouse == 0) {
+            continue; // nothing bound: leave the pad glyph
+        }
+        for (int y = 0; y < cell.h; y++) {
+            for (int x = 0; x < cell.w; x++) {
+                put(cell.x + x, cell.y + y, static_cast<uint8_t>(clear));
+            }
+        }
+        const int w = cell.w >= 32 ? 26 : 20, h = cell.w >= 32 ? 18 : 20;
+        const int x0 = cell.x + (cell.w - w) / 2, y0 = cell.y + (cell.h - h) / 2;
+        if (mouse == 0) { // a key cap: dark outline, light top, shaded foot, rounded corners
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    bool corner = (x == 0 || x == w - 1) && (y == 0 || y == h - 1);
+                    if (corner) {
+                        continue;
+                    }
+                    bool edge = x == 0 || y == 0 || x == w - 1 || y == h - 1;
+                    uint8_t v = edge ? dark : (y >= h - 3 ? mid : light);
+                    put(x0 + x, y0 + y, v);
+                }
+            }
+            int         text_w = static_cast<int>(label.size()) * kOverlayAdvance - 1;
+            int         tx = x0 + (w - text_w) / 2, ty = y0 + (h - 3 - kOverlayGlyphHeight) / 2 + 1;
+            for (char c : label) {
+                if (const std::uint8_t *rows = OverlayGlyph(c)) {
+                    for (int r = 0; r < kOverlayGlyphHeight; r++) {
+                        for (int col = 0; col < kOverlayGlyphWidth; col++) {
+                            if (rows[r] & (0x10 >> col)) {
+                                put(tx + col, ty + r, dark);
+                            }
+                        }
+                    }
+                }
+                tx += kOverlayAdvance;
+            }
+        } else { // a mouse seen from above, the pressed button lit
+            const int mw = 12, mh = 18;
+            const int mx = cell.x + (cell.w - mw) / 2, my = cell.y + (cell.h - mh) / 2;
+            for (int y = 0; y < mh; y++) {
+                for (int x = 0; x < mw; x++) {
+                    bool corner = (x == 0 || x == mw - 1) && (y == 0 || y == mh - 1);
+                    if (corner) {
+                        continue;
+                    }
+                    bool edge = x == 0 || y == 0 || x == mw - 1 || y == mh - 1;
+                    uint8_t v = edge ? dark : light;
+                    if (!edge && y < 7) { // the two buttons
+                        bool left = x < mw / 2;
+                        if ((mouse == 1 && left) || (mouse == 2 && !left)) {
+                            v = hot;
+                        }
+                        if (x == mw / 2 || x == mw / 2 - 1) {
+                            v = (mouse == 3) ? hot : mid;
+                        }
+                    }
+                    if (!edge && y == 7) {
+                        v = dark;
+                    }
+                    put(mx + x, my + y, v);
+                }
+            }
+        }
+    }
+}
+} // namespace
+
 void ModsTextureHook(const char *name, int bpp, int block, unsigned width, unsigned height, bool &indexed, bool &has_alpha,
                      bool &four_bit, const uint32_t *palette, std::vector<std::vector<uint8_t>> &levels) {
     if (!g.inited) {
@@ -562,6 +715,9 @@ void ModsTextureHook(const char *name, int bpp, int block, unsigned width, unsig
     }
     if (g.dump) {
         Dump(name, bpp, block, width, height, indexed, palette, levels);
+    }
+    if (indexed && palette != nullptr && std::strcmp(name, "gaiji") == 0 && !std::getenv("DC_PAD_PROMPTS")) {
+        ComposeKeyCaps(width, height, four_bit, palette, levels);
     }
     {
         int  tc = 0;

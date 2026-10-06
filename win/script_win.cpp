@@ -19,6 +19,8 @@
 #include <fstream>
 #include <iterator>
 #include <array>
+#include <set>
+#include <ctime>
 #include <deque>
 #include <map>
 #include <memory>
@@ -37,11 +39,17 @@
 #include "dun/gameloop.hpp"
 #include "dungeonmap.hpp"
 #include "camera.hpp"
+#include "camerafollow.hpp"
+#include "btactstatus.hpp"
+#include "gamepad.hpp"
 #include "edit.hpp"
 #include "editground.hpp"
 #include "editmapscript.hpp"
 #include "editloop.hpp"
 #include "npcharacter.hpp"
+#include "memcard.hpp"
+#include "memorycardaccess.hpp"
+#include "mainitemmodel.hpp"
 #include "itemdata.hpp"
 #include "mglib.hpp"
 #include "savedata.hpp"
@@ -53,8 +61,12 @@
 #include "platform/input.hpp"
 #include "platform/modtext.hpp"
 #include "platform/net.hpp"
+#include "gfx/gfx.hpp"
+#include "platform/window.hpp"
+#include "platform/mouse.hpp"
 #include "ghost.hpp"
 #include "guestworld.hpp"
+#include "nativeui.hpp"
 #include "platform/clock.hpp"
 #include "platform/paths.hpp"
 #include "userstatus.hpp"
@@ -63,6 +75,13 @@ namespace fs = std::filesystem;
 
 extern int gameTask;               // the dungeon's task state (gameloop.cpp)
 void       PlayTimeCountFlag(int flag); // the play clock
+
+extern s32 itemNowSel; // the dungeon active-item slot (1..3), defined in dun/gameloop.cpp
+void EditSave(); // editloop.cpp: the town's state into the save data, as the save menu does first
+extern s32 MapNo; // the game's current map (a town below 200, a dungeon at 200 and up)
+
+int L_first_person(lua_State *L); // defined with the camera code below
+int L_town_chara(lua_State *L);
 
 namespace {
 
@@ -552,6 +571,17 @@ int MessageHandler(lua_State *L) {
 }
 
 // Calls the function and `nargs` arguments already on the stack. On error the mod is disabled.
+void ApplyBlock();
+// A mod that errors is switched off; what it had put on screen and the pad it had blocked must not stay behind.
+void ClearDeadModHud(const std::string &name) {
+    std::string prefix = name + ":";
+    std::erase_if(g.texts, [&](const auto &e) { return e.first.rfind(prefix, 0) == 0; });
+    std::erase_if(g.rects, [&](const auto &e) { return e.first.rfind(prefix, 0) == 0; });
+    g.texts_dirty = true;
+    g.block_buttons = 0;
+    g.block_sticks = false;
+    ApplyBlock();
+}
 bool Protected(LuaMod &mod, int nargs, int nresults) {
     int base = lua_gettop(mod.L) - nargs; // index of the function (the chunk or handler plus its nargs arguments above it)
     lua_pushcfunction(mod.L, MessageHandler);
@@ -563,6 +593,7 @@ bool Protected(LuaMod &mod, int nargs, int nresults) {
         Log(mod.name, std::string("script error, mod disabled:\n") + lua_tostring(mod.L, -1));
         lua_pop(mod.L, 1);
         mod.dead = true;
+        ClearDeadModHud(mod.name);
         return false;
     }
     return true;
@@ -1005,8 +1036,28 @@ void ApplyBlock() {
 }
 // Holds the dungeon (player, enemies and effects stop, the play clock stops) and hides every pad input from the game, as its own
 // pause does; the mod keeps reading the raw pad. Only starts from normal play, and lets go by itself if the game moves on.
+std::map<int, std::array<float, 3>> g_town_freeze_pos; // villager id -> where it stands while a menu freezes the town
+bool g_town_frozen = false; // the freeze is a town freeze: input blocked, villagers held, the play clock stopped
+bool InWalkingTown() { return pEditGround != nullptr && MapNo >= 0 && MapNo < 200 && GameMode == ED_MODE_WALK; }
 void SetFrozen(bool on, void *owner) {
     if (on == g.frozen) {
+        return;
+    }
+    if (on && InWalkingTown()) { // a town has no dungeon task: hold the villagers and the pad instead
+        g.frozen = true;
+        g.freeze_owner = owner;
+        g_town_frozen = true;
+        g_town_freeze_pos.clear();
+        PlayTimeCountFlag(0);
+        ApplyBlock();
+        return;
+    }
+    if (!on && g_town_frozen) {
+        g.frozen = false;
+        g.freeze_owner = nullptr;
+        g_town_frozen = false;
+        PlayTimeCountFlag(1);
+        ApplyBlock();
         return;
     }
     if (on && gameTask != GAME_TASK_PLAY) {
@@ -1049,6 +1100,10 @@ int L_block_input(lua_State *L) {
     } else if (lua_toboolean(L, 1)) {
         mask = 0xFFFF;
         sticks = true;
+    }
+    if (mask != 0 && std::getenv("DC_LOG_BLOCK") != nullptr) {
+        std::printf("[block] %s sets mask %x", Self(L) != nullptr ? Self(L)->name.c_str() : "?", mask);
+        std::printf("%c", 10);
     }
     g.block_buttons = mask;
     g.block_sticks = sticks;
@@ -1128,8 +1183,10 @@ int L_set_monster_speed(lua_State *L) {
     }
     return 0;
 }
-// Called where enemy scripts set a movement or motion speed.
+} // namespace
+// Called where enemy scripts set a movement or motion speed. Outside the anonymous namespace: the game code links to it by name.
 float ModsSpeedMul(int i) { return (i >= 0 && i < 16) ? g_mon_speed[i] : 1.0f; }
+namespace {
 
 // dc.set_monster_scale(i, s): draws enemy i (and its attachments) s times its size. The game may reset it, so scripts re-apply it each tick.
 int L_set_monster_scale(lua_State *L) {
@@ -1497,6 +1554,341 @@ int L_world_leave(lua_State *) {
 }
 int L_world_active(lua_State *L) {
     lua_pushboolean(L, GwActive() ? 1 : 0);
+    return 1;
+}
+// dc.town_clock([hours]) -> the town's time of day (0 to 12); with an argument it sets it. Co-op keeps guests on the host's clock.
+int L_town_clock(lua_State *L) {
+    if (lua_isnumber(L, 1)) {
+        NowTime = static_cast<float>(luaL_checknumber(L, 1));
+    }
+    lua_pushnumber(L, NowTime);
+    return 1;
+}
+// dc.edit_mode() -> the town's mode: 1 walking, 2 talking, 4 Georama, 14 event, ... (editmapscript.hpp), or -1 outside a town.
+int L_edit_mode(lua_State *L) {
+    lua_pushinteger(L, pEditGround != nullptr ? GameMode : -1);
+    return 1;
+}
+// ---- Controls: rebinding, injected presses, key capture ---------------------------------------------------------------------
+// The player's key bindings live in mods/_bindings.json ({"cross": ["Mouse1", "F"], ...}); they are applied over the defaults and over
+// config.json when the scripts start, and rewritten when dc.rebind changes one.
+nlohmann::json g_bindings_json = nlohmann::json::object();
+
+void BindingsApply() {
+    g_bindings_json = ReadJson(g.root / "_bindings.json");
+    if (!g_bindings_json.is_object()) {
+        g_bindings_json = nlohmann::json::object();
+        return;
+    }
+    for (auto it = g_bindings_json.begin(); it != g_bindings_json.end(); ++it) {
+        if (!it.value().is_array()) {
+            continue;
+        }
+        std::vector<std::string> names;
+        for (const auto &n : it.value()) {
+            if (n.is_string()) {
+                names.push_back(n.get<std::string>());
+            }
+        }
+        std::vector<std::string_view> views(names.begin(), names.end());
+        if (!InputBindKeys(it.key(), views)) {
+            std::fprintf(stderr, "controls: cannot bind %s\n", it.key().c_str());
+        }
+    }
+}
+void BindingsSave() {
+    std::error_code error;
+    fs::create_directories(g.root, error);
+    std::ofstream out(g.root / "_bindings.json");
+    out << g_bindings_json.dump(1) << std::endl;
+}
+// dc.rebind(action, {"F", "Mouse1"}) -> true when the names fit the action. Remembered between runs.
+int L_rebind(lua_State *L) {
+    std::string action = luaL_checkstring(L, 1);
+    std::vector<std::string> names;
+    if (lua_istable(L, 2)) {
+        int n = static_cast<int>(lua_rawlen(L, 2));
+        for (int i = 1; i <= n; i++) {
+            lua_rawgeti(L, 2, i);
+            if (lua_isstring(L, -1)) {
+                names.push_back(lua_tostring(L, -1));
+            }
+            lua_pop(L, 1);
+        }
+    } else if (lua_isstring(L, 2)) {
+        names.push_back(lua_tostring(L, 2));
+    }
+    std::vector<std::string_view> views(names.begin(), names.end());
+    bool ok = InputBindKeys(action, views);
+    if (ok) {
+        g_bindings_json[action] = names;
+        BindingsSave();
+    }
+    lua_pushboolean(L, ok ? 1 : 0);
+    return 1;
+}
+// dc.reset_bindings(): every action back to its default (config.json is not consulted again until the next start).
+int L_reset_bindings(lua_State *) {
+    InputMouseSettings mouse = InputGetMouseSettings();
+    InputResetBindings();
+    InputSetMouseSettings(mouse);
+    g_bindings_json = nlohmann::json::object();
+    BindingsSave();
+    return 0;
+}
+// dc.binding(action) -> "F, Mouse1": what is bound now.
+int L_binding(lua_State *L) {
+    std::string text = InputBindingText(luaL_checkstring(L, 1));
+    lua_pushstring(L, text.c_str());
+    return 1;
+}
+// dc.press(button(s) [, ticks]): presses pad buttons for the game ("cross", {"l1", "r1"}, ...) for a few ticks (default 3).
+int L_press(lua_State *L) {
+    unsigned short mask = 0;
+    auto           add = [&](const char *name) {
+        std::string low = Fold(name);
+        for (const PadName &p : kPadNames) {
+            if (low == p.name) {
+                mask |= p.bit;
+            }
+        }
+    };
+    if (lua_istable(L, 1)) {
+        int n = static_cast<int>(lua_rawlen(L, 1));
+        for (int i = 1; i <= n; i++) {
+            lua_rawgeti(L, 1, i);
+            if (lua_isstring(L, -1)) {
+                add(lua_tostring(L, -1));
+            }
+            lua_pop(L, 1);
+        }
+    } else {
+        add(luaL_checkstring(L, 1));
+    }
+    InputInjectButtons(mask, static_cast<int>(luaL_optinteger(L, 2, 3)));
+    return 0;
+}
+// dc.wheel_mode(0|1): 0 a wheel notch is Left/Right (choosing the dungeon's active item), 1 it is Up/Down (menus).
+int L_wheel_mode(lua_State *L) {
+    InputSetWheelMode(static_cast<int>(luaL_checkinteger(L, 1)));
+    return 0;
+}
+// dc.capture_key() -> the name of a key or mouse button that went down since the last call, or nil. For a "press the new key" prompt.
+int L_capture_key(lua_State *L) {
+    static std::array<bool, SDL_SCANCODE_COUNT> before{};
+    static std::array<bool, 6>                  mouse_before{};
+    int                                         count = 0;
+    const bool                                 *now = SDL_GetKeyboardState(&count);
+    std::string                                 found;
+    if (now != nullptr) {
+        for (int i = 0; i < count && i < SDL_SCANCODE_COUNT; i++) {
+            if (now[i] && !before[i] && found.empty()) {
+                const char *name = SDL_GetScancodeName(static_cast<SDL_Scancode>(i));
+                if (name != nullptr && name[0] != 0) {
+                    found = name;
+                }
+            }
+            before[i] = now[i];
+        }
+    }
+    SDL_MouseButtonFlags buttons = SDL_GetMouseState(nullptr, nullptr);
+    for (int b = 1; b <= 5; b++) {
+        bool down = (buttons & SDL_BUTTON_MASK(b)) != 0;
+        if (down && !mouse_before[b] && found.empty()) {
+            found = "Mouse" + std::to_string(b);
+        }
+        mouse_before[b] = down;
+    }
+    if (found.empty()) {
+        lua_pushnil(L);
+    } else {
+        lua_pushstring(L, found.c_str());
+    }
+    return 1;
+}
+// dc.select_quick_item(n): the dungeon's active item slot 1..3 (the one Square uses). Returns the slot, or 0 outside a dungeon.
+int L_select_quick_item(lua_State *L) {
+    int n = static_cast<int>(luaL_checkinteger(L, 1));
+    if (n < 1 || n > 3 || gameTask != GAME_TASK_PLAY) {
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+    itemNowSel = n;
+    activeItem.now = n;
+    lua_pushinteger(L, n);
+    return 1;
+}
+
+// The game's main menu has a MODS entry in the Manuals slot. Picking it asks the scripts to open the mods page instead of the manuals; the page's own
+// "Manuals" row lets one pick through (dc.manual_pass, then a Cross press).
+bool g_mods_menu_requested = false;
+bool g_manual_pass = false;
+int L_mods_menu_requested(lua_State *L) {
+    lua_pushboolean(L, g_mods_menu_requested ? 1 : 0);
+    g_mods_menu_requested = false;
+    return 1;
+}
+// dc.nui_set({rows = {"Controls", "Skill Tree", ...}, cursor = 1, help = "text"}): the MODS page shown in the game's own manual screen (nativeui_win.cpp).
+// dc.nui_ready() -> true when it can take a page; dc.nui_close() runs the screen's closing transition; dc.input_blocked() -> some mod is holding the pad.
+std::string g_nui_owner; // the mod whose page is in the window
+int L_nui_set(lua_State *L) {
+    if (LuaMod *m = Self(L)) {
+        g_nui_owner = m->name;
+    }
+    std::vector<std::string> rows;
+    int                      cursor = 0;
+    std::string              help;
+    if (lua_istable(L, 1)) {
+        lua_getfield(L, 1, "rows");
+        if (lua_istable(L, -1)) {
+            int n = static_cast<int>(lua_rawlen(L, -1));
+            for (int i = 1; i <= n; i++) {
+                lua_rawgeti(L, -1, i);
+                rows.push_back(lua_isstring(L, -1) ? lua_tostring(L, -1) : "");
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "cursor");
+        cursor = lua_isnumber(L, -1) ? static_cast<int>(lua_tointeger(L, -1)) - 1 : 0;
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "help");
+        help = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+        lua_pop(L, 1);
+    }
+    NuSetPage(rows, cursor, help);
+    return 0;
+}
+int L_nui_ready(lua_State *L) {
+    lua_pushboolean(L, NuReady() ? 1 : 0);
+    return 1;
+}
+int L_nui_close(lua_State *) {
+    NuClose();
+    g_nui_owner.clear();
+    return 0;
+}
+// dc.nui_owner() -> name of the mod whose page is showing ("" none); dc.nui_release() -> give the window back (the MODS list takes it).
+int L_nui_owner(lua_State *L) {
+    lua_pushstring(L, g_nui_owner.c_str());
+    return 1;
+}
+int L_nui_release(lua_State *) {
+    g_nui_owner.clear();
+    return 0;
+}
+int L_input_blocked(lua_State *L) {
+    lua_pushboolean(L, (g.frozen || g.block_buttons != 0 || g.block_sticks) ? 1 : 0);
+    lua_pushboolean(L, g.frozen ? 1 : 0);
+    lua_pushinteger(L, g.block_buttons);
+    lua_pushboolean(L, g.block_sticks ? 1 : 0);
+    return 4;
+}
+int L_manual_pass(lua_State *) {
+    g_manual_pass = true;
+    return 0;
+}
+struct MenuMouse {
+    bool      enabled = true;
+    bool      free = false;          // the pointer is released for the menu
+    long long hand_seen = -1000;
+    long long title_seen = -1000;     // tick the title's hand was last drawn     // tick the game last drew its hand
+    float     hand_x = 0, hand_y = 0; // where the game put the hand (top-left of the 32x32 sprite), this frame
+    float     last_hx = -1, last_hy = -1;
+    int       still = 0;             // ticks the game's hand has stayed put
+    long long next_press = 0;
+    float     mouse_x = -1000, mouse_y = -1000; // pointer in the 640x480 frame
+    float     prev_err = 1e9f;
+    int       last_dir = 0;           // 1 up 2 down 3 left 4 right: the press sent last
+    bool      left_before = false, right_before = false;
+    float     parked_x = -1, parked_y = -1; // pointer position at which a press last did nothing
+    bool      awaiting = false;      // a pad press was sent and the hand has not settled yet
+    bool      moved_since = false;   // the hand moved since that press
+    long long press_tick = 0;
+    int       blocked_dir = 0;       // a direction that did nothing at parked_x/y
+    float     step_y = 0;            // how far the hand jumped on the last vertical press
+    int       h_state = 0;           // sideways presses in this menu: 0 not tried, 1 they move the hand sideways, -1 they do something else
+    float     press_hx = 0;
+    float     press_hy = 0;
+    float     ring_x[12] = {0}, ring_y[12] = {0};
+    int       ring_n = 0, ring_at = 0;
+    float     avg_x = 0, avg_y = 0, prev_avg_y = 0, prev_avg_x = 0;
+    int       settled = 0;           // ticks the averaged hand position has barely changed
+} g_mm;
+
+// dc.menu_mouse(on): the hand-and-click mouse in the game's menus (default on).
+int L_menu_mouse(lua_State *L) {
+    g_mm.enabled = lua_toboolean(L, 1) != 0;
+    return 0;
+}
+
+// dc.autosave() -> true when the game was written to save file 1 (the top slot of the save list, kept for the autosave). Only in towns: a save made in
+// a dungeon would resume mid-run. Runs the memory card emulation's own save operation to the end at once.
+bool g_autosaving = false;
+// The memory card emulation steps once per frame like the save menu drives it, so the autosave is a small state machine run from the script tick.
+std::vector<char> g_as_work(0x20000);
+bool              g_as_active = false;
+int               g_as_ticks = 0;
+bool              g_as_started_ok = false;
+int               g_as_last = 0; // 0 none yet, 1 saved, -1 failed
+// Slot 0 of the save list is the autosave. Saves made before that existed sit in slot 0 too, so the first autosave moves every save one
+// slot down (darkcloud0 -> darkcloud1 ...) and leaves a marker. False when there is no room (all twelve slots in use).
+bool AutosaveMigrate() {
+    namespace fs = std::filesystem;
+    fs::path        dir = PathsSaveRoot() / "mc0" / McAccess.dir_name;
+    fs::path        marker = dir / "autosave.v1";
+    std::error_code ec;
+    if (fs::exists(marker, ec)) {
+        return true;
+    }
+    if (fs::exists(dir / "darkcloud11", ec) && fs::exists(dir / "darkcloud0", ec)) {
+        return false;
+    }
+    for (int i = 10; i >= 0; i--) {
+        fs::path from = dir / ("darkcloud" + std::to_string(i)), to = dir / ("darkcloud" + std::to_string(i + 1));
+        if (fs::exists(from, ec) && !fs::exists(to, ec)) {
+            fs::rename(from, to, ec);
+        }
+    }
+    if (std::FILE *f = std::fopen(marker.string().c_str(), "wb")) {
+        std::fputs("slot 0 is the autosave", f);
+        std::fclose(f);
+    }
+    return true;
+}
+int L_autosave(lua_State *L) {
+    bool started = false;
+    if (!g_as_active && SaveData != nullptr && McAccess.GetFuncNo() <= MC_OPERATION_IDLE && pEditGround != nullptr && MapNo >= 0 && MapNo < 200) {
+        if (McAccess.file_name[0] == 0) {
+            McAccess.InitForMC();
+        }
+        McAccess.SetFuncNo(MC_OPERATION_IDLE);
+        McAccess.port = 0;
+        if (!AutosaveMigrate()) {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        {   // the save menu works from inside the game's folder on the card
+            char dir[0x60];
+            std::snprintf(dir, sizeof dir, "/%s", McAccess.dir_name);
+            int cmd = 0, result = 0;
+            sceMcChdir(0, 1, dir, McAccess.current_dir);
+            sceMcSync(MC_NOWAIT, &cmd, &result);
+        }
+        EditSave(); // the town's own state (the Georama, the clock) goes into the save data first, as the save menu does
+        McAccess.SetBuff(g_as_work.data());
+        McAccess.file_no = 0;
+        McAccess.SetFuncNo(MC_OPERATION_SAVE);
+        g_as_active = true;
+        g_as_ticks = 0;
+        started = true;
+    }
+    lua_pushboolean(L, started ? 1 : 0);
+    return 1;
+}
+// dc.autosave_state() -> "idle", "saving", "saved" or "failed" (the last one finished).
+int L_autosave_state(lua_State *L) {
+    lua_pushstring(L, g_as_active ? "saving" : g_as_last > 0 ? "saved" : g_as_last < 0 ? "failed" : "idle");
     return 1;
 }
 // dc.my_tunic(): the local player's tunic colour now (0 natural, 1..15 presets, 16 custom).
@@ -2065,7 +2457,7 @@ void LoadLua(const fs::path &mod, const std::string &name) {
         {"set_weapon", L_set_weapon}, {"store_get", L_store_get}, {"store_set", L_store_set}, {"store_slot", L_store_slot}, {"shared_get", L_shared_get}, {"shared_set", L_shared_set}, {"shared_all", L_shared_all},
         {"freeze", L_freeze}, {"block_input", L_block_input}, {"monster_pos", L_monster_pos}, {"floor_select", L_floor_select}, {"set_floor_size", L_set_floor_size}, {"floor_reached", L_floor_reached}, {"town_pos", L_town_pos}, {"camera", L_camera}, {"ailments", L_ailments}, {"set_ailments", L_set_ailments}, {"set_monster_status", L_set_monster_status}, {"monster_status", L_monster_status}, {"set_monster_scale", L_set_monster_scale}, {"day", L_day}, {"shop_list", L_shop_list}, {"set_shop_list", L_set_shop_list}, {"monster_model", L_monster_model}, {"player_pos", L_player_pos},
         {"hurt_monster", L_hurt_monster}, {"set_monster_speed", L_set_monster_speed}, {"launch", L_launch},
-        {"player_state", L_player_state}, {"ghost", L_ghost}, {"ghost_clear", L_ghost_clear}, {"set_tunic", L_set_tunic}, {"my_tunic", L_my_tunic}, {"world_capture", L_world_capture}, {"world_join", L_world_join}, {"world_leave", L_world_leave}, {"world_active", L_world_active}, {"npc_list", L_npc_list}, {"georama_take", L_georama_take}, {"georama_apply", L_georama_apply}, {"georama_map", L_georama_map}, {"npc_puppet", L_npc_puppet}, {"npc_puppet_clear", L_npc_puppet_clear}, {"npc_hold", L_npc_hold}, {"npc_talking", L_npc_talking}, {"launch_file", L_launch_file}, {"ghost_tunic", L_ghost_tunic}, {"floor_seed", L_floor_seed}, {"scene", L_scene}, {"monster_state", L_monster_state}, {"puppet", L_puppet},
+        {"player_state", L_player_state}, {"ghost", L_ghost}, {"ghost_clear", L_ghost_clear}, {"set_tunic", L_set_tunic}, {"my_tunic", L_my_tunic}, {"first_person", L_first_person}, {"town_chara", L_town_chara}, {"autosave", L_autosave}, {"autosave_state", L_autosave_state}, {"menu_mouse", L_menu_mouse}, {"mods_menu_requested", L_mods_menu_requested}, {"nui_set", L_nui_set}, {"nui_ready", L_nui_ready}, {"nui_close", L_nui_close}, {"nui_owner", L_nui_owner}, {"nui_release", L_nui_release}, {"input_blocked", L_input_blocked}, {"manual_pass", L_manual_pass}, {"rebind", L_rebind}, {"reset_bindings", L_reset_bindings}, {"binding", L_binding}, {"press", L_press}, {"wheel_mode", L_wheel_mode}, {"capture_key", L_capture_key}, {"select_quick_item", L_select_quick_item}, {"edit_mode", L_edit_mode}, {"town_clock", L_town_clock}, {"world_capture", L_world_capture}, {"world_join", L_world_join}, {"world_leave", L_world_leave}, {"world_active", L_world_active}, {"npc_list", L_npc_list}, {"georama_take", L_georama_take}, {"georama_apply", L_georama_apply}, {"georama_map", L_georama_map}, {"npc_puppet", L_npc_puppet}, {"npc_puppet_clear", L_npc_puppet_clear}, {"npc_hold", L_npc_hold}, {"npc_talking", L_npc_talking}, {"launch_file", L_launch_file}, {"ghost_tunic", L_ghost_tunic}, {"floor_seed", L_floor_seed}, {"scene", L_scene}, {"monster_state", L_monster_state}, {"puppet", L_puppet},
         {"puppet_clear", L_puppet_clear}, {"logic_ticks", L_logic_ticks},
         {"remove_chest_monster", L_remove_chest_monster}, {"take_event", L_take_event}, {"run_event", L_run_event}, {"msg_on", L_msg_on}, {"msg", L_msg}, {"menu_open", L_menu_open}, {"frozen", L_frozen},
         {"take_ghost_hit", L_take_ghost_hit}, {"hurt_player", L_hurt_player},
@@ -2160,6 +2552,7 @@ void Init() {
     if (!fs::is_directory(g.root, error)) {
         return;
     }
+    BindingsApply(); // the player's own key bindings, over the defaults
     g.allow_native = ReadJson(g.root / "mods.json").value("allow_native", false);
     std::vector<fs::path> mods = ModsLoadOrder(g.root);
     for (const fs::path &mod : mods) {
@@ -2189,10 +2582,41 @@ void Init() {
 // Called from the monster update (gen_win_src.py patches): a puppet keeps its animation but runs no script, movement or attack.
 bool MpIsPuppet(int i) { return i >= 0 && i < 16 && g_puppet[i].on; }
 
+void MenuMouseTick();
+static void TownCharaTick();
+
+// One memory card step per tick while an autosave runs (the card emulation is driven a frame at a time, as the save menu does).
+static void AutosaveStep() {
+    if (!g_as_active) {
+        return;
+    }
+    int r = McAccess.Step();
+    if (r < 0 && McAccess.step >= 6) { // the save file is written by step 3; later steps only refresh the settings file, which may not exist yet
+        r = 1;
+        McAccess.step = 0;
+        McAccess.SetFuncNo(MC_OPERATION_IDLE);
+    }
+    if (r < 0 || ++g_as_ticks > 600) {
+        g_as_active = false;
+        g_as_last = -1;
+        McAccess.SetFuncNo(MC_OPERATION_IDLE);
+        std::printf("[autosave] failed at tick %d (step result %d)", g_as_ticks, r);
+        std::printf("%c", 10);
+    } else if (r == 1 || McAccess.GetFuncNo() == MC_OPERATION_IDLE) {
+        g_as_active = false;
+        g_as_last = 1;
+        std::printf("[autosave] saved to file 1");
+        std::printf("%c", 10);
+    }
+}
+
 void ScriptTick() {
     if (!g.inited) {
         Init();
     }
+    MenuMouseTick();
+    AutosaveStep();
+    TownCharaTick();
     NetPump();
     PuppetApply();
     MpEventPoll();
@@ -2230,7 +2654,9 @@ void ScriptTick() {
             }
         }
 #endif
-        if (owner_dead || gameTask != GAME_TASK_PLAY) {
+        bool lost = g_town_frozen ? !InWalkingTown() : gameTask != GAME_TASK_PLAY;
+        if (owner_dead || lost) {
+            g_town_frozen = false;
             g.frozen = false;
             g.freeze_owner = nullptr;
             driveStepHold = 0;
@@ -2418,13 +2844,454 @@ bool ModsGeoForce() {
     return GameMode == ED_MODE_WALK;
 }
 
+// The manual screen is opening from the main menu: it is the MODS page, unless the page's Manuals row asked for the real manuals.
+void ModsPageNote() {
+    g_nui_owner.clear();
+    if (g_manual_pass) {
+        g_manual_pass = false;
+        NuNoteOpen(false);
+    } else {
+        g_mods_menu_requested = true;
+        NuNoteOpen(true);
+    }
+}
+
+// ---- Play as another character in a town --------------------------------------------------------------------------------------
+// The town only has Toan's own model (chara/c01d.chr + info.cfg). The other five bodies come from the dungeon packs (dun/mainchara/<id>.chr +
+// base.cfg), loaded through the same EdLoadMainChara. The town asks for motion numbers of Toan's town set (0 stand, 1 run, 2 walk, 3/4 doors, 5/6
+// item get, 7 no, 8 fall, 9 land, 10 double door); the dungeon sets agree on 0-2 and have the rest elsewhere, so ModsRemapMotion translates.
+static int g_town_chara = 0;     // the body the player asked for
+static int g_town_loaded = 0;    // the body that is loaded now
+static bool g_town_reload = false;
+static const char *const kTownPack[6] = {"chara/c01d.chr", "dun/mainchara/c04b.chr", "dun/mainchara/c06b.chr", "dun/mainchara/c05a.chr", "dun/mainchara/c10b.chr", "dun/mainchara/c18a.chr"};
+
+static bool TownCharaAvailable(int n) {
+    static const bool any = std::getenv("DC_TOWN_ANY") != nullptr; // testing: every body without the story
+    return n == 0 || (n > 0 && n < 6 && (any || (UserStatus != nullptr && UserStatus->max_hp[n] > 0)));
+}
+
+void ModsLoadTownChara() { // from the town's initialisation in place of the plain load of Toan
+    int n = TownCharaAvailable(g_town_chara) ? g_town_chara : 0;
+    EdLoadMainChara(const_cast<char *>(kTownPack[n]), const_cast<char *>(n == 0 ? "info.cfg" : "base.cfg"), &CharaBuffer);
+    g_town_loaded = n;
+}
+
+int ModsRemapMotion(CCharacter *c, int motion) {
+    if (g_town_loaded == 0 || c != static_cast<CCharacter *>(&MainChara)) {
+        return motion;
+    }
+    static const int map[11] = {0, 1, 2, 0, 0, 34, 35, 31, 32, 0, 0};
+    return motion >= 0 && motion < 11 ? map[motion] : motion;
+}
+
+static void TownCharaTick() {
+    if (!g_town_reload || Chara == nullptr || pEditGround == nullptr || MapNo >= 200) {
+        return;
+    }
+    g_town_reload = false;
+    float pos[4], rot[4];
+    Chara->GetPosition(pos);
+    Chara->GetRotation(rot);
+    ModsLoadTownChara();
+    Chara->SetPosition(pos);
+    Chara->SetRotation(rot);
+    Chara->motion_no = 0;
+}
+
+// dc.town_chara([n]) -> the body in use in towns (0 Toan, 1 Xiao, 2 Goro, 3 Ruby, 4 Ungaga, 5 Osmond). With an argument it switches to that character
+// (when they have joined), at once when a town is open. Returns the body now selected.
+int L_town_chara(lua_State *L) {
+    if (lua_isnumber(L, 1)) {
+        int n = static_cast<int>(lua_tointeger(L, 1));
+        if (TownCharaAvailable(n) && n != g_town_chara) {
+            g_town_chara = n;
+            g_town_reload = true;
+        }
+    }
+    lua_pushinteger(L, g_town_chara);
+    return 1;
+}
+
+// ---- First person -------------------------------------------------------------------------------------------------------------
+// dc.first_person(on) puts the dungeon camera at the character's eyes: the mouse (or right stick) looks around freely, the character still walks
+// where the stick points relative to the view, and looking down shows the body and the weapon. The game's own follow camera keeps running (its
+// angle is the yaw, the movement code reads it); this overrides where the eye sits and what it looks at after each camera step.
+struct FirstPerson {
+    bool  on = false;
+    bool  applied = false;
+    float pitch = 0.0f; // radians above the horizon
+    float dy = 0.0f;    // mouse movement waiting to be turned into pitch
+} g_fp;
+
+extern s32 viewMode__2;
+
+// Puts `cam` at the eyes of the character standing at `feet`, looking along the follow camera's heading and the current pitch.
+static void ApplyFirstPerson(CCameraFollow *cam, const float *feet, float eye_height) {
+    g_fp.pitch = std::clamp(g_fp.pitch - g_fp.dy * 0.0375f - GamePad.GetRYf() * 0.03f, -1.45f, 1.45f);
+    g_fp.dy = 0.0f;
+    float yaw = cam->angle;
+    float fx = -std::sin(yaw), fz = -std::cos(yaw);
+    float cp = std::cos(g_fp.pitch), sp = std::sin(g_fp.pitch);
+    // a little ahead of the face, so the head is not around the eye (looking straight down shows the body, hands and weapon instead)
+    float pos[3] = {feet[0] + fx * 1.3f, feet[1] + eye_height, feet[2] + fz * 1.3f};
+    float ref[3] = {pos[0] + fx * cp * 20.0f, pos[1] + sp * 20.0f, pos[2] + fz * cp * 20.0f};
+    for (int i = 0; i < 3; i++) {
+        cam->pos[i] = cam->next_pos[i] = pos[i];
+        cam->ref[i] = cam->next_ref[i] = ref[i];
+    }
+    cam->SetSpeed(1.0f); // the view turns at once, not by easing toward the angle
+    g_fp.applied = true;
+}
+
+static bool FirstPersonIdle(CCameraFollow *cam, float restore_speed) {
+    if (!g_fp.on) {
+        if (g_fp.applied) {
+            cam->SetSpeed(restore_speed);
+            g_fp.applied = false;
+        }
+        g_fp.dy = 0.0f;
+        return true;
+    }
+    return false;
+}
+
+void ModsFirstPerson() { // dungeon, after the camera step
+    if (NowCamera__3 == nullptr || FirstPersonIdle(NowCamera__3, 8.0f)) {
+        return;
+    }
+    if (gameTask != GAME_TASK_PLAY || viewMode__2 != 0 || BtActStatus.camera_hold != 0 || g.frozen) {
+        g_fp.dy = 0.0f;
+        return;
+    }
+    static const float eye[6] = {14.5f, 12.5f, 14.5f, 14.5f, 16.5f, 13.5f};
+    ApplyFirstPerson(NowCamera__3, CharaMain.pos, eye[std::clamp(static_cast<int>(UserStatus->cur_chara), 0, 5)]);
+}
+
+void ModsFirstPersonTown() { // town, after the walking camera step
+    if (Chara == nullptr || FirstPersonIdle(&MainCamera, 4.0f)) {
+        return;
+    }
+    if (g.frozen) {
+        g_fp.dy = 0.0f;
+        return;
+    }
+    float pos[4];
+    Chara->GetPosition(pos);
+    ApplyFirstPerson(&MainCamera, pos, Chara->body_height * 0.9f);
+}
+// dc.first_person([on]) -> whether first person is on (with an argument it switches it).
+int L_first_person(lua_State *L) {
+    if (lua_gettop(L) >= 1) {
+        bool on = lua_toboolean(L, 1) != 0;
+        if (on != g_fp.on) {
+            g_fp.pitch = 0.0f;
+        }
+        g_fp.on = on;
+        if (lua_isnumber(L, 2)) {
+            g_fp.pitch = std::clamp(static_cast<float>(lua_tonumber(L, 2)), -1.45f, 1.45f);
+        }
+    }
+    lua_pushboolean(L, g_fp.on ? 1 : 0);
+    return 1;
+}
+
+// The mouse turns the follow cameras directly (not through the right stick): radians and height units to add this tick. A mod menu or a freeze
+// holds the camera still. The "controls" setting mouse_look scales it (1 is the default).
+void ModsMouseLook(float *turn, float *height) {
+    *turn = 0.0f;
+    *height = 0.0f;
+    if (g.frozen || g.block_sticks) {
+        return;
+    }
+    float dx = 0.0f, dy = 0.0f;
+    InputMouseLook(&dx, &dy);
+    SharedLoad();
+    float k = 1.0f;
+    if (g.shared.contains("controls") && g.shared["controls"].is_object() && g.shared["controls"].contains("mouse_look") &&
+        g.shared["controls"]["mouse_look"].is_number()) {
+        k = std::clamp(g.shared["controls"]["mouse_look"].get<float>(), 0.1f, 5.0f);
+    }
+    *turn = -dx * 0.0030f * k;
+    *height = dy * 0.0800f * k;
+    g_fp.dy += *height;
+}
+
+// True for one call when any key or mouse button has just gone down (the title's "push start" takes any of them).
+bool ModsAnyKeyEdge() {
+    static std::array<bool, SDL_SCANCODE_COUNT> before{};
+    static unsigned                              mouse_before = 0;
+    int                                          count = 0;
+    const bool                                  *now = SDL_GetKeyboardState(&count);
+    bool                                         edge = false;
+    if (now != nullptr) {
+        for (int i = 0; i < count && i < SDL_SCANCODE_COUNT; i++) {
+            if (now[i] && !before[i]) {
+                edge = true;
+            }
+            before[i] = now[i];
+        }
+    }
+    unsigned mouse = SDL_GetMouseState(nullptr, nullptr);
+    if ((mouse & ~mouse_before) != 0) {
+        edge = true;
+    }
+    mouse_before = mouse;
+    return edge;
+}
+
+// ---- Menu mouse ------------------------------------------------------------------------------------------------------------------
+// In the game's menus the mouse is the pointing hand: the hand follows the pointer, the item under it becomes the selected one (the game's own
+// selection is walked there with pad presses, watching where the game puts its hand), a left click is Cross and a right click is Circle.
+// The hand is the stayframe sprite at texel (64,40) 32x32; the game draws it at its selected item, so its place tells where the selection is.
+
+bool ModsSprite(const char *texture, int &sx, int &sy, int sw, int sh, int u, int v, int tw, int th) {
+    static const bool log = std::getenv("DC_LOG_SPRITES") != nullptr;
+    if (log && texture != nullptr && sw <= 48 && sh <= 48) {
+        static std::set<std::string> seen;
+        std::string                  key = std::string(texture) + ":" + std::to_string(u) + "," + std::to_string(v) + "," + std::to_string(tw) + "," + std::to_string(th);
+        if (seen.insert(key).second) {
+            std::printf("[sprite] %s screen %d,%d %dx%d  texel %d,%d %dx%d", texture, sx, sy, sw, sh, u, v, tw, th);
+            std::printf("%c", 10);
+        }
+    }
+    if (const char *all = std::getenv("DC_LOG_SPRITES_FROM"); all != nullptr && texture != nullptr && ClockTickCount() >= std::atoll(all)) {
+        static int n = 0;
+        if (n++ < 300) {
+            std::printf("[sp] %s screen %d,%d %dx%d texel %d,%d %dx%d", texture, sx, sy, sw, sh, u, v, tw, th);
+            std::printf("%c", 10);
+        }
+    }
+    if (texture != nullptr && g_mm.enabled && sw == 32 && sh == 32 && tw == 32 && th == 32 &&
+        ((u == 64 && v == 40 && std::strcmp(texture, "stayframe") == 0) || (u == 210 && v == 248 && std::strcmp(texture, "option2") == 0) ||
+         (u == 96 && v == 96 && std::strcmp(texture, "gaiji") == 0) || (u == 0 && v == 0 && std::strcmp(texture, "icon01") == 0))) { // icon01: the title's hand
+        g_mm.hand_x = static_cast<float>(sx);
+        g_mm.hand_y = static_cast<float>(sy);
+        g_mm.hand_seen = ClockTickCount();
+        if (u == 0 && v == 0 && std::strcmp(texture, "icon01") == 0) {
+            g_mm.title_seen = g_mm.hand_seen; // the title menu is chosen by where the pointer is (ModsTitleHover), not by walking the selection
+        }
+        if (g_mm.free && g_mm.mouse_x > -500) { // the hand goes where the pointer is, its fingertip (right edge, middle) on it
+            sx = static_cast<int>(g_mm.mouse_x) - 30;
+            sy = static_cast<int>(g_mm.mouse_y) - 16;
+        }
+    }
+    return false;
+}
+
+// Pointer position in the 640x480 frame, or false when it cannot be read.
+bool PointerInFrame(float &x, float &y) {
+    if (const char *fake = std::getenv("DC_FAKE_MOUSE"); fake != nullptr && std::sscanf(fake, "%f,%f", &x, &y) == 2) {
+        return true; // a test aid: the pointer stays at this place in the 640x480 frame
+    }
+    SDL_Window *window = WindowHandle();
+    if (window == nullptr) {
+        return false;
+    }
+    float wx = 0, wy = 0;
+    SDL_GetMouseState(&wx, &wy);
+    int ww = 0, wh = 0, pw = 0, ph = 0;
+    SDL_GetWindowSize(window, &ww, &wh);
+    SDL_GetWindowSizeInPixels(window, &pw, &ph);
+    if (ww <= 0 || wh <= 0) {
+        return false;
+    }
+    gfx::LogicalMapping m = gfx::GetUiMapping(gfx::kMainTarget);
+    if (m.scale_x <= 0.0f || m.scale_y <= 0.0f) {
+        return false;
+    }
+    float px = wx * static_cast<float>(pw) / static_cast<float>(ww);
+    float py = wy * static_cast<float>(ph) / static_cast<float>(wh);
+    x = (px - m.offset_x) / m.scale_x;
+    y = (py - m.offset_y) / m.scale_y;
+    return true;
+}
+
+void MenuMouseTick() {
+    if (!g_mm.enabled) {
+        if (g_mm.free) {
+            MouseSetFree(false);
+            SDL_ShowCursor();
+            g_mm.free = false;
+        }
+        return;
+    }
+    long long now = ClockTickCount();
+    bool      menu = now - g_mm.hand_seen <= 3; // the game drew its hand a moment ago: a menu is up
+    if (menu && !g_mm.free) {
+        MouseSetFree(true);
+        SDL_HideCursor();
+        g_mm.free = true;
+        g_mm.prev_err = 1e9f;
+        g_mm.last_dir = 0;
+        g_mm.h_state = 0;
+        g_mm.step_y = 0;
+        g_mm.blocked_dir = 0;
+        g_mm.awaiting = false;
+        g_mm.ring_n = 0;
+    } else if (!menu && g_mm.free) {
+        MouseSetFree(false);
+        SDL_ShowCursor();
+        g_mm.free = false;
+        g_mm.mouse_x = -1000;
+        return;
+    }
+    if (!g_mm.free) {
+        return;
+    }
+    float mx = 0, my = 0;
+    if (!PointerInFrame(mx, my)) {
+        return;
+    }
+    g_mm.mouse_x = mx;
+    g_mm.mouse_y = my;
+    // clicks
+    Uint32 buttons = SDL_GetMouseState(nullptr, nullptr);
+    bool   left = (buttons & SDL_BUTTON_LMASK) != 0, right = (buttons & SDL_BUTTON_RMASK) != 0;
+    if (left && !g_mm.left_before) {
+        InputInjectButtons(kInputCross, 3);
+    }
+    if (right && !g_mm.right_before) {
+        InputInjectButtons(kInputCircle, 3);
+    }
+    g_mm.left_before = left;
+    g_mm.right_before = right;
+    if (now - g_mm.title_seen <= 3) {
+        return; // the title: ModsTitleHover picks the row
+    }
+    // walk the game's selection to the item under the pointer: press a direction, wait for the hand to settle, see whether it moved.
+    // The game's hand sways where it rests, so its place is averaged over a dozen ticks.
+    g_mm.ring_x[g_mm.ring_at] = g_mm.hand_x;
+    g_mm.ring_y[g_mm.ring_at] = g_mm.hand_y;
+    g_mm.ring_at = (g_mm.ring_at + 1) % 12;
+    g_mm.ring_n = std::min(12, g_mm.ring_n + 1);
+    {
+        float ax = 0, ay = 0;
+        for (int i = 0; i < g_mm.ring_n; i++) {
+            ax += g_mm.ring_x[i];
+            ay += g_mm.ring_y[i];
+        }
+        g_mm.prev_avg_x = g_mm.avg_x;
+        g_mm.prev_avg_y = g_mm.avg_y;
+        g_mm.avg_x = ax / static_cast<float>(g_mm.ring_n);
+        g_mm.avg_y = ay / static_cast<float>(g_mm.ring_n);
+    }
+    bool calm = std::fabs(g_mm.avg_y - g_mm.prev_avg_y) < 0.7f && std::fabs(g_mm.avg_x - g_mm.prev_avg_x) < 0.7f && g_mm.ring_n >= 12;
+    g_mm.settled = calm ? g_mm.settled + 1 : 0;
+    if (std::fabs(g_mm.avg_y - g_mm.press_hy) > 8.0f || std::fabs(g_mm.avg_x - g_mm.last_hx) > 8.0f) {
+        g_mm.moved_since = true;
+    }
+    if (left || right) {
+        return;
+    }
+    float tipx = g_mm.avg_x + 30.0f, tipy = g_mm.avg_y + 16.0f; // where the game's hand points
+    if (g_mm.awaiting) {
+        if (g_mm.settled >= 6 && (g_mm.moved_since || now - g_mm.press_tick > 40)) {
+            g_mm.awaiting = false;
+            if (!g_mm.moved_since) { // that direction does nothing here (the end of the list, a wall): leave it be until the pointer moves a way
+                g_mm.blocked_dir = g_mm.last_dir;
+                g_mm.parked_x = g_mm.mouse_x;
+                g_mm.parked_y = g_mm.mouse_y;
+            } else if (g_mm.last_dir == 1 || g_mm.last_dir == 2) {
+                g_mm.step_y = std::fabs(g_mm.avg_y - g_mm.press_hy);
+            } else if (g_mm.last_dir == 3 || g_mm.last_dir == 4) {
+                bool sideways = std::fabs(g_mm.avg_x - g_mm.press_hx) > 8.0f && std::fabs(g_mm.avg_y - g_mm.press_hy) < 10.0f;
+                g_mm.h_state = sideways ? 1 : -1;
+            }
+        } else {
+            return;
+        }
+    }
+    if (g_mm.settled < 4 || now < g_mm.next_press) {
+        return;
+    }
+    float dx = mx - tipx, dy = my - tipy;
+    float tolerance = g_mm.step_y > 4.0f ? g_mm.step_y * 0.5f + 1.0f : 15.0f; // half a row apart, so rows 32 apart (the title) still tell apart
+    int   dir = 0;
+    if (std::fabs(dy) > tolerance) {
+        dir = dy < 0 ? 1 : 2;
+    } else if (g_mm.h_state >= 0) {
+        if (dx > 110.0f) {
+            dir = 4;
+        } else if (dx < -50.0f) {
+            dir = 3;
+        }
+    }
+    if (dir != 0 && dir == g_mm.blocked_dir && std::fabs(mx - g_mm.parked_x) + std::fabs(my - g_mm.parked_y) < 24.0f) {
+        dir = 0;
+    }
+    if (dir == 0) {
+        return;
+    }
+    if (std::getenv("DC_LOG_MM") != nullptr) {
+        std::printf("[mm] dir %d dy %.0f hand %.0f,%.0f mouse %.0f,%.0f step %.0f", dir, dy, g_mm.hand_x, g_mm.hand_y, mx, my, g_mm.step_y);
+        std::printf("%c", 10);
+    }
+    unsigned short pad = dir == 1 ? kInputUp : dir == 2 ? kInputDown : dir == 3 ? kInputLeft : kInputRight;
+    InputInjectButtons(pad, 2);
+    g_mm.last_dir = dir;
+    g_mm.awaiting = true;
+    g_mm.moved_since = false;
+    g_mm.press_tick = now;
+    g_mm.press_hy = g_mm.avg_y;
+    g_mm.press_hx = g_mm.avg_x;
+    g_mm.last_hx = g_mm.avg_x;
+    g_mm.next_press = now + 4;
+}
+
+// The title menu's row under the pointer (0 new game, 1 load, 2 option), or -1 when the pointer has not moved since the last call or is on no row.
+// The rows are the start3 sprites at y 296, 328 and 360 (32 high); the game takes the row as its selection (patched into the title's menu step).
+int ModsTitleHover() {
+    static float last_x = -1, last_y = -1;
+    if (!g_mm.free || g_mm.mouse_x < -500) {
+        return -1;
+    }
+    float x = g_mm.mouse_x, y = g_mm.mouse_y;
+    bool  moved = std::fabs(x - last_x) + std::fabs(y - last_y) > 2.0f;
+    last_x = x;
+    last_y = y;
+    if (!moved || x < 190.0f || x > 450.0f || y < 296.0f || y >= 392.0f) {
+        return -1;
+    }
+    return static_cast<int>((y - 296.0f) / 32.0f);
+}
+
 void ModsNpcTalkTick(int villager_id) {
     g_talk_id = villager_id;
     g_talk_tick = ClockTickCount();
 }
 
+// Co-op: both games must shuffle a town's villager schedule the same way, so while the launcher has switched co-op on the shuffle is seeded from
+// the map. The ordinary random stream is restarted afterwards.
+unsigned ModsVillagerSeed(int map_no) {
+    if (std::getenv("DC_NO_VSEED") != nullptr) {
+        return 0u;
+    }
+    const char *e = std::getenv("DC_LAUNCH_COOP");
+    return (e != nullptr && e[0] != 0) ? 12345u + static_cast<unsigned>(map_no) * 7919u : 0u;
+}
+unsigned ModsVillagerReseed() { // a fresh random seed for the game's own generator, once the shared shuffle is done
+    return static_cast<unsigned>(ClockTickCount()) * 2654435761u ^ static_cast<unsigned>(std::time(nullptr)) ^ 0x9E3779B9u;
+}
+
 // Called at the end of EdMoveVillager: villagers that follow the host (or stand still while talked to) are put where they belong.
 void ModsNpcStep() {
+    if (g_town_frozen) { // a mod menu is open in the town: everyone stands still
+        for (int i = 0; i < 10; i++) {
+            CNPCharacter &v = EdVillager[i];
+            if (v.initialized == 0) {
+                continue;
+            }
+            auto at = g_town_freeze_pos.find(v.villager_id);
+            if (at == g_town_freeze_pos.end()) {
+                float pos[4] = {0, 0, 0, 1};
+                v.GetPosition(pos);
+                at = g_town_freeze_pos.emplace(v.villager_id, std::array<float, 3>{pos[0], pos[1], pos[2]}).first;
+            }
+            v.SetPosition(at->second[0], at->second[1], at->second[2]);
+            v.sequence_enabled = 0;
+        }
+        return;
+    }
     if (g_npc_puppets.empty() && g_npc_hold.empty()) {
         return;
     }

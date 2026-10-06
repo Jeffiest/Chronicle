@@ -447,7 +447,13 @@ void InputInit() {
     } else {
         std::fprintf(stderr, "input: no gamepads: %s\n", SDL_GetError());
     }
-    const Config &config = ConfigGet();
+    InputApplyConfig(ConfigGet());
+    WindowAddEventHook(InputHandleEvent);
+    MouseStart();
+}
+
+void InputApplyConfig(const Config &config) {
+    InputResetBindings();
     for (const ConfigKeyBinding &binding : config.key_bindings) {
         std::vector<std::string_view> names(binding.keys.begin(), binding.keys.end());
         if (!InputBindKeys(binding.action, names)) {
@@ -468,8 +474,6 @@ void InputInit() {
         mouse.release_scancodes.push_back(scancode);
     }
     InputSetMouseSettings(mouse);
-    WindowAddEventHook(InputHandleEvent);
-    MouseStart();
 }
 
 void InputShutdown() {

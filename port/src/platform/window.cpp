@@ -18,6 +18,31 @@ std::vector<void (*)(const SDL_Event &)> g_hooks;
     std::exit(1);
 }
 
+struct Placement {
+    int  width;
+    int  height;
+    bool fullscreen;
+};
+
+Placement Place(const WindowConfig &config, SDL_DisplayID display) {
+    Placement placement = {config.width, config.height, config.fullscreen && !config.headless};
+    if (placement.width > 0 && placement.height > 0) {
+        return placement;
+    }
+    const SDL_DisplayMode *desktop = config.headless ? nullptr : SDL_GetDesktopDisplayMode(display);
+    // A window cannot be given the whole monitor: the desktop keeps its panels. Fullscreen can.
+    if (placement.width <= 0 && placement.height <= 0 && desktop != nullptr) {
+        placement.fullscreen = true;
+    }
+    if (placement.width <= 0) {
+        placement.width = desktop != nullptr ? desktop->w : 1280;
+    }
+    if (placement.height <= 0) {
+        placement.height = desktop != nullptr ? desktop->h : 960;
+    }
+    return placement;
+}
+
 } // namespace
 
 void WindowInit(const WindowConfig &config) {
@@ -43,29 +68,14 @@ void WindowInit(const WindowConfig &config) {
         }
 #endif
     }
-    if (config.fullscreen && !config.headless) {
+    Placement placement = Place(config, SDL_GetPrimaryDisplay());
+    if (placement.fullscreen) {
         flags |= SDL_WINDOW_FULLSCREEN;
-    }
-    int width = config.width;
-    int height = config.height;
-    if (width <= 0 || height <= 0) {
-        const SDL_DisplayMode *desktop =
-            config.headless ? nullptr : SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
-        // A window cannot be given the whole monitor: the desktop keeps its panels. Fullscreen can.
-        if (width <= 0 && height <= 0 && desktop != nullptr) {
-            flags |= SDL_WINDOW_FULLSCREEN;
-        }
-        if (width <= 0) {
-            width = desktop != nullptr ? desktop->w : 1280;
-        }
-        if (height <= 0) {
-            height = desktop != nullptr ? desktop->h : 960;
-        }
     }
     SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Dark Cloud");
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, placement.width);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, placement.height);
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, static_cast<Sint64>(flags));
     // Without a Vulkan surface, macOS would give the window OpenGL, which the offscreen driver cannot load.
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, !config.vulkan);
@@ -74,6 +84,24 @@ void WindowInit(const WindowConfig &config) {
     if (g_window == nullptr) {
         Fatal("SDL_CreateWindow");
     }
+}
+
+void WindowSetMode(const WindowConfig &config) {
+    if (g_window == nullptr || config.headless) {
+        return;
+    }
+    SDL_DisplayID display = SDL_GetDisplayForWindow(g_window);
+    Placement     placement = Place(config, display);
+    // Some platforms change a window asynchronously: SDL_SyncWindow waits for the change, so the
+    // pixel-size event that resizes the renderer, as for a window resized by hand, is in the queue.
+    SDL_SetWindowFullscreen(g_window, placement.fullscreen);
+    SDL_SyncWindow(g_window);
+    if (placement.fullscreen) {
+        return;
+    }
+    SDL_SetWindowSize(g_window, placement.width, placement.height);
+    SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+    SDL_SyncWindow(g_window);
 }
 
 void WindowShutdown() {

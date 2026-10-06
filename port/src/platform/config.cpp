@@ -10,6 +10,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 
@@ -17,7 +18,8 @@
 
 namespace {
 
-Config g_config;
+Config                        g_config;
+std::vector<ConfigChangeHook> g_change_hooks;
 
 std::string_view Trim(std::string_view text) {
     constexpr std::string_view kSpace = " \t\r\n";
@@ -253,6 +255,27 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     return false;
 }
 
+bool WriteReplacing(const std::filesystem::path &path, std::string_view text) {
+    std::filesystem::path temp = path;
+    temp += ".tmp";
+    std::error_code error;
+    {
+        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+        file << text;
+        file.close();
+        if (!file) {
+            std::filesystem::remove(temp, error);
+            return false;
+        }
+    }
+    std::filesystem::rename(temp, path, error);
+    if (error) {
+        std::filesystem::remove(temp, error);
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 const Config &ConfigGet() {
@@ -328,10 +351,7 @@ bool ConfigSave() {
     std::filesystem::path path = PathsSaveRoot() / "config.json";
     std::error_code       error;
     std::filesystem::create_directories(path.parent_path(), error);
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    file << ConfigSerialize(g_config);
-    file.flush();
-    if (!file) {
+    if (!WriteReplacing(path, ConfigSerialize(g_config))) {
         std::fprintf(stderr, "config: could not save %s\n", PathsDisplay(path).c_str());
         return false;
     }
@@ -355,4 +375,32 @@ bool ConfigLoad() {
     g_config = ConfigParse(text.str());
     std::fprintf(stderr, "config: loaded %s\n", PathsDisplay(path).c_str());
     return true;
+}
+
+void ConfigAddChangeHook(ConfigChangeHook hook) {
+    if (std::ranges::find(g_change_hooks, hook) == g_change_hooks.end()) {
+        g_change_hooks.push_back(hook);
+    }
+}
+
+void ConfigRemoveChangeHook(ConfigChangeHook hook) {
+    std::erase(g_change_hooks, hook);
+}
+
+bool ConfigChange(const Config &config) {
+    Config after = ConfigParse(ConfigSerialize(config));
+    if (after == g_config) {
+        return true;
+    }
+    Config before = std::exchange(g_config, std::move(after));
+    bool   saved = ConfigSave();
+    for (ConfigChangeHook hook : g_change_hooks) {
+        hook(before, g_config);
+    }
+    return saved;
+}
+
+bool ConfigAppliesOnRestart(std::string_view key) {
+    // DebugMode is set from it once, before the first mode; the developer-menu chord reads it live.
+    return key == "game.debug_mode";
 }

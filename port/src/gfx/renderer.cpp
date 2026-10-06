@@ -848,6 +848,13 @@ void RendererShutdown() {
 
 void RendererResize() { g.resize_pending = true; }
 
+void SetPresentMode(PresentMode mode) {
+    if (mode != g.config.present_mode) {
+        g.config.present_mode = mode;
+        g.resize_pending = true;
+    }
+}
+
 namespace detail {
 namespace {
 

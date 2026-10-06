@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <system_error>
 #include <vector>
 
@@ -33,12 +32,6 @@ char *PastNext64(char *pointer) {
     return pointer + (64 - reinterpret_cast<std::uintptr_t>(pointer) % 64);
 }
 
-std::size_t ReadFile(const fs::path &path, void *data, std::size_t size) {
-    std::ifstream file(path, std::ios::binary);
-    file.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
-    return static_cast<std::size_t>(file.gcount());
-}
-
 s32 &LastFileNo() {
     return static_cast<s32 *>(SaveData->GetConfigData())[17];
 }
@@ -56,7 +49,7 @@ bool WriteConfig() {
 
 // Reads file_no's whole save into g_image: this version's, and every checksum right.
 bool ReadImage(int file_no, const char *version) {
-    if (ReadFile(SaveSlotPath(file_no), g_image, kImageSize) < kImageSize ||
+    if (FilesRead(SaveSlotPath(file_no), g_image, kImageSize) < kImageSize ||
         std::strncmp(g_image + sizeof(CSaveData), version, kVersionSize) != 0) {
         return false;
     }
@@ -153,7 +146,7 @@ PC_OVERRIDE int CMemoryCardAccess::GetDir() {
 // directory did.
 PC_OVERRIDE int CMemoryCardAccess::LoadSysConfig() {
     char        data[sizeof(SV_CONFIG_SYS) + sizeof(s32)];
-    std::size_t size = ReadFile(SaveConfigPath(), data, sizeof(data));
+    std::size_t size = FilesRead(SaveConfigPath(), data, sizeof(data));
 
     if (size < sizeof(SV_CONFIG_SYS)) {
         return 1;
@@ -213,7 +206,7 @@ PC_OVERRIDE int CMemoryCardAccess::GetSaveFileInfoFromMc(int file_no) {
     }
 
     for (int dungeon = 0; dungeon < 7; dungeon++) {
-        info.quest_total += save->QuestDungeon(dungeon, 0);
+        info.quest_total += std::clamp(save->QuestDungeon(dungeon, 0), 0, 9999);
     }
 
     if (info.quest_total > 9999) {

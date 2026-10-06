@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <libpad.h>
 
+#include <climits>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,10 @@
 #include "platform_fixture.hpp"
 #include "save_slots.hpp"
 #include "savedata.hpp"
+
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
 
 // The save screens' list and CMemoryCardAccess on flat files, driven as the save menu does:
 // SetFuncNo, then Step until the operation finishes, on a save root in a temporary directory.
@@ -277,7 +282,7 @@ TEST(SaveSlots, UnusableFilesStayAndKeepTheirNumbers) {
     std::vector<char> image = ReadFile(root / "darkcloud1");
 
     // Another version's save, one whose map word is damaged, a directory, and a whole save whose
-    // map lies past the boards' table of names.
+    // map lies past the boards' table of names and whose quest counts are negative.
     std::vector<char> other = image;
     std::strcpy(other.data() + kSaveDataSize, "darkcloudVer1.0");
     WriteFile(root / "darkcloud4", other);
@@ -286,15 +291,24 @@ TEST(SaveSlots, UnusableFilesStayAndKeepTheirNumbers) {
     WriteFile(root / "darkcloud0", damaged);
     fs::create_directory(root / "darkcloud2");
     MapNoOf(g_save) = 0x7fffffff;
+    g_save.QuestDungeon(0, -8);
+    g_save.QuestDungeon(6, INT_MIN);
     g_mc.SetBuff(g_menu_buffer);
     g_mc.file_no = 5;
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_SAVE) == 1);
 
+    std::vector<int> files = {0, 1, 2, 4, 5};
+#ifndef _WIN32
+    // A FIFO is not read, which would wait for a writer.
+    ASSERT_TRUE(mkfifo((root / "darkcloud7").c_str(), 0600) == 0);
+    files.push_back(7);
+#endif
+
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_GET_ALL_SAVE_FILE_INFO) == 1);
-    ASSERT_TRUE((SaveSlots.files == std::vector<int>{0, 1, 2, 4, 5}));
+    ASSERT_TRUE(SaveSlots.files == files);
     ASSERT_TRUE(SaveSlots.saves.size() == 2);
     ASSERT_TRUE(SaveSlots.saves[0].file_no == 2 && SaveSlots.saves[1].file_no == 6);
-    ASSERT_TRUE(SaveSlots.saves[1].map_no == 0);
+    ASSERT_TRUE(SaveSlots.saves[1].map_no == 0 && SaveSlots.saves[1].quest_total == 0);
     ASSERT_TRUE(SaveSlotFirstFree(SaveSlots.files) == 3);
     ASSERT_TRUE(ReadFile(root / "darkcloud4") == other && ReadFile(root / "darkcloud0") == damaged);
     g_mc.file_no = 0;
@@ -315,7 +329,7 @@ TEST(SaveSlots, UnusableFilesStayAndKeepTheirNumbers) {
         ASSERT_TRUE(entry.path().extension() != ".tmp") << entry.path();
     }
 
-    g_mc.file_no = 7;
+    g_mc.file_no = 8;
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_DELETE) == 1);
 
     fs::remove_all(root);

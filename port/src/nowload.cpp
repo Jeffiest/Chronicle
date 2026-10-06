@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "gameloop.hpp"
 #include "gfx/gfx.hpp"
 #include "mainselect.hpp"
@@ -19,8 +18,7 @@
 
 namespace {
 
-// What retail's PAL 320000-byte stack array holds, plus the sector-rounded tail LoadFile2 writes.
-// NTSC's array was 64000 bytes; the larger buffer serves both discs.
+// What retail's 320000-byte stack array holds, plus the sector-rounded tail LoadFile2 writes.
 constexpr std::size_t kArchiveBytes = 320000 + 2048;
 
 int count;
@@ -227,8 +225,7 @@ PC_OVERRIDE int VSyncCallBack_Load(int field) {
 
         if (map_title_no == 0x321) {
             if (logo_count == 0) {
-                // On a PAL disc, languages past the first two show a full-screen logo image instead.
-                if (!PortNtscData() && LanguageCode >= LANG_ENGLISH_UK) {
+                if (nl_tex.width >= 640) {
                     Show(&nl_tex, CRect_i_(0, 0x10, 0x280, 0x1C0), CRect_i_(0, 0, 0x280, 0x1C0), (u_char) (int) col_cnt);
                 } else {
                     Show(&nl_tex, CRect_i_(0x60, 0xC0, 0x1C0, 0x40), CRect_i_(0, 0, 0x1C0, 0x40), (u_char) (int) col_cnt);

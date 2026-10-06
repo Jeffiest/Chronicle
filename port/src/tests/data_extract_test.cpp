@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "data_fixture.hpp"
 
 using namespace datafix;
@@ -133,6 +135,51 @@ TEST(DataExtract, IsIdempotent) {
     dcdata::Summary repaired = dcdata::Extract(dcdata::OpenArchive(iso), out, nullptr);
     ASSERT_TRUE(repaired.written == 1 && repaired.kept == kStandardReachable - 1);
     CheckExtracted(out, disc);
+    fs::remove_all(dir);
+}
+
+TEST(DataExtract, NormalizesNtscAssets) {
+    fs::path dir = TempDir("normalize_ntsc");
+    Bytes   start = Pattern(32, 7);
+    Bytes   event(24, 0);
+    Put32(event, 20, 24);
+    event.insert(event.end(), {1, 2, 3, 4});
+    Bytes image(16 + 2 * 48 + 8, 0);
+    std::memcpy(image.data(), "IM2", 3);
+    Put32(image, 4, 2);
+    std::memcpy(image.data() + 16, "other", 5);
+    Put32(image, 16 + 32, 16 + 2 * 48);
+    std::memcpy(image.data() + 64, "wepstatus", 9);
+    Put32(image, 64 + 32, 16 + 2 * 48 + 4);
+    Disc disc = MakeDisc({
+        {"gedit/system/esys.pak", MakePack({{"cursor.img", Pattern(8, 1)}})},
+        {"meswin/mes_tex.pak", Pattern(16, 2)},
+        {"rmdat/rmdat1.pak", MakePack({{"start.img", start}})},
+        {"dun/img/us/dname00.img", Pattern(16, 3)},
+        {"dun/script/d01/event.stb", event},
+        {"commenu/a_eng/dungeon/dunmenu5.pak", MakePack({{"btlmenu.img", image}})}
+    });
+    fs::path out = dir / "data";
+    dcdata::Archive archive = dcdata::OpenArchive(WriteStandardIso(dir, disc));
+    dcdata::Extract(archive, out, nullptr);
+
+    EXPECT_EQ(ReadBytes(out / "meswin/mes_tex_2.pak"), disc.files[1].data);
+    EXPECT_EQ(ReadBytes(out / "dun/img/us_e/dname00.img"), disc.files[3].data);
+    auto members = dcdata::ReadPack(ReadBytes(out / "normalized/rmdat/rmdat1.pak"));
+    ASSERT_EQ(members.size(), 5);
+    EXPECT_EQ(members[1].name, "start_f.img");
+    EXPECT_EQ(members[1].data, start);
+    EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_2.mes"), (Bytes{1, 2, 3, 4}));
+    auto battle = dcdata::ReadPack(ReadBytes(out / "normalized/commenu/a_eng/dungeon/dunmenu5.pak"));
+    ASSERT_EQ(battle.size(), 2);
+    EXPECT_EQ(battle[1].name, "btlmenu2.img");
+    EXPECT_EQ(dcdata::Le32(battle[1].data.data() + 4), 1);
+    EXPECT_EQ(battle[1].data.size(), 68);
+    EXPECT_TRUE(dcdata::Mismatched(dcdata::ParseIndex(disc.hd2), out).empty());
+
+    dcdata::Summary again = dcdata::Extract(archive, out, nullptr);
+    EXPECT_EQ(again.written, 0);
+    EXPECT_EQ(again.kept, 6);
     fs::remove_all(dir);
 }
 

@@ -19,7 +19,6 @@
 #include "collision.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "dataset.hpp"
 #include "debugfont.hpp"
 #include "dngstatusdata.hpp"
@@ -170,7 +169,11 @@ PC_OVERRIDE int EditInit(void *param) {
     InitializeDataBuffer();
     SetDataBuffer(&VisualData, 100);
     SetDataBuffer(&EtcDataBuffer, 40000);
+#ifdef PAL
     SetDataBuffer(&EdScriptBuffer, 20000);
+#else
+    SetDataBuffer(&EdScriptBuffer, 16000);
+#endif
     SetDataBuffer(&EPartsInfoBuff, 8000);
     SetDataBuffer(&CharaBuffer, 115000);
     SetDataBuffer(&TextureData, 10);
@@ -459,15 +462,12 @@ PC_OVERRIDE int EditInit(void *param) {
     EditMes1.SetBuff(talk_mes);
     EdMesBuffer.Align64();
     short *system_mes = (short *) (EdMesBuffer.base + EdMesBuffer.used * 16);
-
-    // On the NTSC disc the editor's system messages are read from editsys.bin whatever the language.
-    if (PortNtscData()) {
-        LoadFile("gedit/system/editsys.bin", system_mes, &mes_size);
-    } else {
-        sprintf(mes_path, "gedit/system/editsys%s.mes", language);
-        LoadFile(mes_path, system_mes, &mes_size);
-    }
-
+#ifdef PAL
+    sprintf(mes_path, "gedit/system/editsys%s.mes", language);
+    LoadFile(mes_path, system_mes, &mes_size);
+#else
+    LoadFile("gedit/system/editsys.bin", system_mes, &mes_size);
+#endif
     EdMesBuffer.Alloc((mes_size >> 4) + 1);
     EditSystemMes.tex_buff = MesWinTexBuff_01;
     EditSystemMes.tex_block = 26;

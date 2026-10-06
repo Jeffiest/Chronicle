@@ -17,9 +17,7 @@
 #include "clothread.hpp"
 #include "clsmes.hpp"
 #include "collisiondata.hpp"
-#include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "debugfont.hpp"
 #include "dispctrl.hpp"
 #include "dngmessageman.hpp"
@@ -70,9 +68,7 @@
 
 // The dungeon's MainDraw and LoaderLoop, replaced to drop what the renderer has no use for: the VU1
 // program call each opens with and MainDraw's wait for GIF path idle before the frame grab, which
-// the renderer orders itself. Everything else is retail's, PAL's branch but for the floor title,
-// which draws as the disc's floor texture is laid out. The texture loaders below choose their files
-// by disc, and Jinn's and Ruby's actions keep NTSC's timing.
+// the renderer orders itself. Everything else is retail's, PAL's branch only.
 //
 // port/include/stubs/dun/gameloop.hpp renames the unit's MainDraw to DunMainDraw, apart from
 // editloop's, as the PS2 link does.
@@ -87,14 +83,12 @@ struct BOMB_INFO {
 };
 
 extern BOMB_INFO       BombInfo;
-extern CDataAlloc2<1>  BtStartLogoBuffer;
 extern CItemBombEffect CBomb__2[3];
 extern CDebugFont      CDbgMsg;
 extern CRunEffect      CRunFx__2;
 extern CFrameVu1      *CharaFrame;
 extern CCharacter      CharaHand;
 extern ClsMes          DngMes1;
-extern s32             gameTask;
 extern CHitValue       HitValue[32];
 extern char           *MapInfoNameArea[7];
 extern s32             MonstorNameOff;
@@ -165,137 +159,6 @@ float CharaHeight(CUserStatus *status) {
 
 CTexture *NamedTexture(const char *name) {
     return TexManager.GetTexture(const_cast<char *>(name), -1);
-}
-
-// The floor title as an NTSC disc's floor texture lays it out: the caption in pieces, then the
-// floor number after it. A PAL disc's texture holds a whole caption, which StartMessageDraw draws.
-void DrawFloorTitleNtsc() {
-    int shift;
-    int floor_no;
-    int digit_x;
-
-    shift = 0;
-    floor_no = 0;
-
-    if (UserStatus->cur_floor >= 9) {
-        floor_no = -0x24;
-    }
-
-    if (LanguageCode == LANG_JAPANESE) {
-        switch (selectMapNo) {
-            case DUNGEON_DIVINE_BEAST_CAVE:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0xE2, 0xAA, 0x72, 0x32), CRect_i_(0, 0, 0x72, 0x32), rogoAlphaA[2]);
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x17D, 0xAA, 0x4C, 0x32), CRect_i_(0x72, 0, 0x4C, 0x32), rogoAlphaA[2]);
-                break;
-            case DUNGEON_WISE_OWL_FOREST:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0xBE, 0xAA, 0xBE, 0x32), CRect_i_(0, 0, 0xBE, 0x32), rogoAlphaA[2]);
-                shift = 0x40;
-                break;
-            case DUNGEON_SHIPWRECK:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0xF5, 0xAA, 0x4C, 0x32), CRect_i_(0, 0, 0x4C, 0x32), rogoAlphaA[2]);
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x159, 0xAA, 0x4C, 0x32), CRect_i_(0x4C, 0, 0x4C, 0x32), rogoAlphaA[2]);
-                shift = -0x24;
-                break;
-            case DUNGEON_SUN_MOON_TEMPLE:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0xE8, 0xAA, 0x98, 0x32), CRect_i_(0, 0, 0x98, 0x32), rogoAlphaA[2]);
-                shift = 0x40;
-                break;
-            case DUNGEON_MOON_SEA:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0xD7, 0xAA, 0x4C, 0x32), CRect_i_(0, 0, 0x4C, 0x32), rogoAlphaA[2]);
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x13B, 0xAA, 0xBE, 0x32), CRect_i_(0x4C, 0, 0xBE, 0x32), rogoAlphaA[2]);
-                shift = -0x40;
-                break;
-            case DUNGEON_GALLERY_OF_TIME:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x135, 0xAA, 0x98, 0x32), CRect_i_(0, 0, 0x98, 0x32), rogoAlphaA[2]);
-                shift = -0x40;
-                break;
-        }
-
-        if (BtUraDongeon != 0) {
-            set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x120, 0xE6, 0x40, 0x38), CRect_i_(0x13A, 0x78, 0x40, 0x38), rogoAlphaA[2]);
-        } else if (UserStatus->res_limit_zone_current >= 0) {
-            set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0xD4, 0xE6, 0xD8, 0x30), CRect_i_(0, 0x78, 0xD8, 0x30), rogoAlphaA[2]);
-        }
-    }
-
-    if (LanguageCode > LANG_JAPANESE) {
-        switch (selectMapNo) {
-            case DUNGEON_DIVINE_BEAST_CAVE:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0x122, 0xAA, 0x2D, 0x32), CRect_i_(0, 0, 0x2D, 0x32), rogoAlphaA[2]);
-                shift = -0x14;
-                break;
-            case DUNGEON_WISE_OWL_FOREST:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0xA0, 0xAA, 0xDA, 0x32), CRect_i_(0, 0, 0xDA, 0x32), rogoAlphaA[2]);
-                shift = 0x40;
-
-                if (UserStatus->cur_floor < 9) {
-                    shift = 0x20;
-                }
-
-                break;
-            case DUNGEON_SHIPWRECK:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0xC8, 0xAA, 0x91, 0x32), CRect_i_(0, 0, 0x91, 0x32), rogoAlphaA[2]);
-
-                if (UserStatus->cur_floor >= 9) {
-                    shift = 0x20;
-                }
-
-                break;
-            case DUNGEON_SUN_MOON_TEMPLE:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0xDC, 0xAA, 0x8E, 0x32), CRect_i_(0, 0, 0x8E, 0x32), rogoAlphaA[2]);
-                shift = 0x10;
-                break;
-            case DUNGEON_MOON_SEA:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0xC3, 0xAA, 0x4B, 0x32), CRect_i_(0, 0, 0x4B, 0x32), rogoAlphaA[2]);
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x13B, 0xAA, 0xC0, 0x32), CRect_i_(0x60, 0, 0xC0, 0x32), rogoAlphaA[2]);
-                shift = -0x40;
-                break;
-            case DUNGEON_GALLERY_OF_TIME:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x108, 0xAA, 0xE1, 0x32), CRect_i_(0, 0, 0xE1, 0x32), rogoAlphaA[2]);
-                shift = -0x80;
-                break;
-            case DUNGEON_DEMON_SHAFT:
-                set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(floor_no + 0xDC, 0xAA, 0x8E, 0x32), CRect_i_(0, 0, 0x8E, 0x32), rogoAlphaA[2]);
-                shift = 0x10;
-                break;
-        }
-
-        if (BtUraDongeon != 0) {
-            set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0x110, 0xE6, 0x60, 0x38), CRect_i_(0x110, 0x78, 0x60, 0x38), rogoAlphaA[2]);
-        } else if (UserStatus->res_limit_zone_current >= 0) {
-            set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(0xD4, 0xE6, 0xF0, 0x30), CRect_i_(0, 0x78, 0xF0, 0x30), rogoAlphaA[2]);
-        }
-    }
-
-    floor_no = UserStatus->cur_floor + 1;
-
-    if (selectMapNo == DUNGEON_GALLERY_OF_TIME) {
-        floor_no = BtGetFloorLevel(floor_no - 1);
-    }
-
-    if (floor_no < 10) {
-        digit_x = floor_no % 10 * 0x26;
-        set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(shift + 0x15A, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
-    }
-
-    if (floor_no >= 10 && floor_no < 100) {
-        digit_x = floor_no / 10 * 0x26;
-        set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(shift + 0x136, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
-        digit_x = floor_no % 10 * 0x26;
-        set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(shift + 0x15A, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
-    }
-
-    if (floor_no >= 100) {
-        int digit = floor_no / 100;
-
-        digit_x = digit * 0x26;
-        floor_no -= digit * 100;
-        set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(shift + 0x112, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
-        digit_x = floor_no / 10 * 0x26;
-        set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(shift + 0x136, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
-        digit_x = floor_no % 10 * 0x26;
-        set2DSprite(Vif1Packet, TEX_Floor1, CRect_i_(shift + 0x15A, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
-    }
 }
 
 } // namespace
@@ -683,12 +546,7 @@ PC_OVERRIDE void DunMainDraw() {
         if (rogoSwitch2 == 1 && BtEventInfo.floor_title_off == 0) {
             TEX_Floor1 = TexManager.GetTexture(floor_name, -1);
             TexManager.ReloadTexture(Vif1Packet, 8);
-
-            if (PortNtscData()) {
-                DrawFloorTitleNtsc();
-            } else {
-                StartMessageDraw(TEX_Floor1, selectMapNo, UserStatus->cur_floor, BtUraDongeon, rogoAlphaA[2]);
-            }
+            StartMessageDraw(TEX_Floor1, selectMapNo, UserStatus->cur_floor, BtUraDongeon, rogoAlphaA[2]);
         }
 
         TexManager.ReloadTexture(Vif1Packet, 2);
@@ -858,9 +716,7 @@ PC_OVERRIDE void DunMainDraw() {
 extern LOADTEXTURE_INFO2 texdata__2[];
 
 // Retail formats the floor's gate key image over the third name in texdata__2, a string literal the
-// PS2 left writable and a host need not; the port formats it into a buffer of its own. A PAL disc has
-// the dungeon's base textures and the message window's images in a pack for each language; an NTSC
-// disc has one pack of each, and the message window's images in the base pack.
+// PS2 left writable and a host need not; the port formats it into a buffer of its own.
 PC_OVERRIDE void LoadBaseTexture() {
     LOADTEXTURE_INFO2 info[96];
     int               size;
@@ -870,11 +726,9 @@ PC_OVERRIDE void LoadBaseTexture() {
 
     snprintf(gate_key, sizeof(gate_key), "gatekey0%d.img", selectMapNo + 1);
 
-    char path[64] = "dun/pack/dun/pack/teximg2.pac";
+    char path[64] = "dun/pack/teximg2.pac";
 
-    if (PortNtscData()) {
-        strcpy(path, "dun/pack/teximg2.pac");
-    } else if (LanguageCode > LANG_JAPANESE) {
+    if (LanguageCode > LANG_JAPANESE) {
         sprintf(path, "dun/pack/teximg2_%d.pac", LanguageCode);
     }
 
@@ -910,7 +764,7 @@ PC_OVERRIDE void LoadBaseTexture() {
     info[i].name = NULL;
     TexManager.LoadTextureBlock(-1, info);
 
-    // The message window's pages, and the three images the pack supplies in place of
+    // The message window's pages, and the three images the language's own pack supplies in place of
     // the names written here.
     LOADTEXTURE_INFO2 mes_info[8] = {
         {(char *) "#mes_frame_buff#640#480#4", 0x1A, 0},
@@ -921,16 +775,14 @@ PC_OVERRIDE void LoadBaseTexture() {
         {(char *) "meswin/syst04.img",         0x1A, 0},
     };
 
-    if (!PortNtscData()) {
-        char mes_path[64] = "meswin/mes_tex.pak";
+    char mes_path[64] = "meswin/mes_tex.pak";
 
-        if (LanguageCode > LANG_JAPANESE) {
-            sprintf(mes_path, "meswin/mes_tex_%d.pak", LanguageCode);
-        }
-
-        LoadFile(mes_path, read_buffer, NULL);
-        wait_now_loading_vsync();
+    if (LanguageCode > LANG_JAPANESE) {
+        sprintf(mes_path, "meswin/mes_tex_%d.pak", LanguageCode);
     }
+
+    LoadFile(mes_path, read_buffer, NULL);
+    wait_now_loading_vsync();
 
     mes_info[3].name = (char *) GetPackFile(read_buffer, (char *) "gaiji.img", NULL);
     mes_info[4].name = (char *) GetPackFile(read_buffer, (char *) "fuki256.img", NULL);
@@ -975,49 +827,4 @@ PC_OVERRIDE int LoaderLoop() {
     TexManager.ReloadTexture(Vif1Packet, 12);
     CDbgMsg.Draw();
     return chosen;
-}
-PC_OVERRIDE int LoadStartLogo(int map) {
-    const char *dungeon_name[7] = {
-        "dname00.img",
-        "dname01.img",
-        "dname02.img",
-        "dname03.img",
-        "dname04.img",
-        "dname05.img",
-        "dname06.img",
-    };
-    const char *floor_texture[7] = {
-        "floor00",
-        "floor01",
-        "floor02",
-        "floor03",
-        "floor04",
-        "floor05",
-        "floor06",
-    };
-    char *files[5];
-    char  path[32];
-    int   size;
-    int   blocks;
-
-    // Only the one texture is loaded; the NULL after it ends the list. An NTSC disc has the American
-    // image for every language; a PAL disc has one for each.
-    if (PortNtscData()) {
-        sprintf(path, "dun/img/us/%s", dungeon_name[map]);
-        files[0] = path;
-    } else {
-        files[0] = NameExchg(const_cast<char *>(dungeon_name[map]), 0);
-    }
-
-    files[1] = NULL;
-    BtStartLogoBuffer.used = 0;
-    size = LoadTempTexture(files, 8, (char *) BtStartLogoBuffer.base);
-    blocks = (((size >> 6) + 1) << 6) >> 4;
-    BtStartLogoBuffer.Alloc(blocks);
-
-    char *name = const_cast<char *>(floor_texture[map]);
-
-    TEX_Floor1 = TexManager.GetTexture(name, -1);
-    strcpy(floor_name, name);
-    return blocks;
 }

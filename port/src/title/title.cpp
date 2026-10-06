@@ -15,7 +15,6 @@
 #include "character.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "fireomni.hpp"
 #include "frame.hpp"
 #include "framevu1.hpp"
@@ -233,35 +232,34 @@ static void InitProcA() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[2].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[2].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[2].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[3].name = (char *) GetPackFile(read_buffer, "effect.img", 0);
     textures[4].name = (char *) GetPackFile(read_buffer, "c01d01.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "c12a01.img", 0);
@@ -587,35 +585,34 @@ static void InitProcB() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[5].name = (char *) GetPackFile(read_buffer, "effect.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "d01m01.img", 0);
     textures[7].name = (char *) GetPackFile(read_buffer, "c01d01.img", 0);
@@ -717,8 +714,13 @@ static void InitProcB() {
     sceVu0FVECTOR corner3 = {380.0f, 0.0f, -250.0f, 1.0f};
 
     Water__2.SetVertex(corner0, corner1, corner2, corner3);
+#ifdef PAL
     float zero = 0.0f;
     Water__2.frame.SetPosition(zero, -4.0f, zero);
+#else
+    typedef float bp0, bp1, bp2;
+    Water__2.frame.SetPosition(0.0f, -4.0f, 0.0f);
+#endif
     Water__2.SetSize(24, 24, &WaterBuffer);
     Water__2.SetParam(0.1f, 0.015f, 0.0f, 2.0f);
     Water__2.SetColor(100, 110, 120, 128);
@@ -898,35 +900,34 @@ static void InitProcC() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[4].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[4].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[4].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[5].name = (char *) GetPackFile(read_buffer, "effect.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "s04b01.img", 0);
     textures[7].name = (char *) GetPackFile(read_buffer, "s04b02.img", 0);
@@ -1132,35 +1133,34 @@ static void InitProcD() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[4].name = (char *) GetPackFile(read_buffer, "d02i01.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "c01d01.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "c01d01an.img", 0);
@@ -1310,35 +1310,34 @@ static void InitProcE() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[4].name = (char *) GetPackFile(read_buffer, "s4501.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "c01d01.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "c01d01an.img", 0);
@@ -1476,35 +1475,34 @@ static void InitProcF() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[4].name = (char *) GetPackFile(read_buffer, "d02b01.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "c01d01.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "c01d01an.img", 0);
@@ -1675,35 +1673,34 @@ static void InitProcG() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[4].name = (char *) GetPackFile(read_buffer, "s4701.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "e02s01.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "e02s06.img", 0);
@@ -1849,35 +1846,34 @@ static void InitProcH() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[4].name = (char *) GetPackFile(read_buffer, "fire.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "d01b01.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "c12a01.img", 0);
@@ -2099,35 +2095,34 @@ static void InitProcI() {
         {"",                                              0,  0}
     };
 
-    // An NTSC disc carries the one start image; a PAL disc one per language.
-    if (PortNtscData()) {
-        textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
-                break;
-            case LANG_FRENCH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
-                break;
-        }
+#ifdef PAL
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+            break;
+        case LANG_FRENCH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            textures[3].name = (char *) GetPackFile(read_buffer, "start_s.img", 0);
+            break;
     }
 
+#else
+    textures[3].name = (char *) GetPackFile(read_buffer, "start.img", 0);
+#endif
     textures[4].name = (char *) GetPackFile(read_buffer, "e305ex2.img", 0);
     textures[5].name = (char *) GetPackFile(read_buffer, "s1202.img", 0);
     textures[6].name = (char *) GetPackFile(read_buffer, "s2401.img", 0);

@@ -421,6 +421,200 @@ inline bool IsCurrent(const fs::path &path, std::uint64_t size) {
     return fs::is_regular_file(path, error) && fs::file_size(path, error) == size && !error;
 }
 
+inline void Put32(unsigned char *p, std::uint32_t value) {
+    for (int i = 0; i < 4; i++) {
+        p[i] = static_cast<unsigned char>(value >> (8 * i));
+    }
+}
+
+inline std::vector<unsigned char> ReadFile(const fs::path &path) {
+    Reader                     reader(path);
+    std::vector<unsigned char> data(reader.Size());
+    reader.Read(0, data.data(), data.size());
+    return data;
+}
+
+inline void WriteFile(const fs::path &path, std::span<const unsigned char> data) {
+    fs::create_directories(path.parent_path());
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!file) {
+        Fail("cannot write {}", path.string());
+    }
+}
+
+struct PackMember {
+    std::string                name;
+    std::vector<unsigned char> data;
+};
+
+inline std::vector<PackMember> ReadPack(std::span<const unsigned char> pack) {
+    std::vector<PackMember> members;
+    for (std::size_t entry = 0; entry + 76 <= pack.size() && pack[entry];) {
+        const void *end = std::memchr(pack.data() + entry, 0, 64);
+        if (!end) {
+            Fail("pack entry at {} has no terminated name", entry);
+        }
+        std::size_t offset = Le32(pack.data() + entry + 64);
+        std::size_t size = Le32(pack.data() + entry + 68);
+        std::size_t next = Le32(pack.data() + entry + 72);
+        if (offset < 76 || offset > pack.size() - entry || size > pack.size() - entry - offset ||
+            next < 76 || next > pack.size() - entry) {
+            Fail("invalid pack entry at {}", entry);
+        }
+        members.push_back({
+            std::string(reinterpret_cast<const char *>(pack.data() + entry)),
+            {pack.begin() + entry + offset, pack.begin() + entry + offset + size}
+        });
+        entry += next;
+    }
+    return members;
+}
+
+inline std::vector<unsigned char> WritePack(const std::vector<PackMember> &members) {
+    std::vector<unsigned char> pack;
+    for (const PackMember &member : members) {
+        if (member.name.size() >= 64) {
+            Fail("pack member name is too long: {}", member.name);
+        }
+        std::size_t entry = pack.size();
+        pack.resize(entry + 80);
+        std::memcpy(pack.data() + entry, member.name.c_str(), member.name.size() + 1);
+        Put32(pack.data() + entry + 64, 80);
+        Put32(pack.data() + entry + 68, static_cast<std::uint32_t>(member.data.size()));
+        pack.insert(pack.end(), member.data.begin(), member.data.end());
+        pack.resize((pack.size() + 15) & ~std::size_t{15});
+        Put32(pack.data() + entry + 72, static_cast<std::uint32_t>(pack.size() - entry));
+    }
+    pack.resize(pack.size() + 76);
+    return pack;
+}
+
+inline bool AddPackAlias(std::vector<PackMember> &members, std::string_view name,
+                         std::string_view source) {
+    for (const PackMember &member : members) {
+        if (EqualsFolded(member.name, name)) {
+            return false;
+        }
+    }
+    for (const PackMember &member : members) {
+        if (EqualsFolded(member.name, source)) {
+            members.push_back({std::string(name), member.data});
+            return true;
+        }
+    }
+    return false;
+}
+
+inline void Normalize(const fs::path &out, const std::vector<Record> &records) {
+    std::unordered_set<std::string> paths;
+    for (const Record &record : records) {
+        paths.insert(record.path);
+    }
+    if (!paths.contains("gedit/system/esys.pak") || paths.contains("gedit/system/esys_cmn.pak")) {
+        return;
+    }
+    auto alias = [&](std::string_view name, std::string_view source) {
+        fs::path target = out / name;
+        fs::path original = out / source;
+        if (!paths.contains(std::string(name)) && fs::is_regular_file(original) &&
+            !IsCurrent(target, fs::file_size(original))) {
+            fs::create_directories(target.parent_path());
+            fs::copy_file(original, target, fs::copy_options::overwrite_existing);
+        }
+    };
+    for (int language = 1; language <= 6; language++) {
+        alias(std::format("meswin/mes_tex_{}.pak", language), "meswin/mes_tex.pak");
+        alias(std::format("dun/pack/teximg2_{}.pac", language), "dun/pack/teximg2.pac");
+    }
+    for (const char *language : {"jp", "us_e", "fr", "gr", "it", "sp"}) {
+        for (int map = 0; map <= 6; map++) {
+            alias(std::format("dun/img/{}/dname0{}.img", language, map),
+                  std::format("dun/img/us/dname0{}.img", map));
+        }
+    }
+    alias("gedit/system/editsys_2.mes", "gedit/system/editsys.bin");
+    alias("meswin/system_2.mes", "meswin/systeme.bin");
+    alias("meswin/system14_2.mes", "meswin/system14_1.mes");
+    alias("opdat/optext_2.mes", "opdat/usa/fconv.bin");
+    alias("opdat/optext_6.mes", "opdat/usa/fconv.bin");
+    alias("titledat/title_eu.pak", "titledat/title.pak");
+    for (char language : {'e', 'f', 'g', 'i', 's'}) {
+        alias(std::format("titledat/title_{}.pak", language), "titledat/title.pak");
+    }
+    for (int map = 1; map <= 7; map++) {
+        fs::path event = out / std::format("dun/script/d{:02}/event.stb", map);
+        if (!fs::is_regular_file(event)) {
+            continue;
+        }
+        std::vector<unsigned char> data = ReadFile(event);
+        if (data.size() < 24 || Le32(data.data() + 20) >= data.size()) {
+            Fail("invalid event script in {}", event.string());
+        }
+        for (int language = 2; language <= 6; language++) {
+            fs::path target = out / std::format("dun/script/d{:02}/d{:02}_{}.mes", map, map, language);
+            if (!paths.contains(FoldPath(target.lexically_relative(out).generic_string()))) {
+                WriteFile(target, std::span(data).subspan(Le32(data.data() + 20)));
+            }
+        }
+    }
+    for (const Record &record : records) {
+        bool rooms = record.path.starts_with("rmdat/rmdat") && record.path.ends_with(".pak");
+        bool pause = record.path == "opdat/dungeon/dungeon.pim" ||
+                     record.path == "opdat/norn/norn.pak" ||
+                     record.path == "opdat/norn2/norn2.pim" ||
+                     record.path == "opdat/toan/toan.pim";
+        bool battle = record.path.find("/dungeon/dunmenu5.pak") != std::string::npos;
+        if (!rooms && !pause && !battle) {
+            continue;
+        }
+        std::vector<PackMember> members = ReadPack(ReadFile(out / record.path));
+        bool                    changed = false;
+        for (char language : {'f', 'g', 'i', 's'}) {
+            changed |= AddPackAlias(members, std::format("{}{}.img", rooms ? "start_" : "pause_", language),
+                                    rooms ? "start.img" : "pause_e.img");
+        }
+        if (battle) {
+            auto existing = std::find_if(members.begin(), members.end(), [](const PackMember &member) {
+                return EqualsFolded(member.name, "btlmenu2.img");
+            });
+            auto image = std::find_if(members.begin(), members.end(), [](const PackMember &member) {
+                return EqualsFolded(member.name, "btlmenu.img");
+            });
+            if (existing == members.end() && image != members.end()) {
+                const auto &data = image->data;
+                if (data.size() < 16 || std::memcmp(data.data(), "IM2", 3) != 0 ||
+                    16 + std::uint64_t(Le32(data.data() + 4)) * 48 > data.size()) {
+                    Fail("invalid battle menu image in {}", record.path);
+                }
+                for (std::uint32_t i = 0; i < Le32(data.data() + 4); i++) {
+                    const unsigned char *entry = data.data() + 16 + i * 48;
+                    if (std::memcmp(entry, "wepstatus", 9) != 0) {
+                        continue;
+                    }
+                    std::size_t offset = Le32(entry + 32);
+                    std::size_t end = i + 1 < Le32(data.data() + 4) ? Le32(data.data() + 16 + (i + 1) * 48 + 32) : data.size();
+                    if (offset < 64 || end > data.size() || end <= offset) {
+                        Fail("invalid wepstatus image in {}", record.path);
+                    }
+                    std::vector<unsigned char> single(64);
+                    std::memcpy(single.data(), data.data(), 16);
+                    std::memcpy(single.data() + 16, entry, 48);
+                    Put32(single.data() + 4, 1);
+                    Put32(single.data() + 48, 64);
+                    single.insert(single.end(), data.begin() + offset, data.begin() + end);
+                    members.push_back({"btlmenu2.img", std::move(single)});
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            WriteFile(out / "normalized" / record.path, WritePack(members));
+        }
+    }
+}
+
 inline Summary Extract(const Archive &archive, const fs::path &out, std::FILE *log,
                        const ProgressCallback &progress = {}) {
     std::vector<unsigned char> hd2 = ReadExtent(archive.hd2);
@@ -484,6 +678,7 @@ inline Summary Extract(const Archive &archive, const fs::path &out, std::FILE *l
     if (!file) {
         Fail("write error on {}", index_copy.string());
     }
+    Normalize(out, records);
     return summary;
 }
 

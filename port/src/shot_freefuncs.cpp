@@ -78,8 +78,7 @@ PC_OVERRIDE void setItemToReserved(char *page_name, int x, int y, char *item_nam
     MoveImageTest(Vif1Packet, sbp, sbw, 0x13, CRect_i_(x, y, 0x20, 0x20), dbp, dbw, 0x13, dsax, dsay, 0);
 }
 
-// Retail's but for the life and weapon bars' fills, PAL's branch but for the floor number in the top
-// right, which draws where NTSC's does: under the plate's "Floor", level with the last floor's mark.
+// Retail's but for the life and weapon bars' fills, PAL's branch only.
 PC_OVERRIDE void topStatusInfo(int y, int selected_item, int floor) {
     int       alpha;
     CTexture *icons;

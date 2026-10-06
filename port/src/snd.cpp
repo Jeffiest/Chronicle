@@ -126,6 +126,8 @@ PC_OVERRIDE void SndSetReadBuffer(unsigned int *buffer) {
 
 PC_OVERRIDE void setbilinear(int on) { g_linear = on; }
 
+int PortBilinear() { return g_linear; }
+
 PC_OVERRIDE void setAlphaFlag(sceVif1Packet *packet, sceGsAlpha *alpha) { draw2d::Get().set_alpha(alpha); }
 
 PC_OVERRIDE void set2DSprite(sceVif1Packet *packet, CTexture *texture, const CRect_i_ &screen, int u, int v) {

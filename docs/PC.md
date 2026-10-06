@@ -66,6 +66,7 @@ port's file index. Extract again after updating the port to refresh them.
 | `--fast-load` | test hook: loading-screen holds and fades of a few ticks; also `DC_FAST_LOAD=1` |
 | `--display-per-tick N` | headless test aid: render N interpolated display frames per tick (offscreen, not presented) before presenting the tick's canonical image |
 | `--show-fps` | draw the FPS counter when headless too (a headless run leaves `show_fps` off) |
+| `--screenshot-fps` | with `--screenshot` and `--show-fps`: write the image as a window shows it, the counter over the canonical image, instead of the canonical image alone |
 
 Environment: `DC_DATA` and `DC_SAVE` (above), `DC_INPUT` (above), `DC_AUDIO=off` (no audio
 device), `DC_AUDIO_WAV` and `DC_AUDIO_TRACE` (see "Audio"), `DC_VULKAN_VALIDATION` (enable the Khronos validation layer in a
@@ -588,9 +589,11 @@ it has, display frames stop until the next tick's canonical render.
 
 With `video.show_fps` (on by default; `fps_toggle`, F3, flips it at any
 time), every presented frame carries one line at the window's top-left
-corner, in the port's own 5x7 font (`port/src/platform/overlay.cpp`, white
-on a translucent black backdrop, on whole pixels: one per logical unit,
-rounded):
+corner, in the game's own message font (white with a black edge, as the menus
+draw their text) while a mode has the font's textures loaded, and in the
+port's 5x7 font (`port/src/platform/overlay.cpp`, white on a translucent black
+backdrop, on whole pixels: one per logical unit, rounded) on the loading
+screens and between modes, where it has not:
 
 ```
 FPS 143.9  TICK 60.0/60  DRAWS 412
@@ -598,14 +601,16 @@ FPS 143.9  TICK 60.0/60  DRAWS 412
 
 the frames presented per second and the logic ticks rendered per second,
 each over the last half second or so, the configured tick rate, and the
-newest tick's mesh and 2D draws. It is drawn with `gfx::Draw2D` into a
-display list of its own, recorded only when the text or the window's mapping
+newest tick's mesh and 2D draws. It is drawn into a
+display list of its own (`gfx::Draw2D` for the 5x7 font, the game's `ClsMes` text
+code for the message font, anchored to the top-left of what the window shows), recorded only when the text, the window's mapping or the message font
 changes, never into a tick's list: a display frame draws it after the tick's
 list and before the present (`gfx::RenderOptions::overlay`), and a tick
 presented as its canonical image is presented as a display render of the
 counter alone, which starts from that image. So the canonical image, which
 `kPreviousFrame`, frame copies, pick-Z and `--screenshot` read, never holds
-it, and screenshots are the same byte for byte with it on or off. The
+it, and screenshots are the same byte for byte with it on or off (`--screenshot-fps` is the one
+exception, asked for by name). The
 loading screen's own presents do not carry it. Headless runs leave it off
 unless `--show-fps` is given.
 

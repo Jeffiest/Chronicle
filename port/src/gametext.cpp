@@ -1,6 +1,7 @@
 #include "gametext.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <string_view>
 
 #include "gameutil.hpp"
@@ -33,6 +34,9 @@ constexpr Extra kExtras[] = {
     {-0x254, U'Ñ'},
 };
 // clang-format on
+
+// Layouts under way that must not touch the game's random numbers.
+int g_keep_random = 0;
 
 constexpr s16 kUnknown = kGridFirst + static_cast<s16>(kGrid.find(U'?'));
 
@@ -294,6 +298,31 @@ GameText::GameText() : colour_(FONT_COLOR_WHITE) {
     mes_.centre_rows = false;
 }
 
+// Retail's, but for the tables of a layout that keeps the game's random numbers: those stay as
+// they were, and no rand() is called.
+extern float RandTbl[64];
+extern float RandTbl2[64];
+
+PC_OVERRIDE void MakeRandTbl(float lo, float hi) {
+    if (g_keep_random > 0) {
+        return;
+    }
+    for (int i = 0; i < 64; i++) {
+        RandTbl[i] = ((hi - lo) * (float) rand()) / 2147483648.0f;
+        RandTbl[i] += lo;
+    }
+}
+
+PC_OVERRIDE void MakeRandTbl2(float lo, float hi) {
+    if (g_keep_random > 0) {
+        return;
+    }
+    for (int i = 0; i < 64; i++) {
+        RandTbl2[i] = ((hi - lo) * (float) rand()) / 2147483648.0f;
+        RandTbl2[i] += lo;
+    }
+}
+
 int GameText::Set(std::string_view utf8) {
     if (!set_ || utf8 != text_ || mes_.mes_made < 0) {
         set_ = true;
@@ -317,6 +346,14 @@ void GameText::SetColour(u32 colour) {
 }
 
 bool GameText::Layout() {
+    struct Keep {
+        explicit Keep(bool on) : on_(on) { g_keep_random += on ? 1 : 0; }
+
+        ~Keep() { g_keep_random -= on_ ? 1 : 0; }
+
+        bool on_;
+    } keep(keep_random_);
+
     mes_.SetBuff(file_.Data());
     if (SystemMes != nullptr) {
         mes_.SetBuff_system(SystemMes);

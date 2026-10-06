@@ -63,6 +63,10 @@ class ConditionalError(Error):
     pass
 
 
+class GroupedError(Error):
+    pass
+
+
 def mask(text):
     """Returns text with comments and literals blanked, at the same offsets."""
     return LITERAL.sub(lambda match: re.sub(r"[^\n]", " ", match[0]), text)
@@ -185,6 +189,24 @@ def closing(code, opening):
     raise Error("unbalanced brackets")
 
 
+def grouped(statement):
+    """Whether a declaration statement declares more than one name: a comma outside every bracket,
+    template argument list and initialiser."""
+    depth, angle = 0, 0
+    for i, c in enumerate(statement):
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "<" and depth == 0 and re.search(r"\w\s*$", statement[:i]):
+            angle += 1
+        elif c == ">" and depth == 0 and angle > 0:
+            angle -= 1
+        elif c == "," and depth == 0 and angle == 0:
+            return True
+    return False
+
+
 def without_attributes(code):
     """Returns code with each __attribute__((...)) blanked, at the same offsets."""
     while True:
@@ -261,7 +283,9 @@ class Definition:
         declaration = text[: len(flat[:end].rstrip())].lstrip(" \t")
         opening = head.find("(")
         if flat[i] == ";":
-            pointer = FUNCTION_POINTER.match(head) if init is not None else None
+            if grouped(flat[:i]):
+                raise GroupedError("more than one name in one declaration")
+            pointer = FUNCTION_POINTER.match(head)
             if opening >= 0 and pointer is None:
                 raise Error("a declaration, or a variable with constructor arguments")
             if init is None and re.search(r"\bextern\b", head):

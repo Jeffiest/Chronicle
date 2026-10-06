@@ -478,7 +478,7 @@ on a translucent black backdrop, on whole pixels: one per logical unit,
 rounded):
 
 ```
-FPS 143.9  TICK 50.0/50  DRAWS 412
+FPS 143.9  TICK 60.0/60  DRAWS 412
 ```
 
 the frames presented per second and the logic ticks rendered per second,
@@ -544,7 +544,7 @@ replacement units.
   window alive and the pads fresh whatever the loading screen does.
   `sceGsSyncV` returns the parity of the tick, as the interlaced field
   alternated: `CGamePad::Init` and `main` spin until it reads 1. The tick
-  rate is a setting (50 Hz by default); presentation is not tied to it (below).
+  rate is a setting (60 Hz by default); presentation is not tied to it (below).
   `ClockWaitNextTick(hook)` runs a hook over and over while it waits, with the
   elapsed fraction of the tick; `MGEndFrame` presents display frames through it.
 - **Config** (`platform/config`) and **paths** (`platform/paths`): above.

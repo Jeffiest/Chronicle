@@ -190,24 +190,16 @@ def closing(code, opening):
 
 
 def grouped(statement):
-    """Whether a declaration statement declares more than one name: a comma outside every bracket
-    and template argument list. Angle brackets are template ones only before the initialiser, where
-    a < or << is an operator."""
-    depth, angle, initialiser = 0, 0, False
-    for i, c in enumerate(statement):
+    """Whether a declaration statement has a comma outside every bracket. Angle brackets are not
+    counted: telling a template's from a comparison's is not worth the risk of a name stripped
+    unseen, so a template type with a comma needs an alias."""
+    depth = 0
+    for c in statement:
         if c in "([{":
             depth += 1
         elif c in ")]}":
             depth -= 1
-        elif depth > 0:
-            continue
-        elif c == "=" and angle == 0:
-            initialiser = True
-        elif c == "<" and not initialiser and re.search(r"\w\s*$", statement[:i]):
-            angle += 1
-        elif c == ">" and not initialiser and angle > 0:
-            angle -= 1
-        elif c == "," and angle == 0:
+        elif c == "," and depth == 0:
             return True
     return False
 
@@ -289,7 +281,8 @@ class Definition:
         opening = head.find("(")
         if flat[i] == ";":
             if grouped(flat[:i]):
-                raise GroupedError("more than one name in one declaration")
+                raise GroupedError("one name per PC_OVERRIDE declaration, and no comma outside brackets; "
+                                 "use a type alias or split it")
             pointer = FUNCTION_POINTER.match(head)
             if opening >= 0 and pointer is None:
                 raise Error("a declaration, or a variable with constructor arguments")

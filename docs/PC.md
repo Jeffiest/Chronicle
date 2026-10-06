@@ -776,15 +776,27 @@ byte for every 64 bytes of save data. The name is the one the game gives the
 file on the card, so a save copied out of a card export loads as it is.
 `<save>/sysconfig.bin` is the card's 0x40-byte configuration file
 (`SV_CONFIG_SYS`: the options, the last save used, the game clear flag)
-followed by the last save's number as a 32-bit little-endian integer, since
-the image keeps that number in a signed byte, which only holds 0 to 127; a
-0x40-byte file copied out of a card loads too. `icon.sys` and the icons are
+followed by a field of the port's own, the last save's number as a 32-bit
+little-endian integer, since the image keeps that number in a signed byte,
+which only holds 0 to 127; a 0x40-byte file copied out of a card loads too. `icon.sys` and the icons are
 not written.
 
 `port/src/memorycardaccess.cpp` replaces the operations of
 `CMemoryCardAccess` with plain reads and writes of these files
 (`port/src/save_slots.cpp` names and lists them); each finishes in the step
-that starts it. A save is written beside its file and renamed over it. The
+that starts it. Every write goes through `FilesWrite`
+(`port/src/platform/files.cpp`): a temporary file of its own beside the
+target, `<target>.<16 hex digits>.tmp`, created exclusively, written,
+flushed to the disk (`FlushFileBuffers`, `fsync` or macOS's `F_FULLFSYNC`)
+and closed, then moved onto the target (`MoveFileExW` with write-through;
+`rename` or, for a new save, `link`, then a sync of the directory). Until
+that move the target keeps what it held, and a failure removes the
+temporary file. One is left only when the game dies during a write; the
+game ignores it, and it can be deleted. Saving over a save replaces the
+file; a new save never does: when its number has been taken since the list
+was read, by a second copy of the game or a file copied in by hand, it goes
+to the next free number. Saves on POSIX therefore need a file system with
+hard links. The
 card the save screens still check is always there, formatted and with room,
 and so is its save directory; format, unformat, the write test and the
 conversion of NTSC 1.0 saves do nothing.
@@ -803,20 +815,25 @@ retail's steps, less the card:
   and below it. Up and down move one board (held, they repeat), L1 and R1
   jump to the first and the last; Circle closes the screen.
 - The cursor starts on the last save used (config word 17, which a load and
-  a save set); when that file has no board, on the New file board, or on the
-  load screen the first save.
+  a save set, and which follows a new save that moved on); when that file has
+  no board, on the New file board, or on the load screen the first save.
 - No message names the card. Checks and transfers finish within a frame and
   show none; the save after the ending asks "Want to save?" (message 260 of
   `allmenu.mes`) where retail asked to save the cleared data to the card
   (298), and Cross after it closes the screen where retail went back to the
   card choice; an alert only a card raised reads "Saving failed." (266) or
   "Loading failed." (274).
-- A save of another version is still offered for deletion (299), as retail
-  did.
-- A file is skipped unless its name is `darkcloud` and a number as `%d`
-  writes it (`darkcloud01` is not file 1), it is at least a save long and
-  its version is this one's. A skipped `darkcloudN` keeps its number from a
-  new save.
+- The save after the ending writes `sysconfig.bin` in its step. When that
+  fails, "Saving failed." shows; Cross asks again and Circle closes the
+  screen. Retail waited on the write for ever.
+- A file is listed only when its name is `darkcloud` and a number as `%d`
+  writes it (`darkcloud01` is not file 1), it is at least a save long, its
+  version is this one's and every checksum is right. Anything else under such
+  a name, a save of another version, a damaged one or a directory, is left
+  alone and keeps its number from a new save. Retail deleted a save of
+  another version once its message (299) was dismissed.
+- A board names the save's map from a table of 62; a map number outside it
+  shows as the first.
 
 Saves in the card layout earlier builds wrote are not moved by the game. By
 hand, in `<save>/mc0/BESCES-50295dkcloud/` (or the same folder of a card

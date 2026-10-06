@@ -19,6 +19,8 @@ constexpr std::size_t kMaxDigits = 9;
 
 SaveSlotList SaveSlots;
 
+bool SaveSlotNew;
+
 fs::path SaveSlotPath(int file_no) {
     return PathsSaveRoot() / (std::string(kSavePrefix) + std::to_string(file_no));
 }
@@ -52,7 +54,7 @@ std::vector<int> SaveSlotFiles() {
     for (const fs::directory_entry &entry : fs::directory_iterator(PathsSaveRoot(), error)) {
         const std::u8string name = entry.path().filename().u8string();
         int                 file_no = SaveSlotFileNo(std::string_view(reinterpret_cast<const char *>(name.data()), name.size()));
-        if (file_no >= 0 && entry.is_regular_file(error)) {
+        if (file_no >= 0) {
             files.push_back(file_no);
         }
     }

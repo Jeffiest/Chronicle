@@ -41,7 +41,6 @@ int SaveMenuKeyDifVersion();
 int SaveMenuKeyDelete();
 int SaveMenuKeyCopy();
 int SaveMenuKeyAfterEnding();
-int SaveMenuKeySaveEnding();
 int SaveMenuKeySaveDecideEnding();
 
 namespace {
@@ -137,6 +136,7 @@ int SaveMenuKeyFileSelect() {
     if (GamePad.Down(PAD_CROSS)) {
         switch (SaveMenu.access_kind) {
             case SAVE_ACCESS_SAVE:
+                SaveSlotNew = row == static_cast<int>(SaveSlots.saves.size());
                 SaveMenu.key_no = SAVE_KEY_SAVE_CHECK;
                 McAccess.SetFuncNo(MC_OPERATION_SEARCH_TYPE);
                 ComMenuSePlay(MENU_SOUND_CONFIRM);
@@ -154,6 +154,12 @@ int SaveMenuKeyFileSelect() {
     }
 
     return 1;
+}
+
+// Retail's, with the cursor on the file written, which a new save may have had to move on from.
+int SaveMenuKeySaved() {
+    SaveMenu.file_no = McAccess.file_no;
+    return SaveMenuKeyEndSave();
 }
 
 // Retail's, with the save looked up in SaveSlots rather than McAccess.file_info.
@@ -174,6 +180,36 @@ int SaveMenuKeyLoadDecide() {
     if (GamePad.Down(PAD_CIRCLE)) {
         SaveMenu.key_no = SAVE_KEY_FILE_SELECT;
         ComMenuSePlay(MENU_SOUND_REFUSE);
+    }
+
+    return 1;
+}
+
+// Alerts after the ending: Cross asks again and Circle closes the screen. Retail's alert went back
+// to the card choice, which would now save again at once.
+int SaveMenuKeyAlert() {
+    if (SaveMenu.mode != SAVE_MENU_MODE_ENDING) {
+        return SaveMenuKeyArart();
+    }
+
+    if (GamePad.Down(PAD_CROSS)) {
+        SaveMenu.key_no = SAVE_KEY_AFTER_ENDING;
+        ComMenuSePlay(MENU_SOUND_REFUSE);
+    } else if (GamePad.Down(PAD_CIRCLE)) {
+        LeaveSaveMenu();
+    }
+
+    return 1;
+}
+
+// The save after the ending writes the configuration alone. Retail started the write and waited on
+// it, and nothing answered its failure, so the screen waited for ever; the write finishes here.
+int SaveMenuKeySaveEnding() {
+    if (McAccess.SaveSysConfig() == 1) {
+        SaveMenu.key_no = SAVE_KEY_END_SAVE_ENDING;
+    } else {
+        SaveMenu.key_no = SAVE_KEY_ALERT;
+        SaveMenu.alert_no = SAVE_ALERT_SAVE_FAILED;
     }
 
     return 1;
@@ -205,10 +241,10 @@ PC_OVERRIDE int (*SaveMenuFunc[26])() = {
     SaveMenuKeySaveCheck,
     SaveMenuKeySaveDecide,
     SaveMenuKeySave,
-    SaveMenuKeyEndSave,
+    SaveMenuKeySaved,
     SaveMenuKeyLoadDecide,
     SaveMenuKeyLoad,
-    SaveMenuKeyArart,
+    SaveMenuKeyAlert,
     SaveMenuKeyNewDir,
     SaveMenuKeyNewDirSelect,
     SaveMenuKeyFormat,

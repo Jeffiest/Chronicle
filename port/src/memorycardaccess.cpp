@@ -1,12 +1,15 @@
 #include "memorycardaccess.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
+#include <vector>
 
 #include "dngstatusdata.hpp"
+#include "platform/files.hpp"
 #include "save_slots.hpp"
 #include "savedata.hpp"
 
@@ -36,44 +39,45 @@ std::size_t ReadFile(const fs::path &path, void *data, std::size_t size) {
     return static_cast<std::size_t>(file.gcount());
 }
 
-// Written beside the file and renamed over it, so a failed write leaves the old file whole.
-bool WriteFile(const fs::path &path, const void *data, std::size_t size) {
-    fs::path        temp = path;
-    std::error_code error;
-    temp += ".tmp";
-    {
-        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-        file.write(static_cast<const char *>(data), static_cast<std::streamsize>(size));
-        if (!file.flush()) {
-            file.close();
-            fs::remove(temp, error);
-            return false;
-        }
-    }
-    fs::rename(temp, path, error);
-    if (error) {
-        fs::remove(temp, error);
-        return false;
-    }
-    return true;
-}
-
 s32 &LastFileNo() {
     return static_cast<s32 *>(SaveData->GetConfigData())[17];
 }
 
-// The configuration file is the card's 0x40-byte image followed by the last save's whole number:
-// the image keeps it in one signed byte, which holds only files 0 to 127.
+// The configuration file is the card's 0x40-byte image followed by the port's own field, the last
+// save's whole number, little-endian: the image keeps it in one signed byte, which holds only files
+// 0 to 127.
 bool WriteConfig() {
     char data[sizeof(SV_CONFIG_SYS) + sizeof(s32)];
     s32  file_no = LastFileNo();
     std::memcpy(data, &sys_config, sizeof(SV_CONFIG_SYS));
     std::memcpy(data + sizeof(SV_CONFIG_SYS), &file_no, sizeof(file_no));
-    return WriteFile(SaveConfigPath(), data, sizeof(data));
+    return FilesWrite(SaveConfigPath(), data, sizeof(data), true) == FilesResult::kWritten;
 }
 
-bool VersionMatches(const char *image, const char *version) {
-    return std::strncmp(image + sizeof(CSaveData), version, kVersionSize) == 0;
+// Reads file_no's whole save into g_image: this version's, and every checksum right.
+bool ReadImage(int file_no, const char *version) {
+    if (ReadFile(SaveSlotPath(file_no), g_image, kImageSize) < kImageSize ||
+        std::strncmp(g_image + sizeof(CSaveData), version, kVersionSize) != 0) {
+        return false;
+    }
+
+    const char *data = g_image;
+    const char *sum = g_image + sizeof(CSaveData) + kVersionSize;
+    char        total = 0;
+
+    for (u32 i = 0; i < sizeof(CSaveData); i++) {
+        total += *data++;
+
+        if (i % 64 == 63) {
+            if (total != *sum++) {
+                return false;
+            }
+
+            total = 0;
+        }
+    }
+
+    return true;
 }
 
 } // namespace
@@ -187,24 +191,11 @@ PC_OVERRIDE int CMemoryCardAccess::MakeDir() {
     return 1;
 }
 
-// Adds the file to SaveSlots when it is a whole save of this version. Returns 0 for a save of
-// another version, with the error the save screen answers by offering to delete it.
+// Adds the file to SaveSlots when it is a whole save of this version. Any other file is left as
+// it is, unlisted: retail deleted a save of another version once its message was dismissed.
 PC_OVERRIDE int CMemoryCardAccess::GetSaveFileInfoFromMc(int file_no) {
-    if (ReadFile(SaveSlotPath(file_no), g_image, kImageSize) < kImageSize) {
+    if (!ReadImage(file_no, this->GetVersion())) {
         return 1;
-    }
-
-    const char *version = g_image + sizeof(CSaveData);
-
-    if (!VersionMatches(g_image, this->GetVersion())) {
-        if (std::strncmp(version, this->file_name, std::strlen(this->file_name)) != 0) {
-            return 1;
-        }
-
-        this->error.step = this->step;
-        this->error.file_no = file_no;
-        this->error.code = MC_ERROR_VERSION;
-        return 0;
     }
 
     CSaveData    *save = reinterpret_cast<CSaveData *>(g_image);
@@ -215,6 +206,11 @@ PC_OVERRIDE int CMemoryCardAccess::GetSaveFileInfoFromMc(int file_no) {
     info.map_no = save->map_no;
     info.play_time = save->GetPlayTime();
     info.party_size = save->GetDngStatus()->GetPartySize();
+
+    // DrawSaveBoard names the map from a table of 62.
+    if (info.map_no < 0 || info.map_no >= 62) {
+        info.map_no = 0;
+    }
 
     for (int dungeon = 0; dungeon < 7; dungeon++) {
         info.quest_total += save->QuestDungeon(dungeon, 0);
@@ -234,52 +230,48 @@ PC_OVERRIDE int CMemoryCardAccess::GetAllSaveFileInfo() {
     SaveSlots.saves.clear();
 
     for (int file_no : SaveSlots.files) {
-        if (this->GetSaveFileInfoFromMc(file_no) == 0) {
-            return 0;
-        }
+        this->GetSaveFileInfoFromMc(file_no);
     }
 
     return 1;
 }
 
+// A new save has nothing to confirm: it never replaces a file.
 PC_OVERRIDE int CMemoryCardAccess::CheckFileNo(int file_no) {
     std::error_code error;
-    return file_no >= 0 && fs::exists(SaveSlotPath(file_no), error);
+    return !SaveSlotNew && file_no >= 0 && fs::exists(SaveSlotPath(file_no), error);
 }
 
+// A new save that finds its file taken, by another copy of the game or by hand since the list was
+// read, goes to the next free one instead; file_no is then the file written.
 PC_OVERRIDE int CMemoryCardAccess::SaveToMc(int file_no) {
-    sys_config.values[17] = file_no;
-    sys_config.values_copy1[17] = file_no;
-    sys_config.values_copy2[17] = file_no;
+    FilesResult result = FilesWrite(SaveSlotPath(file_no), this->save_buffer, kImageSize, !SaveSlotNew);
 
-    if (!WriteFile(SaveSlotPath(file_no), this->save_buffer, kImageSize)) {
+    for (int attempt = 0; result == FilesResult::kExists && attempt < 100; attempt++) {
+        std::vector<int> files = SaveSlotFiles();
+        if (!std::binary_search(files.begin(), files.end(), file_no)) {
+            files.insert(std::upper_bound(files.begin(), files.end(), file_no), file_no);
+        }
+        file_no = SaveSlotFirstFree(files);
+        result = FilesWrite(SaveSlotPath(file_no), this->save_buffer, kImageSize, false);
+    }
+
+    if (result != FilesResult::kWritten) {
         return -1;
     }
 
+    this->file_no = file_no;
+    sys_config.values[17] = file_no;
+    sys_config.values_copy1[17] = file_no;
+    sys_config.values_copy2[17] = file_no;
     LastFileNo() = file_no;
     this->card[this->port].dir_exists = 1;
     return WriteConfig() ? 1 : -1;
 }
 
 PC_OVERRIDE int CMemoryCardAccess::LoadFromMc(int file_no) {
-    if (ReadFile(SaveSlotPath(file_no), g_image, kImageSize) < kImageSize || !VersionMatches(g_image, this->GetVersion())) {
+    if (!ReadImage(file_no, this->GetVersion())) {
         return -1;
-    }
-
-    const char *data = g_image;
-    const char *sum = g_image + sizeof(CSaveData) + kVersionSize;
-    char        total = 0;
-
-    for (u32 i = 0; i < sizeof(CSaveData); i++) {
-        total += *data++;
-
-        if (i % 64 == 63) {
-            if (total != *sum++) {
-                return -1;
-            }
-
-            total = 0;
-        }
     }
 
     memcpy(SaveData, g_image, sizeof(CSaveData));
@@ -292,10 +284,11 @@ PC_OVERRIDE int CMemoryCardAccess::FormatForMc() {
     return 1;
 }
 
+// A file already gone counts as deleted.
 PC_OVERRIDE int CMemoryCardAccess::DeleteFile(int file_no) {
     std::error_code error;
     fs::remove(SaveSlotPath(file_no), error);
-    return 1;
+    return error ? -1 : 1;
 }
 
 PC_OVERRIDE void CMemoryCardAccess::DmySync() {}

@@ -23,6 +23,7 @@
 #include "platform/audio.hpp"
 #include "platform/clock.hpp"
 #include "platform/config.hpp"
+#include "platform/discord.hpp"
 #include "platform/firstrun.hpp"
 #include "platform/input.hpp"
 #include "platform/input_script.hpp"
@@ -252,6 +253,13 @@ GamePresentSettings PresentSettings(const Config &config) {
             .show_fps = g_options.show_fps || (config.show_fps && !g_options.headless)};
 }
 
+void ApplyDiscord(const Config &config) {
+    DiscordStop();
+    if (config.discord_rich_presence && !g_options.headless) {
+        DiscordStart(kDiscordClientId);
+    }
+}
+
 // Called mid-tick, from a settings screen: what cannot change inside a frame waits for PumpHost.
 void ApplyConfigChange(const Config &before, const Config &after) {
     audio::DefaultMixer().SetMasterGain(after.master_volume);
@@ -270,6 +278,9 @@ void ApplyConfigChange(const Config &before, const Config &after) {
     gfx::SetPresentMode(PresentMode(after.present_mode));
     if (after.aspect != before.aspect || after.ui_scale != before.ui_scale) {
         g_pending_layout = Layout(after);
+    }
+    if (after.discord_rich_presence != before.discord_rich_presence) {
+        ApplyDiscord(after);
     }
 }
 
@@ -350,6 +361,7 @@ int Run(int argc, const char **argv) {
     ClockSetUnbounded(options.headless);
     ClockAddPumpHook(PumpHost);
     GameSetFrameBudget(options.frames);
+    ApplyDiscord(config);
     GameSetPresentSettings(PresentSettings(config));
     ConfigAddChangeHook(ApplyConfigChange);
 
@@ -361,6 +373,7 @@ int Run(int argc, const char **argv) {
 
     ConfigRemoveChangeHook(ApplyConfigChange);
     ClockRemovePumpHook(PumpHost);
+    DiscordStop();
     AudioOutputStop();
     InputShutdown();
     gfx::RendererShutdown();

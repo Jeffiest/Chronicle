@@ -18,6 +18,9 @@ finish-args:
   - --socket=pulseaudio
   # hidraw, for the 2026 Steam Controller.
   - --device=all
+  # Discord Rich Presence.
+  - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
 
 modules:
   # Header only, for the build alone: the network is off while chronicle configures.

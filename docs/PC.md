@@ -123,9 +123,19 @@ key is optional; these are the defaults:
             "ry": "-MouseY",        // lx ly rx ry take MouseX or MouseY, with a sign and a scale (MouseX*0.5)
             "fps_toggle": "F3"      // the FPS counter on and off
         }
+    },
+    "discord": {
+        "rich_presence": true       // Discord Rich Presence (never when headless)
     }
 }
 ```
+
+Discord Rich Presence (`port/src/presence.cpp`, `port/src/platform/discord.cpp`) speaks Discord's
+local IPC protocol over its Unix socket (a named pipe on Windows), so it needs no Discord library. It shows the character
+played and the town, or the dungeon and floor, and reconnects whenever Discord starts. Discord
+names the game after Chronicle's Discord application, whose id is `kDiscordClientId`
+(`platform/discord.hpp`); that application's Rich Presence art assets are `dark_cloud`, `chronicle` and one per character: `toan`, `xiao`, `goro`, `ruby`,
+`ungaga` and `osmond`.
 
 `video.detail_distance` is how far away town houses, villagers and dungeon
 monsters keep their full detail; past it the game's own distances apply, so a
@@ -173,7 +183,8 @@ says which, for the screen to show):
 the master volume, the input section (bindings, mouse and stick), the tick
 rate, `interpolation`, `max_fps` and `show_fps`, the present mode (the
 swapchain is recreated), the window's size and fullscreen state, and `aspect`
-and `ui_scale` (at the next pump outside a frame: `gfx::SetFrameLayout`).
+and `ui_scale` (at the next pump outside a frame: `gfx::SetFrameLayout`),
+and the `discord` section (Rich Presence stops or starts).
 `--width`, `--height` and `--show-fps` keep their hold over the file, and a
 headless window keeps its size. The render scale stays the one the window
 had at start, as after a resize by hand. Each part of the game that holds a

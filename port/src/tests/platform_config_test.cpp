@@ -232,3 +232,11 @@ TEST(PlatformConfig, ChangeAppliesAndSaves) {
     ASSERT_TRUE(ConfigChange(ConfigGet()));
     ASSERT_TRUE(g_changes.size() == 2);
 }
+
+TEST(PlatformConfig, Discord) {
+    ASSERT_TRUE(ConfigParse("").discord_rich_presence);
+    Config config = ConfigParse(R"({"discord": {"rich_presence": false}})");
+    ASSERT_TRUE(!config.discord_rich_presence);
+    ASSERT_TRUE(ConfigParse(R"({"discord": {"rich_presence": "no"}})").discord_rich_presence);
+    ASSERT_TRUE(!ConfigParse(ConfigSerialize(config)).discord_rich_presence);
+}

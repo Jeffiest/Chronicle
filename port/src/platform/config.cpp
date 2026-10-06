@@ -247,6 +247,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         config.shadow_distance = distance;
         return true;
     }
+    if (name == "discord.rich_presence") {
+        return ReadBool(value, config.discord_rich_presence);
+    }
     if (name == "audio.master_volume") {
         float volume = 0.0f;
         if (!ReadNumber(value, volume) || !std::isfinite(volume)) {
@@ -347,6 +350,7 @@ std::string ConfigSerialize(const Config &config) {
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_release"] = config.mouse_release_keys;
     root["input"]["bindings"] = std::move(bindings);
+    root["discord"]["rich_presence"] = config.discord_rich_presence;
     return root.dump(4) + "\n";
 }
 

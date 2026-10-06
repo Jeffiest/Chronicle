@@ -24,11 +24,11 @@ struct ConfigKeyBinding {
 };
 
 struct Config {
-    double                        tick_rate = 60.0;
-    bool                          debug_mode = false;
-    ConfigPresentMode             present_mode = ConfigPresentMode::Fifo;
-    bool                          interpolation = true;
-    double                        max_fps = 0.0;
+    double            tick_rate = 60.0;
+    bool              debug_mode = false;
+    ConfigPresentMode present_mode = ConfigPresentMode::Fifo;
+    bool              interpolation = true;
+    double            max_fps = 0.0;
     // 0: the monitor's (WindowConfig).
     int                           window_width = 0;
     int                           window_height = 0;
@@ -45,6 +45,7 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     std::vector<std::string>      mouse_release_keys = {"Escape"};
+    bool                          discord_rich_presence = true;
 
     bool operator==(const Config &) const = default;
 };
@@ -60,7 +61,7 @@ float ConfigDetailDistance();
 float ConfigShadowDistance();
 
 // Parses a JSON text (comments allowed) over the defaults: an object of the sections game, video,
-// audio and input. Unknown keys and bad values are reported on stderr and leave the default in
+// audio, input and discord. Unknown keys and bad values are reported on stderr and leave the default in
 // place, as does a text that is not JSON; an empty text is the defaults.
 Config ConfigParse(std::string_view text);
 

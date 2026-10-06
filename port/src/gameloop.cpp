@@ -27,6 +27,7 @@
 #include "platform/config.hpp"
 #include "platform/input.hpp"
 #include "platform/overlay.hpp"
+#include "presence.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
 #include "title/opening.hpp"
@@ -788,6 +789,7 @@ int RunGame(int argc, char **argv) {
             GamePad.Step();
             MGEndFrame();
             ++g_frames;
+            PresenceTick();
 
             GameCheckDebugToggle();
             if (GameDeveloperMenuRequested()) {

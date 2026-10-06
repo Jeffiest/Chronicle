@@ -1124,7 +1124,9 @@ check finds nothing to replace. A variable takes one name per declaration,
 and its declaration has no comma outside `()`, `[]` and `{}`: angle brackets do not
 count, so a template type with a comma (`std::pair<int, int>`, or
 `make<int, int>()` in its initialiser) needs a `using` alias, and the script
-stops on one rather than guess.
+stops on one rather than guess. A replaced definition has to spell out its own
+boundaries: a macro that expands to a comma or a semicolon in it is not
+supported, and the script does not notice one.
 
 
 ## Per-unit adjustments

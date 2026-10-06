@@ -68,6 +68,83 @@ void ReleaseKeys(const CTexture &texture) {
     }
 }
 
+uint8_t NearestPaletteColor(const std::array<uint32_t, 256> &palette, uint32_t color) {
+    unsigned best_distance = ~0u;
+    uint8_t  best_index = 0;
+    for (unsigned index = 0; index < palette.size(); index++) {
+        unsigned distance = 0;
+        for (unsigned shift = 0; shift < 32; shift += 8) {
+            int difference = static_cast<int>((palette[index] >> shift) & 0xff) -
+                             static_cast<int>((color >> shift) & 0xff);
+            distance += static_cast<unsigned>(difference * difference);
+        }
+        if (distance < best_distance) {
+            best_distance = distance;
+            best_index = static_cast<uint8_t>(index);
+        }
+    }
+    return best_index;
+}
+
+uint32_t BlendColors(uint32_t first, uint32_t second, unsigned first_weight, unsigned total_weight) {
+    uint32_t blended = 0;
+    for (unsigned shift = 0; shift < 32; shift += 8) {
+        unsigned first_channel = (first >> shift) & 0xff;
+        unsigned second_channel = (second >> shift) & 0xff;
+        unsigned channel = (first_channel * first_weight + second_channel * (total_weight - first_weight) +
+                            total_weight / 2) / total_weight;
+        blended |= channel << shift;
+    }
+    return blended;
+}
+
+// Ground models repeat these images across UV islands and cells. Their source edges differ, so
+// blend a narrow indexed border into a periodic image before uploading it.
+void MakeGroundPeriodic(const char *name, PortDecodedTexture &texture) {
+    if ((std::strcmp(name, "d02b05") != 0 && std::strcmp(name, "d02b06") != 0 &&
+         std::strcmp(name, "e04b01") != 0) ||
+        texture.format != gfx::TextureFormat::Index8 || texture.width < 64 || texture.height < 64 ||
+        texture.levels.empty()) {
+        return;
+    }
+
+    const unsigned horizontal_band = std::strcmp(name, "d02b05") == 0 ? 32 : 8;
+    const unsigned vertical_band = std::strcmp(name, "d02b06") == 0 ? 32 : 8;
+    std::vector<uint8_t> &pixels = texture.levels[0];
+    const unsigned width = texture.width;
+    const unsigned height = texture.height;
+
+    for (unsigned y = 0; y < height; y++) {
+        for (unsigned offset = 0; offset < horizontal_band; offset++) {
+            unsigned left = y * width + offset;
+            unsigned right = y * width + width - 1 - offset;
+            uint32_t left_color = texture.palette[pixels[left]];
+            uint32_t right_color = texture.palette[pixels[right]];
+            unsigned left_weight = horizontal_band + offset;
+            unsigned right_weight = horizontal_band - offset;
+            pixels[left] = NearestPaletteColor(texture.palette,
+                                               BlendColors(left_color, right_color, left_weight, 2 * horizontal_band));
+            pixels[right] = NearestPaletteColor(texture.palette,
+                                                BlendColors(left_color, right_color, right_weight, 2 * horizontal_band));
+        }
+    }
+
+    for (unsigned x = 0; x < width; x++) {
+        for (unsigned offset = 0; offset < vertical_band; offset++) {
+            unsigned top = offset * width + x;
+            unsigned bottom = (height - 1 - offset) * width + x;
+            uint32_t top_color = texture.palette[pixels[top]];
+            uint32_t bottom_color = texture.palette[pixels[bottom]];
+            unsigned top_weight = vertical_band + offset;
+            unsigned bottom_weight = vertical_band - offset;
+            pixels[top] = NearestPaletteColor(texture.palette,
+                                              BlendColors(top_color, bottom_color, top_weight, 2 * vertical_band));
+            pixels[bottom] = NearestPaletteColor(texture.palette,
+                                                 BlendColors(top_color, bottom_color, bottom_weight, 2 * vertical_band));
+        }
+    }
+}
+
 // Retail's EnterTexture, EnterTextureEX and EnterFixTexture share everything but where pixels
 // are staged and which VRAM end moves. The staging buffer and the VRAM arithmetic are kept as
 // retail does them: the game sizes later allocations from buffer_used (editloop's LoadTexture),
@@ -188,6 +265,7 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
                                indexed && swizzled != 0, decoded)) {
             return;
         }
+        MakeGroundPeriodic(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
     }
     tex->tex0 = Tex0(tbp, tbw, psm, tw, th, cbp, indexed ? 1 : 0);

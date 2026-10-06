@@ -29,7 +29,9 @@ float &Jitter(int i, int j) { return g_jitter[i * 15 + j]; }
 struct Span {
     float left;
     float right;
+    float sample_left;
     float texels;
+    float row_scale;
 };
 
 // A band vertex: x in 12.4 GS units of the logical frame, stretched over the span; across is how
@@ -37,7 +39,8 @@ struct Span {
 gfx::Vertex2D StripVertex(const Span &span, int x, int y, unsigned z, float across, int v, int alpha) {
     const float place = MGPortLogicalX(x) / gfx::kLogicalWidth;
     return draw2d::Vertex(span.left + place * (span.right - span.left), MGPortLogicalY(y) * draw2d::RowScale(),
-                          MGPortDepth(z & 0xFFFFFF), across * span.texels, static_cast<float>(v) / 16.0f, 0x80,
+                          MGPortDepth(z & 0xFFFFFF), span.sample_left + across * span.texels,
+                          static_cast<float>(v) / 16.0f * span.row_scale, 0x80,
                           0x80, 0x80, static_cast<u_char>(alpha));
 }
 
@@ -51,10 +54,10 @@ std::array<gfx::Vertex2D, 4> Quad(float x0, float y0, float x1, float y1, float 
     };
 }
 
-// The snapshot's texels that lie beyond depth, on a target that shares the frame's depth buffer;
-// everything nearer is left transparent black, so the image is its own coverage (colour
-// premultiplied by alpha) and stays so through every linear resize.
-void DrawBeyond(gfx::TextureHandle beyond, gfx::TextureHandle snapshot, float depth) {
+// Accumulate the frame beyond several nearby depth planes into a premultiplied image. With heat
+// haze, each plane contributes an equal fraction so the effect gains coverage gradually across the
+// focus distance instead of ending in a visible line on the ground.
+void DrawBeyond(gfx::TextureHandle beyond, gfx::TextureHandle snapshot, float focus, bool feather) {
     const uint8_t clear[4] = {};
     gfx::SetRenderTarget(beyond);
     gfx::Clear(true, clear, false, 0.0f);
@@ -62,12 +65,27 @@ void DrawBeyond(gfx::TextureHandle beyond, gfx::TextureHandle snapshot, float de
     state.depth_test = gfx::DepthTest::GEqual;
     state.texa_aem = false;
     state.texa_ta0 = 0x80;
+    state.blend = feather;
+    state.alpha = {0, 2, 2, 1, 0x80};
     gfx::TextureBinding binding;
     binding.texture = snapshot;
     binding.filter = gfx::Filter::Nearest;
-    std::array<gfx::Vertex2D, 4> quad = Quad(0.0f, 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight, depth, 0.0f, 0.0f,
-                                             gfx::kLogicalWidth, gfx::kLogicalHeight);
-    gfx::Draw2D(gfx::Primitive::Quads, quad, binding, state);
+    const int samples = feather ? 8 : 1;
+    for (int i = 0; i < samples; i++) {
+        sceVu0FVECTOR point = {0.0f, 0.0f, focus + (feather ? (i - 3.5f) * 24.0f : 0.0f), 1.0f};
+        sceVu0ApplyMatrix(point, mgRenderInfo.screen, point);
+        point[2] /= point[3];
+        float depth = MGPortDepth(static_cast<unsigned>(static_cast<int>(point[2])) & 0xFFFFFF);
+        std::array<gfx::Vertex2D, 4> quad = Quad(0.0f, 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight, depth, 0.0f,
+                                                 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight);
+        if (feather) {
+            for (gfx::Vertex2D &vertex : quad) {
+                vertex.color[0] = vertex.color[1] = vertex.color[2] = 0x10;
+                vertex.color[3] = static_cast<u_char>((i + 1) * 0x10);
+            }
+        }
+        gfx::Draw2D(gfx::Primitive::Quads, quad, binding, state);
+    }
 }
 
 // src's texel rect resized over all of a width by height target.
@@ -124,12 +142,11 @@ void AppendStrip(std::vector<gfx::Vertex2D> &triangles, const std::vector<gfx::V
 // towns' heat haze).
 //
 // The copies held the whole frame, so whatever stood nearer than a plane was blurred into the
-// scenery around it, and the quarter-width copy came back as blocks. Here each pass blurs only
-// what lies beyond its own plane (DrawBeyond): the half-size image of the first pass and, for the
-// second, the quarter-size one resized to half size again, which rounds its texels off. The
-// images live in targets of their own, as wide as what the target shows, and frame_image is left
-// alone. The two outermost columns of the second pass stay on the edges, so the wander never
-// uncovers a strip of the sharp frame.
+// scenery around it, and the quarter-width copy came back as blocks. The ordinary depth-of-field
+// passes retain their half- and quarter-size images of only the scenery beyond each plane. Heat
+// haze instead uses two full-resolution targets sharing the frame's depth buffer. Each target gains
+// coverage over eight depth planes; the bands test at the front edge of that range so nearby
+// objects stay sharp. The two outermost columns do not wander past the edges of the image.
 void DepthOfField(float *focus, int level, int alpha, int blur) {
     int phase;
     int i;
@@ -137,6 +154,7 @@ void DepthOfField(float *focus, int level, int alpha, int blur) {
     int k;
 
     gfx::TextureHandle target = gfx::CurrentRenderTarget();
+    bool               haze = blur > 0;
     gfx::LogicalRect   visible = gfx::VisibleLogicalRect(target);
     int                left = std::min(0, static_cast<int>(std::floor(visible.x)));
     int                right = std::max(0x280, static_cast<int>(std::ceil(visible.x + visible.w)));
@@ -144,7 +162,10 @@ void DepthOfField(float *focus, int level, int alpha, int blur) {
     uint32_t           half_height = SCREEN_HALF_HEIGHT;
     uint32_t           quarter_width = (half_width + 1) / 2;
     uint32_t           quarter_height = half_height / 2;
-    Span               span = {static_cast<float>(left), static_cast<float>(right), static_cast<float>(half_width)};
+    Span               span = {static_cast<float>(left), static_cast<float>(right),
+                               haze ? static_cast<float>(left) : 0.0f,
+                               haze ? static_cast<float>(right - left) : static_cast<float>(half_width),
+                               haze ? 2.0f : 1.0f};
 
     sceVu0FVECTOR depth_point[4] = {
         {0.0f, 0.0f, focus[0],         1.0f},
@@ -160,32 +181,51 @@ void DepthOfField(float *focus, int level, int alpha, int blur) {
         screen[i][2] = (int) depth_point[i][2];
     }
 
+    if (haze) {
+        for (i = 0; i < 2; i++) {
+            sceVu0FVECTOR front = {0.0f, 0.0f, focus[i] - 84.0f, 1.0f};
+            sceVu0ApplyMatrix(front, mgRenderInfo.screen, front);
+            screen[i * 2][2] = screen[i * 2 + 1][2] = static_cast<int>(front[2] / front[3]);
+        }
+    }
+
     gfx::TextureHandle snapshot = gfx::NamedRenderTarget("dof frame", 0x280, SCREEN_HEIGHT, false, false, true);
-    gfx::TextureHandle beyond = gfx::NamedRenderTarget("dof beyond", 0x280, SCREEN_HEIGHT, true, true);
-    gfx::TextureHandle near_image = gfx::NamedRenderTarget("dof near", half_width, half_height, true);
+    gfx::TextureHandle beyond = haze ? gfx::kNullTexture :
+                                       gfx::NamedRenderTarget("dof beyond", 0x280, SCREEN_HEIGHT, true, true);
+    gfx::TextureHandle near_image = haze ? gfx::NamedRenderTarget("dof near", 0x280, SCREEN_HEIGHT, true, true) :
+                                          gfx::NamedRenderTarget("dof near", half_width, half_height, true);
     gfx::TextureHandle far_image = gfx::kNullTexture;
-    bool               ready = snapshot != gfx::kNullTexture && beyond != gfx::kNullTexture &&
+    bool               ready = snapshot != gfx::kNullTexture && (haze || beyond != gfx::kNullTexture) &&
                                near_image != gfx::kNullTexture && target == gfx::kMainTarget &&
                                gfx::SnapshotFrame(snapshot);
 
     if (ready) {
-        DrawBeyond(beyond, snapshot, MGPortDepth(static_cast<unsigned>(screen[0][2]) & 0xFFFFFF));
-        Resize(beyond, span.left, 0.0f, span.right, gfx::kLogicalHeight, near_image, half_width, half_height);
+        DrawBeyond(haze ? near_image : beyond, snapshot, focus[0], haze);
+        if (!haze) {
+            Resize(beyond, span.left, 0.0f, span.right, gfx::kLogicalHeight, near_image, half_width, half_height);
+        }
 
         if (level >= 2) {
-            gfx::TextureHandle half = gfx::NamedRenderTarget("dof far half", half_width, half_height, true);
-            gfx::TextureHandle quarter = gfx::NamedRenderTarget("dof far quarter", quarter_width, quarter_height, true);
-            far_image = gfx::NamedRenderTarget("dof far", half_width, half_height, true);
-
-            if (half != gfx::kNullTexture && quarter != gfx::kNullTexture && far_image != gfx::kNullTexture) {
-                DrawBeyond(beyond, snapshot, MGPortDepth(static_cast<unsigned>(screen[2][2]) & 0xFFFFFF));
-                Resize(beyond, span.left, 0.0f, span.right, gfx::kLogicalHeight, half, half_width, half_height);
-                Resize(half, 0.0f, 0.0f, static_cast<float>(half_width), static_cast<float>(half_height), quarter,
-                       quarter_width, quarter_height);
-                Resize(quarter, 0.0f, 0.0f, static_cast<float>(quarter_width), static_cast<float>(quarter_height),
-                       far_image, half_width, half_height);
+            if (haze) {
+                far_image = gfx::NamedRenderTarget("dof far", 0x280, SCREEN_HEIGHT, true, true);
+                if (far_image != gfx::kNullTexture) {
+                    DrawBeyond(far_image, snapshot, focus[1], true);
+                }
             } else {
-                far_image = gfx::kNullTexture;
+                gfx::TextureHandle half = gfx::NamedRenderTarget("dof far half", half_width, half_height, true);
+                gfx::TextureHandle quarter = gfx::NamedRenderTarget("dof far quarter", quarter_width, quarter_height, true);
+                far_image = gfx::NamedRenderTarget("dof far", half_width, half_height, true);
+
+                if (half != gfx::kNullTexture && quarter != gfx::kNullTexture && far_image != gfx::kNullTexture) {
+                    DrawBeyond(beyond, snapshot, focus[1], false);
+                    Resize(beyond, span.left, 0.0f, span.right, gfx::kLogicalHeight, half, half_width, half_height);
+                    Resize(half, 0.0f, 0.0f, static_cast<float>(half_width), static_cast<float>(half_height), quarter,
+                           quarter_width, quarter_height);
+                    Resize(quarter, 0.0f, 0.0f, static_cast<float>(quarter_width), static_cast<float>(quarter_height),
+                           far_image, half_width, half_height);
+                } else {
+                    far_image = gfx::kNullTexture;
+                }
             }
         }
 

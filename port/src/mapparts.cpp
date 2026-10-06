@@ -2,14 +2,11 @@
 
 #include <libvu0.h>
 
-// Retail's DrawLOD raises a part that asks for a lift by its own distance from the eye: 0.02 of the
-// lift within 100 units, then a thousandth of the distance up to 2. Neighbouring road tiles are
-// separate parts, so each stands at a height of its own and the ground shows through the step
-// between two of them: a fraction of a pixel on the PS2's frame, a line of grass along every tile
-// edge on a larger one. The lift only keeps the part clear of the ground in the depth buffer, which
-// the port's float depth does at any distance, so every part takes the one height retail gives a
-// part 100 units away and neighbours meet edge to edge.
+// Road tiles must clear the uneven ground at the same height. A small lift lets the ground win the
+// depth test in places as the camera moves, exposing a different, darker surface beneath the road.
+// The constant road lift is within retail's distance-dependent range and keeps adjacent tiles level.
 constexpr float kPartsLiftDepth = 0.1f;
+constexpr float kRoadLiftDepth = 0.5f;
 
 void CMapParts::DrawLOD(float *distance, int lowest, int highest, int *out_level) {
     sceVu0FVECTOR saved_pos;
@@ -26,7 +23,9 @@ void CMapParts::DrawLOD(float *distance, int lowest, int highest, int *out_level
     sceVu0CopyVector(saved_pos, this->pos);
     sceVu0CopyVector(lifted_pos, saved_pos);
 
-    if (this->lift > 0.0f) {
+    if (this->subtype == MAP_PARTS_SUBTYPE_ROAD && this->lift > 0.0f) {
+        lifted_pos[1] += kRoadLiftDepth;
+    } else if (this->lift > 0.0f) {
         if (this->lift > 1.0f) {
             lifted_pos[1] += 0.1f;
         } else {

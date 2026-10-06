@@ -44,6 +44,17 @@ struct Vec3 {
     float z;
 };
 
+bool Finite(Vec3 value) { return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z); }
+
+bool FiniteMatrix(const float *matrix) {
+    for (int i = 0; i < 16; i++) {
+        if (!std::isfinite(matrix[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 Vec3 operator-(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 
 Vec3 operator+(Vec3 a, Vec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
@@ -97,12 +108,14 @@ void Emit(std::vector<gfx::Vertex3D> &out, std::span<const Vec3> polygon) {
 void AddFace(Volume &volume, std::vector<Vec3> polygon, Vec3 inside, Count count) {
     Vec3 normal = {0.0f, 0.0f, 0.0f};
     Vec3 centre = {0.0f, 0.0f, 0.0f};
+    for (size_t i = 1; i + 1 < polygon.size(); i++) {
+        normal = normal + Cross(polygon[i] - polygon[0], polygon[i + 1] - polygon[0]);
+    }
     for (size_t i = 0; i < polygon.size(); i++) {
-        normal = normal + Cross(polygon[i], polygon[(i + 1) % polygon.size()]);
         centre = centre + polygon[i];
     }
     centre = centre * (1.0f / static_cast<float>(polygon.size()));
-    if (Length(normal) == 0.0f) {
+    if (!Finite(normal) || !Finite(centre) || !Finite(inside) || Length(normal) == 0.0f) {
         return;
     }
     if (Dot(normal, centre - inside) < 0.0f) {
@@ -114,16 +127,26 @@ void AddFace(Volume &volume, std::vector<Vec3> polygon, Vec3 inside, Count count
 // The triangle's prism down to its drop on the plane. A prism the light grazes has no inside and
 // counts nothing, which is also what the microprograms make of it.
 void AddPrism(Volume &volume, const Vec3 top[3], const Vec3 drop[3], const bool sides[3], Count far_cap) {
+    for (int i = 0; i < 3; i++) {
+        if (!Finite(top[i]) || !Finite(drop[i])) {
+            return;
+        }
+    }
     Vec3  normal = Cross(top[1] - top[0], top[2] - top[0]);
     Vec3  centre_top = (top[0] + top[1] + top[2]) * (1.0f / 3.0f);
     Vec3  centre_drop = (drop[0] + drop[1] + drop[2]) * (1.0f / 3.0f);
     Vec3  height = centre_drop - centre_top;
     float area = Length(normal);
     float span = Length(height);
-    if (area == 0.0f || span == 0.0f || std::fabs(Dot(normal, height)) <= 1e-4f * area * span) {
+    float thickness = Dot(normal, height);
+    if (!std::isfinite(area) || !std::isfinite(span) || area == 0.0f || span == 0.0f ||
+        !std::isfinite(thickness) || std::fabs(thickness) <= 1e-4f * area * span) {
         return;
     }
     Vec3 inside = (centre_top + centre_drop) * 0.5f;
+    if (!Finite(inside)) {
+        return;
+    }
     AddFace(volume, {top[0], top[1], top[2]}, inside, Count::Both);
     AddFace(volume, {drop[0], drop[1], drop[2]}, inside, far_cap);
     for (int edge = 0; edge < 3; edge++) {
@@ -137,6 +160,14 @@ void AddPrism(Volume &volume, const Vec3 top[3], const Vec3 drop[3], const bool 
 // The prism's section by the plane z = depth, added wherever it covers: the eye is inside the
 // volume there, which the faces in front of the scene cannot count.
 void AddNearCap(Volume &volume, const Vec3 top[3], const Vec3 drop[3], float depth) {
+    if (!std::isfinite(depth)) {
+        return;
+    }
+    for (int i = 0; i < 3; i++) {
+        if (!Finite(top[i]) || !Finite(drop[i])) {
+            return;
+        }
+    }
     const Vec3          *corners[6] = {&top[0], &top[1], &top[2], &drop[0], &drop[1], &drop[2]};
     static constexpr int kEdges[9][2] = {
         {0, 1},
@@ -158,6 +189,9 @@ void AddNearCap(Volume &volume, const Vec3 top[3], const Vec3 drop[3], float dep
         if ((da < 0.0f) != (db < 0.0f)) {
             Vec3 point = a + (b - a) * (da / (da - db));
             point.z = depth;
+            if (!Finite(point)) {
+                return;
+            }
             section.push_back(point);
         }
     }
@@ -169,6 +203,9 @@ void AddNearCap(Volume &volume, const Vec3 top[3], const Vec3 drop[3], float dep
         mean = mean + point;
     }
     mean = mean * (1.0f / static_cast<float>(section.size()));
+    if (!Finite(mean)) {
+        return;
+    }
     std::sort(section.begin(), section.end(), [mean](Vec3 a, Vec3 b) {
         return std::atan2(a.y - mean.y, a.x - mean.x) > std::atan2(b.y - mean.y, b.x - mean.x);
     });
@@ -184,10 +221,19 @@ struct Projection {
     // and the camera as if fixed to the model: eye_to_clip * view * model * (view * model)^-1.
     gfx::MeshTransform transform;
     bool               has_transform;
+    bool               valid;
 };
 
 Projection Project(const RenderInfo &info, float (*matrix)[4]) {
-    Projection projection;
+    Projection projection = {};
+    Vec3 normal = {info.shadow_normal[0], info.shadow_normal[1], info.shadow_normal[2]};
+    Vec3 light = {info.light_direction[0][0], info.light_direction[1][0], info.light_direction[2][0]};
+    float normal_length = Length(normal);
+    float light_length = Length(light);
+    if (!std::isfinite(normal_length) || !std::isfinite(light_length) || normal_length == 0.0f ||
+        light_length == 0.0f || std::fabs(Dot(normal, light)) <= 1e-3f * normal_length * light_length) {
+        return projection;
+    }
     float      drop[4][4];
     Draw3DMul(projection.model_to_eye, info.view_scaled, matrix);
     Draw3DMul(drop, info.shadow, matrix);
@@ -199,10 +245,13 @@ Projection Project(const RenderInfo &info, float (*matrix)[4]) {
     std::memcpy(transform.view, info.view_scaled, sizeof(transform.view));
     std::memcpy(transform.model, matrix, sizeof(transform.model));
     projection.has_transform = gfx::InvertAffineTransform(&projection.model_to_eye[0][0], transform.local);
-    Vec3 light = {info.light_direction[0][0], info.light_direction[1][0], info.light_direction[2][0]};
     projection.local_light = {Dot({matrix[0][0], matrix[0][1], matrix[0][2]}, light),
                               Dot({matrix[1][0], matrix[1][1], matrix[1][2]}, light),
                               Dot({matrix[2][0], matrix[2][1], matrix[2][2]}, light)};
+    projection.valid = FiniteMatrix(&projection.model_to_eye[0][0]) &&
+                       FiniteMatrix(&projection.drop_to_eye[0][0]) &&
+                       FiniteMatrix(&projection.eye_to_clip[0][0]) && Finite(projection.local_light);
+    projection.has_transform = projection.has_transform && FiniteMatrix(transform.local);
     return projection;
 }
 
@@ -276,10 +325,26 @@ int CVisualShadow::CreateVUdataShadow(u_int *block, u_int *model_data) {
     for (int shape = 0; shape < shadow->shape_num; shape++) {
         int index_num = reinterpret_cast<MDT_SSHAPE *>(corner)->index_num;
         corner = reinterpret_cast<MDT_SSHAPE *>(corner)->vertex;
-        for (int emitted = 0; emitted < index_num; emitted += 3, corner += 3) {
+        for (int emitted = 0; emitted + 3 <= index_num; emitted += 3, corner += 3) {
+            Vec3 positions[3];
+            bool valid = true;
+            for (int i = 0; i < 3; i++) {
+                int index = corner[i].index;
+                if (index < 0 || index >= model->vertex_num) {
+                    valid = false;
+                    break;
+                }
+                positions[i] = {vertices[index][0], vertices[index][1], vertices[index][2]};
+                valid = valid && Finite(positions[i]);
+            }
+            if (!valid) {
+                continue;
+            }
             for (int i = 0; i < 3; i++) {
                 gfx::Vertex3D vertex = {};
-                std::memcpy(vertex.position, vertices[corner[i].index], sizeof(vertex.position));
+                vertex.position[0] = positions[i].x;
+                vertex.position[1] = positions[i].y;
+                vertex.position[2] = positions[i].z;
                 visual.vertices.push_back(vertex);
             }
         }
@@ -304,11 +369,14 @@ int CVisualShadow::CreateVUdataShadowCLIP(u_int *block, u_int *model_data, Rende
     vu_size = kDraw3DBlockQuads;
     Draw3DVisual &visual = Draw3DRegisterVisual(block, true);
 
+    Projection projection = Project(*info, matrix);
+    if (!projection.valid) {
+        return 0;
+    }
     int                             count = ShadowClipBuild(nullptr, 0, model_data, info, matrix, 0);
     std::vector<ShadowClipTriangle> triangles(static_cast<size_t>(count));
     ShadowClipBuild(triangles.data(), count, model_data, info, matrix, 0);
 
-    Projection projection = Project(*info, matrix);
     float      near_cap = NearPlane(projection) * 1.001f;
     Volume     volume;
     for (const ShadowClipTriangle &triangle : triangles) {
@@ -348,6 +416,9 @@ int CVisualShadow::DrawVu1(u_int *packet, float (*matrix)[4], RenderInfo *info, 
         return 0;
     }
     Projection projection = Project(*info, matrix);
+    if (!projection.valid) {
+        return 0;
+    }
 
     if (info->shadow_pass == 2) {
         u_int *saved_primary = vu_data_buffer[0];

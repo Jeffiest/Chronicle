@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -103,6 +104,239 @@ struct TextureRun {
     uint32_t count;
     int      texture;
 };
+
+struct GroundFace {
+    std::array<uint32_t, 3> vertices;
+    size_t                  strip;
+    bool                    grassy;
+};
+
+bool SamePosition(const gfx::Vertex3D &a, const gfx::Vertex3D &b) {
+    float distance = 0.0f;
+    for (int axis = 0; axis < 3; axis++) {
+        float difference = a.position[axis] - b.position[axis];
+        distance += difference * difference;
+    }
+    return distance < 0.0004f;
+}
+
+float GroundAltitude(const gfx::Vertex3D &a, const gfx::Vertex3D &b, const gfx::Vertex3D &c) {
+    float dx = b.position[0] - a.position[0];
+    float dz = b.position[2] - a.position[2];
+    float length = std::sqrt(dx * dx + dz * dz);
+    if (length < 0.001f) {
+        return 0.0f;
+    }
+    return std::fabs(dx * (c.position[2] - a.position[2]) - dz * (c.position[0] - a.position[0])) / length;
+}
+
+void GroundUvAt(const std::array<gfx::Vertex3D, 3> &source, const float position[3], float uv[2]) {
+    float ax = source[1].position[0] - source[0].position[0];
+    float az = source[1].position[2] - source[0].position[2];
+    float bx = source[2].position[0] - source[0].position[0];
+    float bz = source[2].position[2] - source[0].position[2];
+    float px = position[0] - source[0].position[0];
+    float pz = position[2] - source[0].position[2];
+    float determinant = ax * bz - az * bx;
+    if (std::fabs(determinant) < 0.000001f) {
+        uv[0] = source[0].uv[0];
+        uv[1] = source[0].uv[1];
+        return;
+    }
+    float u = (px * bz - pz * bx) / determinant;
+    float v = (ax * pz - az * px) / determinant;
+    for (int axis = 0; axis < 2; axis++) {
+        uv[axis] = source[0].uv[axis] + u * (source[1].uv[axis] - source[0].uv[axis]) +
+                   v * (source[2].uv[axis] - source[0].uv[axis]);
+    }
+}
+
+// Draw each ground texture a short distance into its neighbour at a fading opacity. The two
+// half-opacity edges meet without a hard material boundary while the original art stays intact.
+void AddGroundTransition(Draw3DVisual &visual, const GroundFace &target_face, const GroundFace &source_face,
+                         int edge_a, int edge_b) {
+    std::array<gfx::Vertex3D, 3> target;
+    std::array<gfx::Vertex3D, 3> source;
+    for (int i = 0; i < 3; i++) {
+        target[i] = visual.vertices[target_face.vertices[i]];
+        source[i] = visual.vertices[source_face.vertices[i]];
+    }
+
+    for (int edge = 0; edge < 3; edge++) {
+        int next = (edge + 1) % 3;
+        if ((edge == edge_a && next == edge_b) || (edge == edge_b && next == edge_a)) {
+            edge_a = edge;
+            edge_b = next;
+            break;
+        }
+    }
+    int third = 3 - edge_a - edge_b;
+    float altitude = GroundAltitude(target[edge_a], target[edge_b], target[third]);
+    if (altitude < 0.01f) {
+        return;
+    }
+    float fraction = std::min(4.0f / altitude, 0.25f);
+    gfx::Vertex3D band[4] = {target[edge_a], target[edge_b], target[edge_b], target[edge_a]};
+    for (int axis = 0; axis < 3; axis++) {
+        band[2].position[axis] += fraction * (target[third].position[axis] - band[2].position[axis]);
+        band[3].position[axis] += fraction * (target[third].position[axis] - band[3].position[axis]);
+    }
+    for (int i = 0; i < 4; i++) {
+        gfx::Vertex3D &vertex = band[i];
+        GroundUvAt(source, vertex.position, vertex.uv);
+        vertex.position[1] += 0.02f;
+        vertex.color[0] = 0x80;
+        vertex.color[1] = 0x80;
+        vertex.color[2] = 0x80;
+        vertex.color[3] = i < 2 ? 0x40 : 0;
+    }
+
+    uint32_t first_vertex = static_cast<uint32_t>(visual.vertices.size());
+    visual.vertices.insert(visual.vertices.end(), std::begin(band), std::end(band));
+    Draw3DStrip strip = visual.strips[source_face.strip];
+    strip.first_index = static_cast<uint32_t>(visual.indices.size());
+    strip.index_count = 6;
+    strip.ground_transition = true;
+    visual.indices.insert(visual.indices.end(), {first_vertex, first_vertex + 1, first_vertex + 2,
+                                                  first_vertex, first_vertex + 2, first_vertex + 3});
+    visual.strips.push_back(strip);
+    visual.vertex_colour = true;
+}
+
+void AddForestGroundTransitions(Draw3DVisual &visual) {
+    std::vector<GroundFace> faces;
+    size_t base_strips = visual.strips.size();
+    for (size_t strip_no = 0; strip_no < base_strips; strip_no++) {
+        const Draw3DStrip &strip = visual.strips[strip_no];
+        if (strip.texture < 0) {
+            continue;
+        }
+        const char *name = TexManager.GetTexture(strip.texture)->name;
+        bool grassy = std::strcmp(name, "d02b05") == 0;
+        if (!grassy && std::strcmp(name, "d02b06") != 0) {
+            continue;
+        }
+        for (uint32_t i = strip.first_index; i + 2 < strip.first_index + strip.index_count; i += 3) {
+            GroundFace face = {{{visual.indices[i], visual.indices[i + 1], visual.indices[i + 2]}}, strip_no,
+                               grassy};
+            faces.push_back(face);
+        }
+    }
+
+    for (size_t a = 0; a < faces.size(); a++) {
+        for (size_t b = a + 1; b < faces.size(); b++) {
+            if (faces[a].grassy == faces[b].grassy) {
+                continue;
+            }
+            int first[2] = {-1, -1};
+            int second[2] = {-1, -1};
+            int shared = 0;
+            for (int va = 0; va < 3; va++) {
+                for (int vb = 0; vb < 3; vb++) {
+                    if (SamePosition(visual.vertices[faces[a].vertices[va]],
+                                     visual.vertices[faces[b].vertices[vb]])) {
+                        if (shared < 2) {
+                            first[shared] = va;
+                            second[shared] = vb;
+                        }
+                        shared++;
+                    }
+                }
+            }
+            if (shared == 2) {
+                bool ground_edge = true;
+                for (int edge = 0; edge < 2; edge++) {
+                    const gfx::Vertex3D &vertex = visual.vertices[faces[a].vertices[first[edge]]];
+                    ground_edge = ground_edge && std::fabs(vertex.position[1]) < 1.5f &&
+                                  vertex.normal[1] > 0.75f;
+                }
+                if (!ground_edge) {
+                    continue;
+                }
+                AddGroundTransition(visual, faces[a], faces[b], first[0], first[1]);
+                AddGroundTransition(visual, faces[b], faces[a], second[0], second[1]);
+            }
+        }
+    }
+}
+
+void AddGroundBorderBand(Draw3DVisual &visual, const std::array<gfx::Vertex3D, 3> &face,
+                         const Draw3DStrip &material, int edge_a, int edge_b, int soil_texture) {
+    int third = 3 - edge_a - edge_b;
+    float altitude = GroundAltitude(face[edge_a], face[edge_b], face[third]);
+    if (altitude < 0.01f) {
+        return;
+    }
+    float fraction = std::min(1.0f / altitude, 0.25f);
+    gfx::Vertex3D band[4] = {face[edge_a], face[edge_b], face[edge_b], face[edge_a]};
+    for (int axis = 0; axis < 3; axis++) {
+        band[2].position[axis] += fraction * (face[third].position[axis] - band[2].position[axis]);
+        band[3].position[axis] += fraction * (face[third].position[axis] - band[3].position[axis]);
+    }
+    for (int i = 0; i < 4; i++) {
+        band[i].position[1] += 0.03f;
+        band[i].color[0] = 0x80;
+        band[i].color[1] = 0x80;
+        band[i].color[2] = 0x80;
+        band[i].color[3] = i < 2 ? 0x80 : 0;
+    }
+
+    uint32_t first_vertex = static_cast<uint32_t>(visual.vertices.size());
+    visual.vertices.insert(visual.vertices.end(), std::begin(band), std::end(band));
+    Draw3DStrip strip = material;
+    const CTexture *soil = TexManager.GetTexture(soil_texture);
+    strip.texture = soil_texture;
+    strip.tex0 = soil->tex0;
+    strip.tex1 = soil->tex1;
+    strip.first_index = static_cast<uint32_t>(visual.indices.size());
+    strip.index_count = 6;
+    strip.ground_transition = true;
+    strip.ground_world_uv = true;
+    visual.indices.insert(visual.indices.end(), {first_vertex, first_vertex + 1, first_vertex + 2,
+                                                  first_vertex, first_vertex + 2, first_vertex + 3});
+    visual.strips.push_back(strip);
+    visual.vertex_colour = true;
+}
+
+// Forest cells use different soil images at some matching outer edges. A shared world-space
+// sample covers the edge itself and fades into each cell's original image a short way inward.
+void AddForestGroundBorders(Draw3DVisual &visual) {
+    char soil_name[] = "d02b04";
+    int soil_texture = TexManager.GetTextureHandle(soil_name, -1);
+    if (soil_texture < 0) {
+        return;
+    }
+    size_t base_strips = visual.strips.size();
+    for (size_t strip_no = 0; strip_no < base_strips; strip_no++) {
+        Draw3DStrip strip = visual.strips[strip_no];
+        if (strip.texture < 0 || strip.ground_transition) {
+            continue;
+        }
+        const char *name = TexManager.GetTexture(strip.texture)->name;
+        if (std::strcmp(name, "d02b04") != 0 && std::strcmp(name, "d02b05") != 0 &&
+            std::strcmp(name, "d02b06") != 0) {
+            continue;
+        }
+        for (uint32_t i = strip.first_index; i + 2 < strip.first_index + strip.index_count; i += 3) {
+            std::array<gfx::Vertex3D, 3> face = {visual.vertices[visual.indices[i]],
+                                                 visual.vertices[visual.indices[i + 1]],
+                                                 visual.vertices[visual.indices[i + 2]]};
+            for (int edge = 0; edge < 3; edge++) {
+                int next = (edge + 1) % 3;
+                const gfx::Vertex3D &a = face[edge];
+                const gfx::Vertex3D &b = face[next];
+                bool x_border = std::fabs(std::fabs(a.position[0]) - 80.0f) < 0.5f &&
+                                std::fabs(a.position[0] - b.position[0]) < 0.5f;
+                bool z_border = std::fabs(std::fabs(a.position[2]) - 80.0f) < 0.5f &&
+                                std::fabs(a.position[2] - b.position[2]) < 0.5f;
+                if ((x_border || z_border) && std::fabs(a.position[1]) < 2.0f &&
+                    std::fabs(b.position[1]) < 2.0f && a.normal[1] > 0.6f && b.normal[1] > 0.6f) {
+                    AddGroundBorderBand(visual, face, strip, edge, next, soil_texture);
+                }
+            }
+        }
+    }
+}
 
 // The models map a texture that tiles from one texel inside its near edge to two inside its far
 // one (1 to size - 2), so the GS's clamp never filters past an edge. Where two such panels meet,
@@ -262,9 +496,21 @@ void Draw3DDrawVisual(const Draw3DVisual &visual, const float model[4][4], const
     }
 
     static const float kWhite[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    uint32_t base_flags = constants.flags;
     for (const Draw3DStrip &strip : visual.strips) {
         if (strip.index_count == 0) {
             continue;
+        }
+        if (projected && strip.ground_transition) {
+            continue;
+        }
+        constants.flags = base_flags | (strip.ground_world_uv ? gfx::kMeshWorldUv : 0u);
+        if (strip.ground_world_uv) {
+            for (int axis = 0; axis < 4; axis++) {
+                constants.world_uv[0][axis] = model[axis][0] / strip.ground_uv_period;
+                constants.world_uv[1][axis] = model[axis][2] / strip.ground_uv_period *
+                                               (strip.ground_uv_flip_v ? -1.0f : 1.0f);
+            }
         }
         if (projected) {
             Draw3DMaterial(constants, info, kWhite, kWhite, strip.specular);
@@ -281,17 +527,26 @@ void Draw3DDrawVisual(const Draw3DVisual &visual, const float model[4][4], const
                 // SetEnv sends CLAMP_1 = 5 every frame; TEX1's MMAG picks the filter.
                 binding.wrap_u = gfx::Wrap::Clamp;
                 binding.wrap_v = gfx::Wrap::Clamp;
+                if (strip.ground_transition || strip.ground_world_uv) {
+                    binding.wrap_u = gfx::Wrap::Repeat;
+                    binding.wrap_v = gfx::Wrap::Repeat;
+                }
                 u_long tex1 = strip.tex1 ? strip.tex1 : *reinterpret_cast<const u_long *>(&mgTEX1Env);
                 binding.filter = (tex1 >> 5) & 1 ? gfx::Filter::Linear : gfx::Filter::Nearest;
             }
+        }
+        gfx::DrawState strip_state = state;
+        if (strip.ground_transition) {
+            strip_state.alpha = {0, 1, 0, 1, 0x80};
+            strip_state.depth_write = false;
         }
 
         if (visual.immediate) {
             gfx::DrawMeshImmediate(visual.vertices,
                                    std::span<const uint32_t>(visual.indices).subspan(strip.first_index, strip.index_count),
-                                   constants, binding, state, &transform);
+                                   constants, binding, strip_state, &transform);
         } else {
-            gfx::DrawMesh(visual.mesh, strip.first_index, strip.index_count, constants, binding, state,
+            gfx::DrawMesh(visual.mesh, strip.first_index, strip.index_count, constants, binding, strip_state,
                           &transform);
         }
     }
@@ -387,6 +642,15 @@ int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int unknown0, int
     }
 
     SpanWholeTexture(visual, runs);
+    AddForestGroundTransitions(visual);
+    AddForestGroundBorders(visual);
+    for (Draw3DStrip &strip : visual.strips) {
+        if (strip.texture >= 0 && std::strcmp(TexManager.GetTexture(strip.texture)->name, "e04b01") == 0) {
+            strip.ground_world_uv = true;
+            strip.ground_uv_period = 100.0f;
+            strip.ground_uv_flip_v = true;
+        }
+    }
     Draw3DFinishVisual(visual);
     return vu_size;
 }

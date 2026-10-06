@@ -2,12 +2,14 @@
 
 #include <libpad.h>
 
+#include "mainselect.hpp"
 #include "platform/input.hpp"
 
-// Retail's bodies, plus the two things the host's keyboard and mouse need to know about the game's
-// reads: when pad 0 is read (the mouse motion since the previous read becomes this read's right
-// stick) and whether the game looks at the left stick at all (if not, the movement keys also press
-// the d-pad, for the screens that read only the d-pad).
+// The pad read and stick replacements tell the host when to latch mouse motion and when movement
+// keys must also press the d-pad. Button replacements require a deliberate modifier for retail's
+// pad 2 debug reads without PAL's pad 2 Start/Select overrides changing ordinary pad 1 buttons.
+
+constexpr int kDebugButtonsModifier = PAD_SELECT | PAD_L2;
 
 int pad_button_read(PAD_STATUS *status, int port, int slot) {
     unsigned char data[32];
@@ -36,4 +38,40 @@ int CGamePad::GetLX() {
 int CGamePad::GetLY() {
     InputNoteLeftStickRead();
     return AxisCalibration(pad[0].input.status.left_y);
+}
+
+int CGamePad::On(int mask) {
+    if (key_lock) {
+        return 0;
+    }
+
+    return (pad[0].input.status.button & mask) != 0;
+}
+
+int CGamePad::On2(int mask) {
+    return DebugMode && (pad[0].input.status.button & kDebugButtonsModifier) == kDebugButtonsModifier && On(mask);
+}
+
+int CGamePad::Down(int mask) {
+    if (key_lock) {
+        return 0;
+    }
+
+    if (DebugMode && (pad[0].input.status.button & kDebugButtonsModifier) == kDebugButtonsModifier) {
+        mask &= ~(PAD_CROSS | PAD_CIRCLE);
+    }
+
+    if ((mask & (PAD_L3 | PAD_R3)) && (!DebugMode || (pad[0].input.status.button & kDebugButtonsModifier) != kDebugButtonsModifier)) {
+        return 0;
+    }
+
+    return (mask & (pad[0].input.status.button & ~previous_pad[0].input.status.button)) != 0;
+}
+
+int CGamePad::Down2(int mask) {
+    if (key_lock || !DebugMode || (pad[0].input.status.button & kDebugButtonsModifier) != kDebugButtonsModifier) {
+        return 0;
+    }
+
+    return (mask & (pad[0].input.status.button & ~previous_pad[0].input.status.button)) != 0;
 }

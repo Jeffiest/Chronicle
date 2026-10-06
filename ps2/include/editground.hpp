@@ -114,7 +114,7 @@ public:
     CMapParts        *river_parts; /**< Template river pieces, indexed by how the river joins its neighbours. */
     CMapParts        *road_parts;  /**< Template road pieces, indexed by how the road joins its neighbours. */
     u8                unk_15f3c[4];
-    CMapParts         fixed_parts[64]; /**< Parts of the map that the player cannot move; the second is the ground model. */
+    CMapParts         fixed_parts[64]; /**< Parts of the map that the player cannot move; in Muska Racka the first is the ground model. */
     s32               spare_words[1];  /**< Words Initialize clears; nothing reads them. */
     CPartsCursor      cursor;          /**< Cursor drawn over the cells a part would occupy. */
     EPARTS_FUNC_DATA *people[128];     /**< Villager markers of the placed parts. */

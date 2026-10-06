@@ -30,8 +30,8 @@ void GameSetFastLoad(bool fast);
 bool GameFastLoad();
 
 // DebugMode starts as the config file's game.debug_mode. GameCheckDebugToggle runs after every frame
-// of the main loop and, while that setting is on, flips DebugMode when pad 1 holds L1+R1+L2+R2 and
-// R3 is pressed: retail PAL's pad 2 combination, read past the game's pad lock.
+// of the main loop and flips DebugMode when pad 1 holds L1+R1+L2+R2 and R3 is pressed: retail PAL's
+// pad 2 combination, read past the game's pad lock.
 void GameCheckDebugToggle();
 
 // The way back to the developer menu from any mode while DebugMode is set. GameDeveloperMenuRequested

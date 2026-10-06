@@ -31,6 +31,7 @@
 #include "title/opening.hpp"
 #include "title/script.hpp"
 #include "vector.hpp"
+#include "visualvu1.hpp"
 #include "wind.hpp"
 
 /* The rectangle a texture transfer takes, declared here rather than reached through rect.h for the
@@ -68,6 +69,10 @@ public:
 /* A frame parented to an object, which is what lets the world transform drive a model. */
 class CObjectFrame : public CObject {
 public:
+    CFrameVu1 *frame[4];         /**< Frame of each level of detail; zero where the object has none. */
+    s32        rotation_changed; /**< Set whenever the angle, its motion or the moment changes. */
+    s32        draw_on;          /**< 1 while the object draws; 0 leaves it out of the scene. */
+
     virtual void FrameObjectOnOff(char *name, int on);
     virtual void Draw();
 
@@ -78,12 +83,13 @@ public:
    through the object dispatch like anything else in the world. */
 class CMapObject : public CObjectFrame {
 public:
-    char       unk_00[36];
-    CFrameVu1 *shadow_frame; /**< Model the object's shadow is drawn from; zero where it casts none. */
-    char       unk_28[8];
-    float      shadow_offset; /**< Height the shadow drops below the object. */
-    int        unk_34;        /**< Category of map part the object belongs to. */
-    int        handle;        /**< Handle the map gave the object. */
+    CFrameVu1 *collision_frame; /**< Frame that collision reads; zero where the object has none. */
+    CFrameVu1 *shadow_frame;    /**< Model the object's shadow is drawn from; zero where it casts none. */
+    CFrameVu1 *shade_frame;     /**< Frame that the shade draws from; zero where the object takes none. */
+    CFrameVu1 *camera_frame;    /**< Collision frame the camera reads; zero where the object has none. */
+    float      shadow_offset;   /**< Height the shadow drops below the object. */
+    int        unk_34;          /**< Category of map part the object belongs to. */
+    int        handle;          /**< Handle the map gave the object. */
     char       unk_3C[4];
 
     CMapObject();
@@ -94,12 +100,17 @@ public:
     void DrawShadow(int fast);
 };
 
+class CTexture;
+
 /* The scene's one fire, which is a light rather than a model. */
 class CFireOmni {
 public:
     char          unk_00[32];
-    sceVu0FVECTOR position; /**< World position the fire draws at. */
-    char          unk_30[16];
+    sceVu0FVECTOR position;    /**< World position the fire draws at. */
+    s32           texture_set; /**< Indicates that the textures were supplied rather than looked up. */
+    CTexture     *core;        /**< Bright inner texture of the flame. */
+    CTexture     *glow;        /**< Soft outer texture of the flame. */
+    s32           unk_3C;
 
     CFireOmni();
 
@@ -119,12 +130,25 @@ struct MAPOBJ_INFO {
 
 /* The river the scene draws, which is a grid the file sizes and colours once and then shakes every
    tick. Another unit's class to type; only what this file calls and the extent are named. */
-
+/* The rippling water the scene stands on. Laid out as the shared CWater, so its pointers take their
+   host size; this file declares DrawVu1 with the argument types its call passes. */
 class CWater {
 public:
-    char   unk_00[176];
-    CFrame frame; /**< Places and draws the water surface. */
-    char   unk_320[16];
+    s32            rows;
+    s32            columns;
+    float         *height;
+    float         *height_a;
+    float         *height_b;
+    sceVu0FVECTOR  vertex[4];
+    u_int         *packet[3];
+    CVisualPolyVu1 visual;
+    u8             color[4];
+    float          wave_speed;
+    float          damping;
+    float          height_scale;
+    float          distortion;
+    s32            tags_built;
+    CFrameVu1      frame; /**< Places and draws the water surface. */
 
     CWater();
 
@@ -150,7 +174,11 @@ public:
     float         step_x;      /**< Amount added to the first component each tick. */
     float         step_y;      /**< Amount added to the second component each tick. */
     float         step_z;      /**< Amount added to the third component each tick. */
-    char          unk_4C[60];
+    float         step_w;
+    sceVu0FVECTOR current;    /**< Current animated value applied to the attached frames. */
+    CFrame       *frames[10]; /**< Frames driven by this animation. */
+    int           completion_flag;
+    int           unk_8C;
 
     OBJ_ANIME_SEQ();
 
@@ -164,7 +192,8 @@ class CEffectParam;
 
 class CEffectGroup {
 public:
-    char unk_00[8];
+    CEffect *effect_table; /**< First effect in the caller-supplied pool. */
+    int      capacity;     /**< Number of effects in the pool. */
 
     CEffectGroup() { Initialize(0, 0); }
 

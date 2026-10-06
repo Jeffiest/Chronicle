@@ -5,6 +5,7 @@
 
 #include "clsmes.hpp"
 #include "gametext.hpp"
+#include "gameutil.hpp"
 
 namespace {
 
@@ -95,6 +96,16 @@ TEST(GameText, WindowCapacity) {
     EXPECT_EQ(text.Width(), 0);
     EXPECT_LT(text.Mes().mes_made, 0);
     EXPECT_EQ(text.Mes().win_line_num, MES_WIN_LINE_MAX);
+
+    // A value code's digits count too, and a colour change lays the text out again.
+    const std::string value = std::string(MES_WIN_LINE_MAX - 3, 'A') + "{-1025}";
+    EXPECT_EQ(text.Set(value), 0);
+    text.Mes().value = 1000;
+    text.SetColour(FONT_COLOR_YELLOW);
+    EXPECT_EQ(text.Set(value), -1);
+    text.Mes().value = 1;
+    EXPECT_EQ(text.Set(value), 0);
+    EXPECT_GT(text.Width(), 0);
 
     std::string lines = "A";
     for (int line = 1; line < 11; line++) {

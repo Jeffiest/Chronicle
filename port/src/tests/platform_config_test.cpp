@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../platform/config.hpp"
@@ -152,4 +153,44 @@ TEST(PlatformConfig, SerializeRoundTrips) {
     ASSERT_TRUE(again.key_bindings.size() == 2 && again.key_bindings[0].action == "cross");
     ASSERT_TRUE((again.key_bindings[0].keys == std::vector<std::string>{"Space", "Z"}));
     ASSERT_TRUE(again.key_bindings[1].keys.size() == 1 && again.key_bindings[1].keys[0] == "Return");
+}
+
+namespace {
+
+std::vector<std::pair<Config, Config>> g_changes;
+
+void RecordChange(const Config &before, const Config &after) {
+    g_changes.emplace_back(before, after);
+}
+
+} // namespace
+
+TEST(PlatformConfig, ChangeAppliesAndSaves) {
+    std::filesystem::path root = std::filesystem::temp_directory_path() / ("dc_config_change_" + std::to_string(dc::test::ProcessId()));
+    std::filesystem::create_directories(root);
+    PathsSetSaveRoot(root);
+    std::ofstream(root / "config.json") << R"({"video": {"show_fps": false}})";
+    ASSERT_TRUE(ConfigLoad());
+    ConfigAddChangeHook(RecordChange);
+    ConfigAddChangeHook(RecordChange);
+
+    // A bad value is taken as config.json would read it back.
+    Config config = ConfigGet();
+    config.master_volume = 0.25f;
+    config.ui_scale = 10.0f;
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_TRUE(g_changes.size() == 1);
+    ASSERT_TRUE(g_changes[0].first.master_volume == 1.0f && !g_changes[0].first.show_fps);
+    ASSERT_TRUE(g_changes[0].second.master_volume == 0.25f && g_changes[0].second.ui_scale == 1.0f);
+    ASSERT_TRUE(ConfigGet() == g_changes[0].second);
+    ASSERT_TRUE(!std::filesystem::exists(root / "config.json.tmp"));
+
+    // The same settings again change nothing.
+    ASSERT_TRUE(ConfigChange(ConfigGet()));
+    ASSERT_TRUE(g_changes.size() == 1);
+
+    ConfigRemoveChangeHook(RecordChange);
+    ASSERT_TRUE(ConfigLoad());
+    ASSERT_TRUE(ConfigGet().master_volume == 0.25f && !ConfigGet().show_fps);
+    std::filesystem::remove_all(root);
 }

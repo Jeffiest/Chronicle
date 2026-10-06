@@ -19,6 +19,8 @@ enum class ConfigAspect {
 struct ConfigKeyBinding {
     std::string              action;
     std::vector<std::string> keys;
+
+    bool operator==(const ConfigKeyBinding &) const = default;
 };
 
 struct Config {
@@ -43,6 +45,8 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     std::vector<std::string>      mouse_release_keys = {"Escape"};
+
+    bool operator==(const Config &) const = default;
 };
 
 const Config &ConfigGet();
@@ -64,9 +68,31 @@ Config ConfigParse(std::string_view text);
 std::string ConfigSerialize(const Config &config);
 
 // Writes the current settings to <save root>/config.json, creating the save root if need be, and
-// says on stderr where it saved, or that it could not. Returns whether the file was written.
+// says on stderr where it saved, or that it could not. Returns whether the file was written. The
+// text goes to config.json.tmp first and is renamed over config.json, so a crash leaves the old
+// file or the new one, never a part.
 bool ConfigSave();
 
 // Loads <save root>/config.json and says on stderr where it loaded from. With no file there, keeps
 // the defaults and saves them as a new config.json. Returns whether a file was read.
 bool ConfigLoad();
+
+// Applies a change of settings to the running game; before is what ConfigChange replaced. Each part
+// of the game that holds a setting adds its own and looks only at its own keys.
+using ConfigChangeHook = void (*)(const Config &before, const Config &after);
+
+// Adding a hook twice runs it once.
+void ConfigAddChangeHook(ConfigChangeHook hook);
+
+void ConfigRemoveChangeHook(ConfigChangeHook hook);
+
+// What a settings screen calls with the settings it edited. They are taken as config.json would read
+// them back (a bad value is reported and becomes its default), become ConfigGet(), are saved (comments
+// in the file are not kept), and reach the running game through the change hooks, in the order they
+// were added; ConfigAppliesOnRestart names the settings that wait for the next start instead. Settings
+// equal to the current ones change nothing. Returns whether the settings are saved.
+bool ConfigChange(const Config &config);
+
+// Whether a change to the setting, by its config.json name ("game.debug_mode"), reaches the running
+// game only at the next start.
+bool ConfigAppliesOnRestart(std::string_view key);

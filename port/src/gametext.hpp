@@ -32,8 +32,8 @@ std::string GameTextDecode(const s16 *codes);
 
 // A message file of port text, laid out as ClsMes::SetBuff reads one: the count, then each
 // message's number and where its text starts, then the texts, all s16. So an id is -0x8000 to
-// 0x7FFF, and every message but the last (by id) has to start within 0x7FFF codes of the table's
-// middle, &buff[1 + count]: about 32,000 codes of text in all.
+// 0x7FFF. Every message must start within 0x7FFF codes of &buff[1 + count]; the last message by
+// id may extend beyond that range.
 class GameTextFile {
 public:
     // Sets message id's text; gives back how many characters GameTextEncode replaced, or -1,

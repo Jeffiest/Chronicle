@@ -810,9 +810,9 @@ the port's (`port/src/clsmes.cpp`) takes no more, and `GameText::Set` gives back
 -1, draws nothing and has a width of 0 for a text that did not fit. A line past
 the window's ten `line_pos` entries draws in the block layout, as a line
 without one does. A message file is s16 throughout: an id is -0x8000 to
-0x7FFF, and each message but the last (by id) must start within 0x7FFF codes
-of `&buff[1 + count]`; `GameTextFile::Set` gives back -1 and leaves the file
-as it was where either would not hold.
+0x7FFF. Every message must start within 0x7FFF codes of `&buff[1 + count]`;
+the last message by id may extend beyond that range. `GameTextFile::Set`
+gives back -1 and leaves the file as it was where either would not hold.
 
 ## Arenas
 

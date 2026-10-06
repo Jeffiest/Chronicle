@@ -298,7 +298,7 @@ GameText::GameText() : colour_(FONT_COLOR_WHITE) {
 }
 
 int GameText::Set(std::string_view utf8) {
-    if (!set_ || utf8 != text_) {
+    if (!set_ || utf8 != text_ || mes_.mes_made < 0) {
         set_ = true;
         text_ = utf8;
         missing_ = file_.Set(0, utf8);
@@ -314,8 +314,8 @@ void GameText::SetColour(u32 colour) {
     if (colour != colour_) {
         colour_ = colour;
         // The colour goes into each laid-out character, so it takes a new layout.
-        if (mes_.mes_made >= 0) {
-            Layout();
+        if (mes_.mes_made >= 0 && !Layout()) {
+            missing_ = -1;
         }
     }
 }

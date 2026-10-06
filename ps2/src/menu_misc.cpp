@@ -1135,7 +1135,7 @@ int CharaChangeInitToGL(u_long128 *buffer, int chara) {
     char path[64];
     char name[64];
     char cfg[16];
-    char effect[32];
+    char effect[40]; /* Long enough for the longest effect path, Goro's (38 bytes). */
     int  size;
 
     CharaChangeBaseBuf = buffer;

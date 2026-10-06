@@ -1135,7 +1135,7 @@ int CharaChangeInitToGL(u_long128 *buffer, int chara) {
     char path[64];
     char name[64];
     char cfg[16];
-    char effect[32];
+    char effect[40];
     int  size;
 
     CharaChangeBaseBuf = buffer;

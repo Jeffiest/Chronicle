@@ -73,6 +73,10 @@ public:
 /* A frame parented to an object, which is what lets the world transform drive a model. */
 class CObjectFrame : public CObject {
 public:
+    CFrameVu1 *frame[4];         /**< Frame of each level of detail; zero where the object has none. */
+    s32        rotation_changed; /**< Set whenever the angle, its motion or the moment changes. */
+    s32        draw_on;          /**< 1 while the object draws; 0 leaves it out of the scene. */
+
     virtual void FrameObjectOnOff(char *name, int on);
     virtual void Draw();
 
@@ -83,12 +87,13 @@ public:
    through the object dispatch like anything else in the world. */
 class CMapObject : public CObjectFrame {
 public:
-    char       unk_00[36];
-    CFrameVu1 *shadow_frame; /**< Model the object's shadow is drawn from. */
-    char       unk_28[8];
-    float      shadow_offset; /**< Height the shadow drops below the object. */
-    int        unk_34;        /**< Map category the object is sorted under. */
-    int        handle;        /**< Map handle; below zero leaves the object undrawn. */
+    CFrameVu1 *collision_frame; /**< Frame that collision reads; zero where the object has none. */
+    CFrameVu1 *shadow_frame;    /**< Model the object's shadow is drawn from. */
+    CFrameVu1 *shade_frame;     /**< Frame that the shade draws from; zero where the object takes none. */
+    CFrameVu1 *camera_frame;    /**< Collision frame the camera reads; zero where the object has none. */
+    float      shadow_offset;   /**< Height the shadow drops below the object. */
+    int        unk_34;          /**< Map category the object is sorted under. */
+    int        handle;          /**< Map handle; below zero leaves the object undrawn. */
     char       unk_EC[4];
 
     CMapObject();
@@ -99,12 +104,17 @@ public:
     void DrawShadow(int unknown0);
 };
 
+class CTexture;
+
 /* The scene's one fire, which is a light rather than a model. */
 class CFireOmni {
 public:
     char          unk_00[32];
-    sceVu0FVECTOR pos; /**< World position DrawFire draws the next fire at. */
-    char          unk_30[16];
+    sceVu0FVECTOR pos;         /**< World position DrawFire draws the next fire at. */
+    s32           texture_set; /**< Indicates that the textures were supplied rather than looked up. */
+    CTexture     *core;        /**< Bright inner texture of the flame. */
+    CTexture     *glow;        /**< Soft outer texture of the flame. */
+    s32           unk_3C;
 
     CFireOmni();
 
@@ -126,7 +136,11 @@ public:
     float         step_x;      /**< Amount added to the first component each tick. */
     float         step_y;      /**< Amount added to the second component each tick. */
     float         step_z;      /**< Amount added to the third component each tick. */
-    char          unk_4C[60];
+    float         step_w;
+    sceVu0FVECTOR current;    /**< Current animated value applied to the attached frames. */
+    CFrame       *frames[10]; /**< Frames driven by this animation. */
+    int           completion_flag;
+    int           unk_8C;
 
     OBJ_ANIME_SEQ();
 

@@ -177,12 +177,17 @@ public:
     void Draw();
 };
 
+class CTexture;
+
 /* The movie's one fire, which is a light rather than a model. */
 class CFireOmni {
 public:
     char          unk_18[32];
-    sceVu0FVECTOR position; /**< World position the fire draws at. */
-    char          unk_4C[16];
+    sceVu0FVECTOR position;    /**< World position the fire draws at. */
+    s32           texture_set; /**< Indicates that the textures were supplied rather than looked up. */
+    CTexture     *core;        /**< Bright inner texture of the flame. */
+    CTexture     *glow;        /**< Soft outer texture of the flame. */
+    s32           unk_3C;
 
     CFireOmni();
 

@@ -82,6 +82,10 @@ public:
 /* A frame parented to an object, which is what lets the world transform drive a model. */
 class CObjectFrame : public CObject {
 public:
+    CFrameVu1 *frame[4];         /**< Frame of each level of detail; zero where the object has none. */
+    s32        rotation_changed; /**< Set whenever the angle, its motion or the moment changes. */
+    s32        draw_on;          /**< 1 while the object draws; 0 leaves it out of the scene. */
+
     virtual void FrameObjectOnOff(char *name, int on);
     virtual void Draw();
 
@@ -93,13 +97,13 @@ public:
    out of it here, which is what names the first member. */
 class CMapObject : public CObjectFrame {
 public:
-    CFrameVu1 *frame; /**< Model the object draws at its nearest level of detail. */
-    char       unk_04[32];
-    CFrameVu1 *shadow_frame; /**< Model the object's shadow is drawn from; zero where it casts none. */
-    char       unk_28[8];
-    float      shadow_offset; /**< Height the shadow drops below the object. */
-    int        unk_34;        /**< Category of map part the object belongs to. */
-    int        handle;        /**< Handle the map gave the object. */
+    CFrameVu1 *collision_frame; /**< Frame that collision reads; zero where the object has none. */
+    CFrameVu1 *shadow_frame;    /**< Model the object's shadow is drawn from; zero where it casts none. */
+    CFrameVu1 *shade_frame;     /**< Frame that the shade draws from; zero where the object takes none. */
+    CFrameVu1 *camera_frame;    /**< Collision frame the camera reads; zero where the object has none. */
+    float      shadow_offset;   /**< Height the shadow drops below the object. */
+    int        unk_34;          /**< Category of map part the object belongs to. */
+    int        handle;          /**< Handle the map gave the object. */
     char       unk_3C[4];
 
     CMapObject();
@@ -907,7 +911,7 @@ void OpD_DrawProcess() {
             flower.Draw();
             flower.FrameObjectOnOff("flo_S", 1);
 
-            CFrame       *frame = flower.frame->SearchFrame("flo_S");
+            CFrame       *frame = flower.frame[0]->SearchFrame("flo_S");
             sceVu0FVECTOR ambient;
 
             sceVu0CopyVector(ambient, ambientlight);

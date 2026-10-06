@@ -75,7 +75,7 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 
 | site | function | state | class | expression | origin | use |
 |---|---|---|---|---|---|---|
-| port/src/title/op_b.cpp:761 | OpB_InitProcess2 | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[8].wind (read back only in CCharacter::ClothStep) |
+| port/src/title/op_b.cpp:844 | OpB_InitProcess2 | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[8].wind (read back only in CCharacter::ClothStep) |
 | port/src/title/op_c.cpp:886 | OpC_InitProcess5 | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
 | port/src/title/op_c.cpp:1589 | OpC_MotionProcess | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
 | port/src/title/rushmovi.cpp:446 | MotionProcess | port | resolved | `(intptr_t)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
@@ -96,7 +96,7 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 | ps2/src/editloop.cpp:5215 | LoadObjectParts | retail | resolved | `(int)parts->frame[2]` | field | store: parts->preview_frame (read back only in CEditGround::DrawPartsCursor) |
 | ps2/src/editloop.cpp:5217 | LoadObjectParts | retail | resolved | `(int)parts->frame[1]` | field | store: parts->preview_frame (read back only in CEditGround::DrawPartsCursor) |
 | ps2/src/editloop.cpp:5219 | LoadObjectParts | retail | resolved | `(int)parts->frame[0]` | field | store: parts->preview_frame (read back only in CEditGround::DrawPartsCursor) |
-| ps2/src/title/op_d.cpp:669 | OpD_MotionProcess | retail | resolved | `(int)& Wind` | image | store: Chara__3[cloth_actor].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/op_d.cpp:673 | OpD_MotionProcess | retail | resolved | `(int)& Wind` | image | store: Chara__3[cloth_actor].wind (read back only in CCharacter::ClothStep) |
 
 ## Sites that never run (116)
 
@@ -201,22 +201,22 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 | ps2/src/texture.cpp:1065 | LoadImage | dead | escapes | `(u_int)source` | parameter | store to memory: packet[9] |
 | ps2/src/texture.cpp:1356 | CTextureManager::CleanUpBuffer | replaced | round-trip | `(int)* slot` | field | cast back: (u_int *)((int)* slot - shift) |
 | ps2/src/texture.cpp:1360 | CTextureManager::CleanUpBuffer | replaced | round-trip | `(int)tex->clut` | field | cast back: (u_int *)((int)tex->clut - shift) |
-| ps2/src/title/op_b.cpp:969 | OpB_InitProcess2 | replaced | resolved | `(int)& Wind` | image | store: Chara__3[8].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/op_c.cpp:1242 | OpC_InitProcess5 | replaced | resolved | `(int)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/op_c.cpp:1953 | OpC_MotionProcess | replaced | resolved | `(int)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/rushmovi.cpp:601 | MotionProcess | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/rushmovi.cpp:603 | MotionProcess | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:424 | InitProcA | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:793 | InitProcB | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1088 | InitProcC | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1337 | InitProcD | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1510 | InitProcE | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1681 | InitProcF | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1870 | InitProcG | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1871 | InitProcG | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:1872 | InitProcG | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[2].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:2061 | InitProcH | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
-| ps2/src/title/title.cpp:2288 | InitProcI | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/op_b.cpp:983 | OpB_InitProcess2 | replaced | resolved | `(int)& Wind` | image | store: Chara__3[8].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/op_c.cpp:1271 | OpC_InitProcess5 | replaced | resolved | `(int)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/op_c.cpp:1982 | OpC_MotionProcess | replaced | resolved | `(int)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/rushmovi.cpp:615 | MotionProcess | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/rushmovi.cpp:617 | MotionProcess | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:417 | InitProcA | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:786 | InitProcB | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1081 | InitProcC | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1330 | InitProcD | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1503 | InitProcE | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1674 | InitProcF | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1863 | InitProcG | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1864 | InitProcG | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:1865 | InitProcG | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[2].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:2054 | InitProcH | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |
+| ps2/src/title/title.cpp:2281 | InitProcI | dead | resolved | `(int)& Wind__4` | image | store: Chara__3[0].wind (read back only in CCharacter::ClothStep) |
 | ps2/src/visualvu1.cpp:614 | CVisualVu1::DrawVu1 | replaced | escapes | `(u_int)vu_data` | field | store to memory: * packet ++ |
 
 ## Where round-trip values become pointers again (40)

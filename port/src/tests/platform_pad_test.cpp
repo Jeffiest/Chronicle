@@ -269,6 +269,44 @@ TEST(PlatformPad, VibrationDrivesRumble) {
     ASSERT_TRUE(rumble.large_motor == 0);
 }
 
+TEST(PlatformPad, BackButtonActions) {
+    std::string_view paddles[][1] = {{"Gamepad:paddle2"}, {"Gamepad:paddle1"}, {"Gamepad:paddle4"}};
+    ASSERT_TRUE(InputBindKeys("developer_menu", paddles[0]));
+    ASSERT_TRUE(InputBindKeys("debug_menu", paddles[1]));
+    ASSERT_TRUE(InputBindKeys("gyro_toggle", paddles[2]));
+    std::string_view f9[] = {"F9"};
+    std::string_view f10[] = {"F10"};
+    ASSERT_TRUE(InputBindKeys("debug_menu", f9));
+    ASSERT_TRUE(InputBindKeys("developer_menu", f10));
+
+    OpenPads();
+    SetPad(0, 0);
+    SetPad(1, 0);
+    for (int i = 0; i < 4; ++i) {
+        GamePad.UpDate();
+    }
+    InputSetScriptedDevices({.keys = {SDL_SCANCODE_F9}});
+    DebugMode = 0;
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_R3) == 0);
+
+    InputSetScriptedDevices({});
+    InputSetScriptedDevices({.keys = {SDL_SCANCODE_F9}});
+    DebugMode = 1;
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_R3));
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_R3) == 0);
+
+    InputSetScriptedDevices({.keys = {SDL_SCANCODE_F10}});
+    ASSERT_TRUE(GameDeveloperMenuRequested());
+    ASSERT_TRUE(!GameDeveloperMenuRequested());
+
+    InputSetScriptedDevices({});
+    DebugMode = 0;
+    InputResetBindings();
+}
+
 TEST(PlatformPad, InputBindings) {
     std::string_view keys[] = {"Space", "Z"};
     ASSERT_TRUE(InputBindKeys("cross", keys));

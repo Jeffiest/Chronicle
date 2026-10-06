@@ -11,9 +11,14 @@
 
 constexpr int kDebugButtonsModifier = PAD_SELECT | PAD_L2;
 
+static bool g_debug_menu_pressed = false;
+
 PC_OVERRIDE int pad_button_read(PAD_STATUS *status, int port, int slot) {
     unsigned char data[32];
     InputLatchPad(port);
+    if (port == 0) {
+        g_debug_menu_pressed = InputHostPressed(InputHostAction::DebugMenu);
+    }
     if (!scePadRead(port, slot, data)) {
         return 0;
     }
@@ -59,6 +64,10 @@ PC_OVERRIDE int CGamePad::Down(int mask) {
 
     if (DebugMode && (pad[0].input.status.button & kDebugButtonsModifier) == kDebugButtonsModifier) {
         mask &= ~(PAD_CROSS | PAD_CIRCLE);
+    }
+
+    if ((mask & PAD_R3) && DebugMode && g_debug_menu_pressed) {
+        return 1;
     }
 
     if ((mask & (PAD_L3 | PAD_R3)) && (!DebugMode || (pad[0].input.status.button & kDebugButtonsModifier) != kDebugButtonsModifier)) {

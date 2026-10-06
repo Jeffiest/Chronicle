@@ -94,7 +94,11 @@ TEST(PlatformConfig, LoadsFromSaveRoot) {
 TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     Config defaults = ConfigParse("");
     ASSERT_TRUE(defaults.mouse_sensitivity == 0.1f && !defaults.mouse_invert_y && defaults.mouse_capture);
-    ASSERT_TRUE(defaults.stick_sensitivity == 1.33f);
+    ASSERT_TRUE(defaults.stick_sensitivity == 1.33f && defaults.gyro_sensitivity == 0.5f);
+    ASSERT_TRUE(ConfigParse(R"({"input": {"gyro_sensitivity": 1.25}})").gyro_sensitivity == 1.25f);
+    ASSERT_TRUE(ConfigParse(R"({"input": {"gyro_sensitivity": -1}})").gyro_sensitivity == 0.5f);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(ConfigParse(R"({"input": {"gyro_sensitivity": 1.25}})"))).gyro_sensitivity ==
+                1.25f);
     ASSERT_TRUE(defaults.mouse_release_keys.size() == 1 && defaults.mouse_release_keys[0] == "Escape");
 
     Config config = ConfigParse(R"({"input": {

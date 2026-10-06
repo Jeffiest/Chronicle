@@ -392,6 +392,27 @@ void RestoreStickSensitivity(Config &config, const Config &defaults) {
     config.stick_sensitivity = defaults.stick_sensitivity;
 }
 
+int GyroSensitivityCount(const Config &) {
+    return 39;
+}
+
+int GyroSensitivityChoice(const Config &config) {
+    return static_cast<int>(std::lround((std::clamp(config.gyro_sensitivity, 0.1f, 2.0f) - 0.1f) * 20.0f));
+}
+
+void SetGyroSensitivity(Config &config, int choice) {
+    config.gyro_sensitivity = 0.1f + choice / 20.0f;
+}
+
+std::string GyroSensitivityText(const Config &config) {
+    return config.gyro_sensitivity > 10.0f ? std::format("{:.2g}", config.gyro_sensitivity)
+                                           : std::format("{:.2f}", config.gyro_sensitivity);
+}
+
+void RestoreGyroSensitivity(Config &config, const Config &defaults) {
+    config.gyro_sensitivity = defaults.gyro_sensitivity;
+}
+
 const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::save_cursor_position, true>("game.save_cursor_position", "Save Cursor Position",
                                                             "On|Off", 0x15E),
@@ -444,6 +465,9 @@ const Row kControlRows[] = {
     Row{"input.stick_sensitivity", "Stick Sensitivity", "\"Stick Sensitivity\"\nHow far a gamepad's\nstick has to tilt.",
         -1, StickSensitivityCount, StickSensitivityChoice, SetStickSensitivity, StickSensitivityText, nullptr,
         RestoreStickSensitivity},
+    Row{"input.gyro_sensitivity", "Gyro Sensitivity", "\"Gyro Sensitivity\"\nHow fast tilting\nturns the camera.",
+        -1, GyroSensitivityCount, GyroSensitivityChoice, SetGyroSensitivity, GyroSensitivityText, nullptr,
+        RestoreGyroSensitivity},
 };
 
 // A page of the screen. Every page so far is a list of rows; one that needs its own layout, such as

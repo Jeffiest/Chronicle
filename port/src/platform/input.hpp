@@ -153,6 +153,9 @@ int InputScancodeFromName(std::string_view name);
 // also take Gamepad:<SDL gamepad button name> (Gamepad:guide).
 enum class InputHostAction {
     FpsToggle,
+    DeveloperMenu,
+    DebugMenu,
+    GyroToggle,
 };
 
 // Whether a key, mouse button or gamepad button bound to the action is held, live or scripted.

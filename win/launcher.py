@@ -105,6 +105,7 @@ def write_game_config(save_dir, size, fullscreen, max_fps, volume):
         cfg = {}
     w, h = (int(x) for x in size.split('x'))
     cfg.setdefault('video', {}).update({'width': w, 'height': h, 'fullscreen': bool(fullscreen), 'max_fps': float(max_fps)})
+    cfg['video'].setdefault('present_mode', 'mailbox')       # a new config starts on mailbox, never vsync; an existing choice is kept
     cfg.setdefault('audio', {})['master_volume'] = round(volume / 100.0, 3)
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(cfg, indent=4) + '\n', encoding='utf-8')

@@ -245,9 +245,9 @@ PATCHES = [
      'extern "C" char *setlocale(int, const char *);\nvoid InstallCrashHandler();\nint main(int argc, const char **argv, const char **envp) {\n    InstallCrashHandler();\n    setlocale(0 /* LC_ALL */, ".UTF-8"); // wide<->narrow path conversion needs a UTF-8 locale on Windows\n    argc = PathsConsumeArgs(argc, argv);\n    argc = SetupConsumeArgs(argc, argv);'),
     ('port/src/main.cpp', '    FirstRunIfNoData(options.headless);', '    FirstRunIfNoData(options.headless);\n    SetupIfNeeded(options.headless);'),
     ('port/src/main.cpp', 'void InstallCrashHandler();', 'void InstallCrashHandler();\nint SetupConsumeArgs(int, const char **);\nvoid SetupIfNeeded(bool);'),
-    # Windows defaults: mailbox presenting keeps the game ticking at 50 Hz; a frame cap stops the GPU running flat out.
+    # Windows defaults: mailbox presenting keeps the game ticking at 50 Hz; a frame cap of 240 stops the GPU running flat out.
     ('port/src/platform/config.hpp', 'present_mode = ConfigPresentMode::Fifo;', 'present_mode = ConfigPresentMode::Mailbox;'),
-    ('port/src/platform/config.hpp', 'max_fps = 0.0;', 'max_fps = 144.0;'),
+    ('port/src/platform/config.hpp', 'max_fps = 0.0;', 'max_fps = 240.0;'),
     ('port/src/platform/config.hpp', 'show_fps = true;', 'show_fps = false;'),
     ('port/src/platform/config.hpp', 'debug_mode = true;', 'debug_mode = false;'),
     ('port/src/gfx/draw.cpp', 'Error("a draw samples the target it renders to; snapshot it first");',

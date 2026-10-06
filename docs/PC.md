@@ -774,6 +774,35 @@ retail's 0x136A7-byte image. `sce/sifdev.cpp` implements `sceOpen`,
 device prefix stripped (the debug dump `edit.cpp` writes to `host0:`), and
 `WriteFile` writes there too.
 
+## Game text
+
+`port/src/gametext.cpp` writes the port's own text in the game's message
+font, so menus the port adds can match the game's. A message is an s16 code
+per character ending in `MES_CODE_END` (-0xFF); a space is
+`MES_CODE_SPACE` (-0xFE) and a line break `MES_CODE_NEWLINE` (-0x100). The
+PAL font draws only the external characters from -0x300: -0x300 to -0x2E0
+are the pad buttons and icons; -0x2DF to -0x288 are the 88 cells of
+`gaiji.img`'s letter grid in order (`A`-`Z`, `a`-`z`,
+`'="!?#&+-*/%()@|<>{}[]:,.$` and `0`-`9`); -0x287 to -0x254 are `œ ¡ ¿ ß Œ
+Ç ç` and the letters `DrawGaijiFont` draws an accent over (`ÀÁÂÄÈÉÊËÌÍÎÏÑ
+ÒÓÔÖÙÚÛÜàáâäèéêëìíîïñòóôöùúûü`). -0x263 to -0x261, -0x253 and -0x252
+draw a bare `?`. There is no `;`, `_`, `~`, `^`, backquote or backslash.
+The table was read off the `gaiji.img` of every `meswin/mes_tex_N.pak` (all
+seven draw these characters in the same cells; only the pixels differ) and
+checked by decoding every `.mes` on the disc: each language uses only
+characters in it, and its own accents only.
+
+`GameTextEncode` turns UTF-8 into codes. Curly quotes and dashes become the
+font's own; any other character the font lacks, and any byte that is not
+UTF-8, becomes `?` and is counted. `{N}` writes code N as it is, for control
+codes and icons, and `{{` a `{`; `GameTextDecode` writes the same form, so
+any message reads back and encodes to the same codes. `GameTextFile` lays
+texts out as a message file for `ClsMes::SetBuff`. `GameText` is one piece of
+text drawn as the menus draw their help line (`InitMenuMesSet`'s
+`CommonMenuMes2`: the menu font, white with a black edge, shown whole): `Set`
+the text, `SetColour` a `FontColor`, then `Draw(x, y, alpha)` from a menu's
+draw function; `Width` gives its width for aligning a value.
+
 ## Arenas
 
 `CDataAlloc2<1>::Alloc/Alloc64/Align64` and the carving in

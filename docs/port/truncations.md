@@ -75,7 +75,7 @@ recovered, as `CCharacter::ClothStep` does with `PortImagePointer`) fixes the ro
 
 | site | function | state | class | expression | origin | use |
 |---|---|---|---|---|---|---|
-| port/src/title/op_b.cpp:844 | OpB_InitProcess2 | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[8].wind (read back only in CCharacter::ClothStep) |
+| port/src/title/op_b.cpp:836 | OpB_InitProcess2 | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[8].wind (read back only in CCharacter::ClothStep) |
 | port/src/title/op_c.cpp:886 | OpC_InitProcess5 | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
 | port/src/title/op_c.cpp:1589 | OpC_MotionProcess | port | resolved | `(intptr_t)& Wind` | image | store: Chara__3[11].wind (read back only in CCharacter::ClothStep) |
 | port/src/title/rushmovi.cpp:446 | MotionProcess | port | resolved | `(intptr_t)& Wind__4` | image | store: Chara__3[1].wind (read back only in CCharacter::ClothStep) |

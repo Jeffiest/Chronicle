@@ -10,8 +10,6 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr std::string_view kSavePrefix = "darkcloud";
-
 // Nine digits always fit an int.
 constexpr std::size_t kMaxDigits = 9;
 
@@ -21,37 +19,41 @@ SaveSlotList SaveSlots;
 
 bool SaveSlotNew;
 
+fs::path SaveSlotsRoot() {
+    return PathsSaveRoot() / "saves";
+}
+
+fs::path SaveSlotDirectory(int file_no) {
+    return SaveSlotsRoot() / std::to_string(file_no + 1);
+}
+
 fs::path SaveSlotPath(int file_no) {
-    return PathsSaveRoot() / (std::string(kSavePrefix) + std::to_string(file_no));
+    return SaveSlotDirectory(file_no) / "save.dat";
 }
 
-fs::path SaveConfigPath() {
-    return PathsSaveRoot() / "sysconfig.bin";
+fs::path SaveStatePath() {
+    return SaveSlotsRoot() / "state.json";
 }
 
+// A number as the board writes it: from 1, with no leading zero.
 int SaveSlotFileNo(std::string_view name) {
-    if (!name.starts_with(kSavePrefix)) {
+    if (name.empty() || name.size() > kMaxDigits || name[0] == '0') {
         return -1;
     }
-    std::string_view digits = name.substr(kSavePrefix.size());
-    // The game names a file with %d, so darkcloud01 is not file 1.
-    if (digits.empty() || digits.size() > kMaxDigits || (digits[0] == '0' && digits.size() > 1)) {
-        return -1;
-    }
-    int file_no = 0;
-    for (char c : digits) {
+    int number = 0;
+    for (char c : name) {
         if (c < '0' || c > '9') {
             return -1;
         }
-        file_no = file_no * 10 + (c - '0');
+        number = number * 10 + (c - '0');
     }
-    return file_no;
+    return number - 1;
 }
 
 std::vector<int> SaveSlotFiles() {
     std::vector<int> files;
     std::error_code  error;
-    for (const fs::directory_entry &entry : fs::directory_iterator(PathsSaveRoot(), error)) {
+    for (const fs::directory_entry &entry : fs::directory_iterator(SaveSlotsRoot(), error)) {
         const std::u8string name = entry.path().filename().u8string();
         int                 file_no = SaveSlotFileNo(std::string_view(reinterpret_cast<const char *>(name.data()), name.size()));
         if (file_no >= 0) {

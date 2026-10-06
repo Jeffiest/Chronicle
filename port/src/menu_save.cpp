@@ -69,7 +69,7 @@ PC_OVERRIDE int GetSaveMenuMsgNo() {
 }
 
 // Retail's looked for a card holding the save directory and its configuration. Data exists once
-// the configuration file or a save does.
+// state.json or a save folder does.
 PC_OVERRIDE int InitExistData() {
     if (McAccess.InitForMC() != 0) {
         return 0;
@@ -78,5 +78,5 @@ PC_OVERRIDE int InitExistData() {
     McAccess.port = 0;
     McAccess.LoadSysConfig();
     std::error_code error;
-    return std::filesystem::exists(SaveConfigPath(), error) || !SaveSlotFiles().empty();
+    return std::filesystem::exists(SaveStatePath(), error) || !SaveSlotFiles().empty();
 }

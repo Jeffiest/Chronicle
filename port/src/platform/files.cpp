@@ -74,6 +74,31 @@ FilesResult Commit(const fs::path &temp, const fs::path &path, bool replace) {
     return !replace && Taken() ? FilesResult::kExists : FilesResult::kFailed;
 }
 
+FilesResult CreateDirectoryAt(const fs::path &path) {
+    // Publish a new directory with the same write-through move as a file. Only this call's
+    // temporary directory may be removed on failure, never an occupied slot.
+    fs::path temp;
+    bool     created = false;
+    for (int attempt = 0; attempt < 8 && !created; ++attempt) {
+        temp = TempPath(path);
+        created = CreateDirectoryW(temp.c_str(), nullptr) != 0;
+        if (!created && !Taken()) {
+            return FilesResult::kFailed;
+        }
+    }
+    if (!created) {
+        return FilesResult::kFailed;
+    }
+    if (MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_WRITE_THROUGH)) {
+        return FilesResult::kWritten;
+    }
+    FilesResult result = Taken() || GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES
+                             ? FilesResult::kExists
+                             : FilesResult::kFailed;
+    RemoveDirectoryW(temp.c_str());
+    return result;
+}
+
 std::size_t ReadRegular(const fs::path &path, char *data, std::size_t size) {
     File file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == kNoFile) {
@@ -207,6 +232,21 @@ FilesResult Commit(const fs::path &temp, const fs::path &path, bool replace) {
     return SyncDirectory(path) ? FilesResult::kWritten : FilesResult::kFailed;
 }
 
+FilesResult CreateDirectoryAt(const fs::path &path) {
+    if (mkdir(path.c_str(), 0755) != 0) {
+        if (!Taken()) {
+            return FilesResult::kFailed;
+        }
+        // A previous attempt may have made the directory but failed to sync its name.
+        std::error_code error;
+        if (fs::is_directory(path, error) && !SyncDirectory(path)) {
+            return FilesResult::kFailed;
+        }
+        return FilesResult::kExists;
+    }
+    return SyncDirectory(path) ? FilesResult::kWritten : FilesResult::kFailed;
+}
+
 std::size_t ReadRegular(const fs::path &path, char *data, std::size_t size) {
     File file = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (file == kNoFile) {
@@ -261,4 +301,8 @@ FilesResult FilesWrite(const fs::path &path, const void *data, std::size_t size,
 
 std::size_t FilesRead(const fs::path &path, void *data, std::size_t size) {
     return ReadRegular(path, static_cast<char *>(data), size);
+}
+
+FilesResult FilesCreateDirectory(const fs::path &path) {
+    return CreateDirectoryAt(path);
 }

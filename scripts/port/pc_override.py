@@ -39,7 +39,11 @@ TAG = re.compile(r"\bPC_OVERRIDE\b")
 DIRECTIVE = re.compile(r"[ \t]*#[ \t]*(\w+)")
 LITERAL = re.compile(
     r'//(?:\\\r?\n|[^\n])*|/\*.*?\*/|(?<![A-Za-z0-9_])(?:u8|[uUL])?R"([^ ()\\\t\n]*)\(.*?\)\1"'
-    r'|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'',
+    r'|"(?:\\.|[^"\\\n])*"'
+    # A number whole, digit separators and all (1'000, 0xff'ff), so that its ' opens no character
+    # literal; mask leaves it as it is.
+    r"|(?P<number>(?<![\w.])\.?\d(?:[eEpP][+-]|[\w.]|'(?=\w))*)"
+    r"|'(?:\\.|[^'\\\n])*'",
     re.DOTALL,
 )
 RENAME = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+([A-Za-z_]\w*)[ \t]*\r?$", re.MULTILINE)
@@ -69,7 +73,7 @@ class GroupedError(Error):
 
 def mask(text):
     """Returns text with comments and literals blanked, at the same offsets."""
-    return LITERAL.sub(lambda match: re.sub(r"[^\n]", " ", match[0]), text)
+    return LITERAL.sub(lambda match: match[0] if match["number"] else re.sub(r"[^\n]", " ", match[0]), text)
 
 
 def directive_lines(code, start=0):

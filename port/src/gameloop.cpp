@@ -48,6 +48,7 @@ constexpr int kConfigVibrationOff = 7;
 constexpr int kConfigScreenX = 12;
 constexpr int kConfigScreenY = 13;
 constexpr int kConfigGameClear = 14;
+constexpr int kConfigLastFile = 17;
 
 // CSaveData::map_no is private; retail's main() writes it by offset.
 constexpr int kSaveMapNoOffset = 0x1C8;
@@ -157,7 +158,6 @@ bool         g_stop;
 // Retail's save_data and config_data are static in main.cpp, so the port
 // keeps its own; everything else reaches the save through SaveData.
 alignas(64) CSaveData g_save_data;
-SV_CONFIG_SYS g_config_data;
 
 s32 *ConfigWords() {
     return static_cast<s32 *>(SaveData->GetConfigData());
@@ -226,10 +226,7 @@ void StartNewGame() {
     for (int i = 0; i < 6; ++i) {
         std::memcpy(names[i], g_save_data.GetCharaName(i), sizeof(names[i]));
     }
-    g_save_data.ConvertConfig(&g_config_data);
-    std::memset(static_cast<void *>(&g_save_data), 0, sizeof(CSaveData));
-    g_save_data.Initialize();
-    g_save_data.InvertConfig(&g_config_data);
+    ResetSaveKeepingConfig(g_save_data);
     for (int i = 0; i < 6; ++i) {
         std::memcpy(g_save_data.GetCharaName(i), names[i], sizeof(names[i]));
     }
@@ -329,6 +326,17 @@ bool FrameBoundaryStop() {
 
 } // namespace
 
+void ResetSaveKeepingConfig(CSaveData &save) {
+    SV_CONFIG_SYS config;
+    // The configuration's copy holds one byte per word; the last file's number may not fit one.
+    const s32 last_file = static_cast<s32 *>(save.GetConfigData())[kConfigLastFile];
+    save.ConvertConfig(&config);
+    std::memset(static_cast<void *>(&save), 0, sizeof(CSaveData));
+    save.Initialize();
+    save.InvertConfig(&config);
+    static_cast<s32 *>(save.GetConfigData())[kConfigLastFile] = last_file;
+}
+
 void GameFollowMapJump() {
     if (NextMapNo < 0) {
         return;
@@ -370,9 +378,11 @@ void GameFollowMapJump() {
 void GameApplyLoopResult(int loop_mode, int result) {
     switch (loop_mode) {
         case GAME_MODE_LANGUAGE:
+            // Retail's memory card check came next and went on to the attract movie; the port has
+            // no card to check.
             if (result != 0) {
-                MapNo = -1;
-                mode = GAME_MODE_MEMORY_CHECK;
+                MapNo = 801;
+                mode = GAME_MODE_RUSH_MOVIE;
             }
             break;
         case GAME_MODE_TITLE:

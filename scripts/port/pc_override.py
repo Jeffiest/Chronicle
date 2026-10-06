@@ -39,7 +39,11 @@ TAG = re.compile(r"\bPC_OVERRIDE\b")
 DIRECTIVE = re.compile(r"[ \t]*#[ \t]*(\w+)")
 LITERAL = re.compile(
     r'//(?:\\\r?\n|[^\n])*|/\*.*?\*/|(?<![A-Za-z0-9_])(?:u8|[uUL])?R"([^ ()\\\t\n]*)\(.*?\)\1"'
-    r'|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'',
+    r'|"(?:\\.|[^"\\\n])*"'
+    # A number whole, digit separators and all (1'000, 0xff'ff), so that its ' opens no character
+    # literal; mask leaves it as it is.
+    r"|(?P<number>(?:\.\d|(?<![\w.])\d)(?:[eEpP][+-]|[\w.]|'(?=\w))*)"
+    r"|'(?:\\.|[^'\\\n])*'",
     re.DOTALL,
 )
 RENAME = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+([A-Za-z_]\w*)[ \t]*\r?$", re.MULTILINE)
@@ -47,6 +51,8 @@ C_LINKAGE = re.compile(r'\bextern\s*"C"')
 ATTRIBUTE = re.compile(r"\b__attribute__\s*\(")
 NAME = re.compile(r"((?:[A-Za-z_]\w*(?:<[^<>()]*>)?\s*::\s*)*(?:operator\b.*|~?[A-Za-z_]\w*))\s*$", re.DOTALL)
 TYPE_BODY = re.compile(r"\s*(?:class|struct|union|enum|namespace)\b[^;(]*$")
+# A pointer to a function, or an array of them, named inside its declarator: int (*name[n])(...).
+FUNCTION_POINTER = re.compile(r"[^(]*\(\s*\*\s*([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*\)\s*\(")
 BUILTIN = {"int", "char", "short", "long", "float", "double", "void", "bool", "unsigned", "signed", "wchar_t"}
 NOT_A_TYPE = {"const", "volatile", "register", "struct", "class", "union", "enum"}
 INLINE = re.compile(r"\b(?:__)?inline(?:__)?\b")
@@ -61,9 +67,13 @@ class ConditionalError(Error):
     pass
 
 
+class GroupedError(Error):
+    pass
+
+
 def mask(text):
     """Returns text with comments and literals blanked, at the same offsets."""
-    return LITERAL.sub(lambda match: re.sub(r"[^\n]", " ", match[0]), text)
+    return LITERAL.sub(lambda match: match[0] if match["number"] else re.sub(r"[^\n]", " ", match[0]), text)
 
 
 def directive_lines(code, start=0):
@@ -183,6 +193,21 @@ def closing(code, opening):
     raise Error("unbalanced brackets")
 
 
+def grouped(statement):
+    """Whether a declaration statement has a comma outside every bracket. Angle brackets are not
+    counted: telling a template's from a comparison's is not worth the risk of a name stripped
+    unseen, so a template type with a comma needs an alias."""
+    depth = 0
+    for c in statement:
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            return True
+    return False
+
+
 def without_attributes(code):
     """Returns code with each __attribute__((...)) blanked, at the same offsets."""
     while True:
@@ -259,11 +284,15 @@ class Definition:
         declaration = text[: len(flat[:end].rstrip())].lstrip(" \t")
         opening = head.find("(")
         if flat[i] == ";":
-            if opening >= 0:
+            if grouped(flat[:i]):
+                raise GroupedError("one name per PC_OVERRIDE declaration, and no comma outside brackets; "
+                                 "use a type alias or split it")
+            pointer = FUNCTION_POINTER.match(head)
+            if opening >= 0 and pointer is None:
                 raise Error("a declaration, or a variable with constructor arguments")
             if init is None and re.search(r"\bextern\b", head):
                 raise Error("a declaration")
-            name = re.search(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*$", head)
+            name = pointer or re.search(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\]\s*)*$", head)
             if name is None:
                 raise Error("no name")
             self.name = self.spelled = (renames or {}).get(name[1], name[1])

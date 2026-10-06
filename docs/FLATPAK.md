@@ -7,7 +7,7 @@ your own PAL disc and extracts it.
 
 ## Installing the bundle
 
-CI (`.github/workflows/flatpak.yml`) uploads `chronicle.flatpak` with every
+CI (`.github/workflows/pc.yml`) uploads `chronicle.flatpak` with every
 build. The runtime comes from Flathub:
 
 ```sh

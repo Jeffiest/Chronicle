@@ -1634,5 +1634,5 @@ game looks for and does not find behave as on the disc: `LoadFile2` returns
 to `<dir>/bin`; an installed copy finds its data and saves under
 `$XDG_DATA_HOME/chronicle` (above). The Linux release is a Flatpak,
 `org.themoonpeople.Chronicle`, built from `port/flatpak/` by
-`.github/workflows/flatpak.yml`; `docs/FLATPAK.md` covers building,
+`.github/workflows/pc.yml`; `docs/FLATPAK.md` covers building,
 installing, the first start and where the data and saves live.

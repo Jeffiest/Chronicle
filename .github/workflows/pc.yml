@@ -6,7 +6,11 @@
 # The macOS job (docs/MACOS.md) runs the tests and then darkcloud on MoltenVK,
 # the driver the game uses there. The Windows job (docs/WINDOWS.md) builds with
 # tools/windows' scripts and runs the cases that need no Vulkan device.
-name: PC port
+# The Flatpak job (docs/FLATPAK.md) packages the Linux build in Flathub's
+# freedesktop 26.08 image. Its manifest uses the commit under test as a git
+# source, and its smoke run checks that the packaged binary reaches its data
+# check. All three downloadable builds belong to the same workflow run.
+name: PC builds
 
 on:
   push:
@@ -107,12 +111,27 @@ jobs:
           echo "darkcloud exited $status"
           [ "$status" -eq 0 ] || [ "$status" -eq 4 ]
 
+      - name: Package the macOS build
+        run: tar -czf artifacts/chronicle-macos-arm64.tar.gz -C port/build/macos-arm64 darkcloud dcdata
+
+      - name: Upload the macOS build
+        uses: actions/upload-artifact@v7
+        with:
+          name: chronicle-macos-arm64
+          path: artifacts/chronicle-macos-arm64.tar.gz
+          if-no-files-found: error
+
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: macos
-          path: artifacts/
+          path: |
+            artifacts/vulkaninfo.txt
+            artifacts/darkcloud-headless.txt
+            artifacts/darkcloud-window.txt
+            artifacts/shot-headless.png
+            artifacts/shot-window.png
           if-no-files-found: warn
 
   windows:
@@ -145,3 +164,62 @@ jobs:
       # The renderer's cases run on Linux and macOS.
       - name: Test
         run: ctest --test-dir port/build/windows --output-on-failure -j4 -E '^(GfxMisc|TexDecode)\.'
+
+      - name: Package the Windows build
+        run: |
+          $files = @('darkcloud.exe', 'dcdata.exe', 'libc++.dll', 'libunwind.dll', 'libwinpthread-1.dll', 'SDL3.dll', 'vulkan-1.dll')
+          $paths = $files | ForEach-Object { Join-Path 'port/build/windows' $_ }
+          Compress-Archive -LiteralPath $paths -DestinationPath chronicle-windows-x64.zip
+
+      - name: Upload the Windows build
+        uses: actions/upload-artifact@v7
+        with:
+          name: chronicle-windows-x64
+          path: chronicle-windows-x64.zip
+          if-no-files-found: error
+
+  flatpak:
+    name: Build the Flatpak (Linux x86_64)
+    runs-on: ubuntu-26.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-26.08
+      options: --privileged
+    env:
+      MANIFEST: port/flatpak/ci.yml
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Point the manifest at this commit
+        run: |
+          # flatpak-builder clones the workspace, which belongs to another user in the container.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          awk -v commit="$GITHUB_SHA" '
+            /# chronicle-source:/ {
+              print
+              print "      - type: git"
+              print "        path: ../.."
+              print "        commit: " commit
+              print "        disable-submodules: true"
+              skip = 1
+              next
+            }
+            /# chronicle-source-end/ { skip = 0 }
+            !skip { print }
+          ' port/flatpak/org.themoonpeople.Chronicle.yml > "$MANIFEST"
+          sed -n '/name: chronicle$/,$p' "$MANIFEST"
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: ${{ env.MANIFEST }}
+          bundle: chronicle.flatpak
+          artifact-name: chronicle-x86_64.flatpak
+          cache-key: flatpak-builder-${{ hashFiles('port/flatpak/org.themoonpeople.Chronicle.yml') }}
+
+      - name: Start darkcloud without data
+        run: |
+          set +e
+          flatpak build --env=XDG_DATA_HOME=/tmp/xdg flatpak_app darkcloud --headless --frames 1 > run.txt 2>&1
+          status=$?
+          cat run.txt
+          echo "darkcloud exited $status"
+          [ "$status" -eq 3 ] && grep -q 'no game data: /tmp/xdg/chronicle/data' run.txt

@@ -1042,12 +1042,19 @@ void DrawScrollBar(int alpha) {
                      alpha);
 }
 
+// How far the bracket corners close in over one beat. Retail closes in by up to 5.8 pixels, but its
+// corners' arms are 10 pixels apart at rest, so for the last beats of every cycle their end caps
+// meet and overlap, and a short red tick shows across each side's middle. The corners here stop a
+// couple of pixels short of one another and close in by the same share of the beat.
+constexpr int   kBracketBeats = 30;
+constexpr float kBracketClose = 4.0f;
+
 // Retail's bracket corners round the chosen part, and its bobbing hand left of them or at the
 // mouse's pointer.
 void DrawCursor(int left, int right, int top, int alpha, int hand_left = -1) {
     static int bracket_count = 0;
     static int hand_count = 0;
-    float      pulse = 0.2f * bracket_count;
+    float      pulse = kBracketClose * static_cast<float>(bracket_count) / static_cast<float>(kBracketBeats - 1);
     int        x0 = static_cast<int>(left + pulse);
     int        x1 = static_cast<int>(right - pulse);
     int        y0 = static_cast<int>(top + pulse);
@@ -1056,7 +1063,7 @@ void DrawCursor(int left, int right, int top, int alpha, int hand_left = -1) {
     DrawSprite(x1, y0, 0xC2, 0xF8, 16, 16, alpha);
     DrawSprite(x0, y1, 0xB2, 0x108, 16, 16, alpha);
     DrawSprite(x1, y1, 0xC2, 0x108, 16, 16, alpha);
-    bracket_count = (bracket_count + 1) % 30;
+    bracket_count = (bracket_count + 1) % kBracketBeats;
 
     float target_x = static_cast<float>(hand_left >= 0 ? hand_left : left - 38);
     float target_y = static_cast<float>(top + 9);

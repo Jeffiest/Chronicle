@@ -277,9 +277,92 @@ PC_OVERRIDE void FaceChange(int actor_no) {
     }
 }
 
+extern CDataAlloc2<1> CharaDataBuffer__2[7];
+extern CCharacter     Chara__3[23];
+
+namespace {
+
+// The largest of the couple's motion files is 1,187,152 bytes.
+u_char g_dance_pack[2][0x130000] __attribute__((aligned(64)));
+
+} // namespace
+
+u_int *OpeningDancePack(int dancer) {
+    return (u_int *) g_dance_pack[dancer];
+}
+
 /* The couple's dance, which is ten motion files played end to end. A file is swapped in when the
    one running reaches its last key and the next pair is started in the background straight after,
-   so the dance runs continuously off a buffer that only ever holds two steps. */
+   so the dance runs continuously off a buffer that only ever holds two steps. Retail reads the
+   pair into read_buffer, where the script's object loads also go, and an object loaded between a
+   pair's read and its swap leaves the second dancer with no pack: it keeps its old motion and steps
+   through keys the first dancer's new data has replaced. The port reads each dancer's steps into a
+   buffer of its own. */
+PC_OVERRIDE void LoadMotionData() {
+    char *motion_files[20][2] = {
+        {"opdat/chara/01p19a1a.chr", "01p19a1a.cfg"},
+        {"opdat/chara/01p19a1b.chr", "01p19a1b.cfg"},
+        {"opdat/chara/01p19a2a.chr", "01p19a2a.cfg"},
+        {"opdat/chara/01p19a2a.chr", "01p19a2a.cfg"},
+        {"opdat/chara/01p19a2b.chr", "01p19a2b.cfg"},
+        {"opdat/chara/01p19a3.chr",  "01p19a3.cfg" },
+        {"opdat/chara/01p19a3b.chr", "01p19a3b.cfg"},
+        {"opdat/chara/01p19a4a.chr", "01p19a4a.cfg"},
+        {"opdat/chara/01p19a4b.chr", "01p19a4b.cfg"},
+        {"opdat/chara/01p19a5.chr",  "01p19a5.cfg" },
+        {"opdat/chara/01p17a1a.chr", "01p17a1a.cfg"},
+        {"opdat/chara/01p17a1b.chr", "01p17a1b.cfg"},
+        {"opdat/chara/01p17a2a.chr", "01p17a2a.cfg"},
+        {"opdat/chara/01p17a2a.chr", "01p17a2a.cfg"},
+        {"opdat/chara/01p17a2b.chr", "01p17a2b.cfg"},
+        {"opdat/chara/01p17a3.chr",  "01p17a3.cfg" },
+        {"opdat/chara/01p17a3b.chr", "01p17a3b.cfg"},
+        {"opdat/chara/01p17a4a.chr", "01p17a4a.cfg"},
+        {"opdat/chara/01p17a4b.chr", "01p17a4b.cfg"},
+        {"opdat/chara/01p17a5.chr",  "01p17a5.cfg" }
+    };
+
+    if (DanceCnt < 10) {
+        if (Chara__3[6].motion_type.state.time > (float) (Chara__3[6].motion_type.motion_info->end - 1)) {
+            if (DanceCnt != 2) {
+                CharaDataBuffer__2[6].used = 0;
+                Chara__3[6].LoadPackData(OpeningDancePack(0), motion_files[DanceCnt][1], &CharaDataBuffer__2[4], &CharaDataBuffer__2[6], 0);
+                Chara__3[7].LoadPackData(OpeningDancePack(1), motion_files[DanceCnt + 10][1], &CharaDataBuffer__2[4], &CharaDataBuffer__2[6], 0);
+            }
+
+            Chara__3[6].motion_type.motion_info->start = noroi[DanceCnt].start;
+            Chara__3[6].motion_type.motion_info->end = noroi[DanceCnt].end;
+            Chara__3[6].motion_type.state.time = (float) Chara__3[6].motion_type.motion_info->start;
+            Chara__3[7].motion_type.motion_info->start = dancer[DanceCnt].start;
+            Chara__3[7].motion_type.motion_info->end = dancer[DanceCnt].end;
+            Chara__3[7].motion_type.state.time = (float) Chara__3[7].motion_type.motion_info->start;
+            DanceCnt++;
+
+            if (DanceCnt != 3 && DanceCnt < 10) {
+                LoadFileBG(motion_files[DanceCnt][0], (u_long128 *) OpeningDancePack(0), 0);
+                LoadFileBG(motion_files[DanceCnt + 10][0], (u_long128 *) OpeningDancePack(1), 0);
+            }
+        }
+
+        Chara__3[6].motion_no = 0;
+        Chara__3[6].motion_flags = 0;
+        Chara__3[6].motion_speed = -1.0f;
+
+        if (Chara__3[6].motion_type.state.time > 225.0f) {
+            DanceStart = 1;
+        }
+
+        if (DanceStart == 1) {
+            Chara__3[7].motion_no = 0;
+            Chara__3[7].motion_flags = 0;
+            Chara__3[7].motion_speed = -1.0f;
+        } else {
+            Chara__3[7].motion_no = 1;
+            Chara__3[7].motion_flags = 0;
+            Chara__3[7].motion_speed = -1.0f;
+        }
+    }
+}
 
 /* The village scene's set-up, and the shape every scene file's is a variation of. The textures come
    out of the pack the background load left in memory, so the manifest is built with its five fixed

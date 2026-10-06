@@ -1,15 +1,9 @@
 #include "memorycardaccess.hpp"
 
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 
-#include "dataread_port.hpp"
-#include "menu_draw.hpp"
 #include "savedata.hpp"
-
-// The bodies are retail's, which pass string literals as char *.
-#pragma clang diagnostic ignored "-Wwritable-strings"
 
 namespace {
 
@@ -19,50 +13,6 @@ char *PastNext64(char *pointer) {
 }
 
 } // namespace
-
-// Saves go to the save directory of the release whose disc the data came from.
-PC_OVERRIDE void CMemoryCardAccess::Initialize() {
-    if (PortNtscData()) {
-        switch (GetMenuLangFlag()) {
-            case LANG_JAPANESE:
-                strcpy(this->dir_name, "BISCPS-15004dkcloud");
-                break;
-            case LANG_ENGLISH_US:
-            default:
-                strcpy(this->dir_name, "BASCUS-97111dkcloud");
-                break;
-        }
-    } else {
-        strcpy(this->dir_name, "BESCES-50295dkcloud");
-    }
-
-    strcpy(this->file_name, "darkcloud");
-
-    for (int i = 0; i < 0x40; i++) {
-        this->current_dir[i] = 0;
-    }
-
-    this->port = 0;
-    this->file_no = 0;
-    this->fd = -1;
-    memset(&this->error, 0, sizeof(this->error));
-    this->SetVersion("darkcloudVer1.9");
-    this->func_no = MC_OPERATION_IDLE;
-    this->idle_code = 0x3D;
-    this->step = 0;
-    this->save_buffer = NULL;
-    this->load_buffer = NULL;
-    this->read_buffer = NULL;
-    this->dir_table = SaveFileInfo;
-    this->transferred = 0;
-    this->transfer_size = 0;
-    memset(this->card, 0, sizeof(this->card));
-    memset(this->file_info, 0, sizeof(this->file_info));
-    memset(&this->icon, 0, sizeof(this->icon));
-    this->card[0].present = 1;
-    this->card[1].present = 1;
-    printf("SaveData size = %zu\n", sizeof(CSaveData));
-}
 
 PC_OVERRIDE void CMemoryCardAccess::SetBuff(char *buffer) {
     char *data;

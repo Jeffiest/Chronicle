@@ -14,7 +14,6 @@
 #include "character.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "effect.hpp"
 #include "effectgroup.hpp"
 #include "fireomni.hpp"
@@ -173,9 +172,10 @@ static int   SndCnt;
 
 /* One actor's blinking and speaking. The mouth is driven from the script's own clock rather than
    from a motion: while the actor is talking, a new mouth frame is picked at random every sixth
-   hundredth of a second left on the timer, and the timer running out closes the mouth and ends the
-   line. The eyes are whatever the script last asked for. The cache is flushed on both sides of the
-   two transfers because the plate is a texture the previous tick drew from and the next one will. */
+   hundredth of a second left on the timer (in the PAL build, on a random one tick in five), and the
+   timer running out closes the mouth and ends the line. The eyes are whatever the script last asked
+   for. The cache is flushed on both sides of the two transfers because the plate is a texture the
+   previous tick drew from and the next one will. */
 // op_c's FaceChange, under the name op_b's scene calls it by (FaceChange__Fi__2 in the PS2 build).
 PC_OVERRIDE void FaceChangeC(int actor_no) {
     static FACE_INFO face[21] = {
@@ -285,7 +285,6 @@ PC_OVERRIDE void OpC_InitProcess() {
         {0,                                                 26, 0},
         {0,                                                 19, 0},
         {0,                                                 19, 0},
-        {0,                                                 19, 0}, // start2.img on an NTSC disc, else the list's end
         {0,                                                 0,  0}
     };
 
@@ -305,33 +304,28 @@ PC_OVERRIDE void OpC_InitProcess() {
     tex[19].name = (char *) GetPackFile(read_buffer, "syst04.img", 0);
     tex[20].name = (char *) GetPackFile(read_buffer, "pause.img", 0);
 
-    if (PortNtscData()) {
-        tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-        tex[22].name = (char *) GetPackFile(read_buffer, "start2.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_FRENCH:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                tex[21].name = (char *) GetPackFile(read_buffer, "pause_s.img", 0);
-                break;
-        }
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_FRENCH:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            tex[21].name = (char *) GetPackFile(read_buffer, "pause_s.img", 0);
+            break;
     }
 
     TexManager.Initialize(16352);

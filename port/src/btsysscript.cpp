@@ -5,7 +5,6 @@
 #include "btitem_port.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "dun/gameloop.hpp"
 #include "editground.hpp"
 #include "editloop.hpp"
@@ -31,8 +30,6 @@ int GetStackInt(RS_STACKDATA *argument) {
 
 } // namespace
 
-// A PAL disc has a message file for each language beside the floor's script; an NTSC disc has none,
-// and the script is set up without one.
 PC_OVERRIDE void BtSystemScriptLoad(int floor) {
     char  path[32];
     char  mes_path[40];
@@ -41,19 +38,12 @@ PC_OVERRIDE void BtSystemScriptLoad(int floor) {
     char *mes;
 
     sprintf(path, "dun/script/d0%d/event.stb", floor + 1);
+    sprintf(mes_path, "dun/script/d0%d/d0%d_%d.mes", floor + 1, floor + 1, LanguageCode);
     BtSystemScriptFileBuffer.used = 0;
     g_event_data = reinterpret_cast<char *>(BtSystemScriptFileBuffer.base + BtSystemScriptFileBuffer.used * 0x10);
     LoadFile(path, g_event_data, &read_size);
     wait_now_loading_vsync();
     BtSystemScriptFileBuffer.Alloc((read_size >> 4) + 1);
-
-    if (PortNtscData()) {
-        EdSetEventScript(g_event_data, NULL, &BtSystemScriptFileBuffer);
-        AddSystemEventScript();
-        return;
-    }
-
-    sprintf(mes_path, "dun/script/d0%d/d0%d_%d.mes", floor + 1, floor + 1, LanguageCode);
     mes = reinterpret_cast<char *>(BtSystemScriptFileBuffer.base + BtSystemScriptFileBuffer.used * 0x10);
     LoadFile(mes_path, mes, &mes_size);
     wait_now_loading_vsync();

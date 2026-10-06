@@ -2,8 +2,8 @@
 
 `PLATFORM=PC` builds the game's code as a native x64 Linux program with clang
 20, as C++26, on SDL3 and Vulkan 1.4 (`docs/MACOS.md` covers macOS on Apple
-Silicon, `docs/WINDOWS.md` x64 Windows). The port is always the PAL release;
-there is no region setting. Its timing is NTSC's, though: the game runs 60 ticks a
+Silicon, `docs/WINDOWS.md` x64 Windows). The port accepts PAL and NTSC game data;
+there is no region setting. The game runs 60 ticks a
 second, and the code that sped PAL up for its 50 Hz (`#ifdef PAL_TIMING` in
 ps2/src, which only the PS2 PAL build defines) is left out. `docs/PC_PORT_PLAN.md` is the plan it was built
 to and records the phases; this document describes what is built.
@@ -43,6 +43,12 @@ same from a shell:
 port/build/pc/dcdata extract "rom/Dark Cloud (PAL).iso" data
 port/build/pc/darkcloud --data data --save save
 ```
+
+The extractor accepts a PAL or NTSC disc image. For NTSC data it supplies the
+localized filenames and pack members expected by the shared game code. Original
+disc files remain in the extracted tree for verification against `DATA.HD2`;
+normalized pack copies live under `data/normalized` and are selected by the
+port's file index. Extract again after updating the port to refresh them.
 
 `darkcloud` takes:
 

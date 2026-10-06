@@ -15,7 +15,6 @@
 #include "character.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "fireomni.hpp"
 #include "frame.hpp"
 #include "framevu1.hpp"
@@ -388,7 +387,6 @@ PC_OVERRIDE void OpB_InitProcess() {
         {0,                                                 19, 0},
         {0,                                                 19, 0},
         {0,                                                 2,  0},
-        {0,                                                 19, 0}, // start2.img on an NTSC disc, else the list's end
         {"",                                                0,  0}
     };
 
@@ -411,39 +409,31 @@ PC_OVERRIDE void OpB_InitProcess() {
     texture_list[18].name = (char *) GetPackFile(read_buffer, "fire.img", 0);
     texture_list[19].name = (char *) GetPackFile(read_buffer, "pause.img", 0);
 
-    if (PortNtscData()) {
-        texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_FRENCH:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_s.img", 0);
-                break;
-        }
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_FRENCH:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            texture_list[20].name = (char *) GetPackFile(read_buffer, "pause_s.img", 0);
+            break;
     }
 
     texture_list[21].name = (char *) GetPackFile(read_buffer, "p09a01an.img", 0);
-
-    if (PortNtscData()) {
-        texture_list[22].name = (char *) GetPackFile(read_buffer, "start2.img", 0);
-    }
 
     TexManager.Initialize(16352);
     TexManager.LoadTextureBlock(-1, texture_list);
@@ -734,7 +724,6 @@ PC_OVERRIDE void OpB_InitProcess2() {
         {0,                                                 19, 0},
         {0,                                                 19, 0},
         {0,                                                 2,  0},
-        {0,                                                 19, 0}, // start2.img on an NTSC disc, else the list's end
         {"",                                                0,  0}
     };
 
@@ -753,39 +742,31 @@ PC_OVERRIDE void OpB_InitProcess2() {
     texture_list[14].name = (char *) GetPackFile(read_buffer, "fire.img", 0);
     texture_list[15].name = (char *) GetPackFile(read_buffer, "pause.img", 0);
 
-    if (PortNtscData()) {
-        texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-    } else {
-        switch (LanguageCode) {
-            case LANG_JAPANESE:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_ENGLISH_US:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_ENGLISH_UK:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
-                break;
-            case LANG_FRENCH:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_f.img", 0);
-                break;
-            case LANG_GERMAN:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_g.img", 0);
-                break;
-            case LANG_ITALIAN:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_i.img", 0);
-                break;
-            case LANG_SPANISH:
-                texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_s.img", 0);
-                break;
-        }
+    switch (LanguageCode) {
+        case LANG_JAPANESE:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_ENGLISH_US:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_ENGLISH_UK:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_e.img", 0);
+            break;
+        case LANG_FRENCH:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_f.img", 0);
+            break;
+        case LANG_GERMAN:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_g.img", 0);
+            break;
+        case LANG_ITALIAN:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_i.img", 0);
+            break;
+        case LANG_SPANISH:
+            texture_list[16].name = (char *) GetPackFile(read_buffer, "pause_s.img", 0);
+            break;
     }
 
     texture_list[17].name = (char *) GetPackFile(read_buffer, "p09a01an.img", 0);
-
-    if (PortNtscData()) {
-        texture_list[18].name = (char *) GetPackFile(read_buffer, "start2.img", 0);
-    }
 
     TexManager.Initialize(16352);
     TexManager.LoadTextureBlock(-1, texture_list);

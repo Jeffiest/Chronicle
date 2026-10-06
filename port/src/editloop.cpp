@@ -18,7 +18,6 @@
 #include "collision.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
-#include "dataread_port.hpp"
 #include "dataset.hpp"
 #include "debugfont.hpp"
 #include "dngstatusdata.hpp"
@@ -1573,9 +1572,6 @@ PC_OVERRIDE void EdDrawClock(int x, int y) {
     }
 }
 
-// Retail's LoadTexture with the disc's own editor art: the NTSC disc keeps the message window art in
-// one pack and the editor's system art in a pack per language, where PAL splits the system art into
-// a common pack and a per-language image. The frame buffers keep the PAL sizes on either disc.
 PC_OVERRIDE int LoadTexture() {
     int        entered;
     int        image;
@@ -1594,7 +1590,7 @@ PC_OVERRIDE int LoadTexture() {
     };
     char mes_path[64] = "meswin/mes_tex.pak";
 
-    if (!PortNtscData() && LanguageCode > LANG_JAPANESE) {
+    if (LanguageCode > LANG_JAPANESE) {
         sprintf(mes_path, "meswin/mes_tex_%d.pak", LanguageCode);
     }
 
@@ -1607,75 +1603,36 @@ PC_OVERRIDE int LoadTexture() {
 
     LOADTEXTURE_INFO2 blocks[64] = {};
 
-    if (PortNtscData()) {
-        char system_path[64] = "gedit/system/esys.pak";
+    char system_path[64] = "gedit/system/esys.pak";
 
-        if (LanguageCode > LANG_JAPANESE) {
-            sprintf(system_path, "gedit/system/esys_%d.pak", LanguageCode);
-        }
-
-        LoadFile(system_path, read_buffer, NULL);
-        wait_now_loading_vsync();
-        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
-        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "cursor.img", NULL), -1, 0, 0);
-
-        LOADTEXTURE_INFO2 system_blocks[] = {
-            {"#water_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",  0x15, 0},
-            {"#shadow_buff#640#" HALF_BUFFER_HEIGHT_STR "#4", 0x16, 0},
-            {"#blender#640#" HALF_BUFFER_HEIGHT_STR "#4",     0x18, 0},
-            {"#font_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",   0x1F, 0},
-            {"img/system.img",                                0x14, 0},
-            {"img/pause.img",                                 0x14, 0},
-            {"s_eff.img",                                     0x14, 0},
-            {"whatsday.img",                                  0x14, 0},
-            {"img/ankfont.img",                               0x1F, 0},
-            {"#frame_image#640#" SCREEN_HEIGHT_STR "#4",      0x13, 0},
-        };
-
-        memcpy(blocks, system_blocks, sizeof(system_blocks));
-        blocks[4].name = (char *) GetPackFile(read_buffer, "system.img", NULL);
-        blocks[5].name = (char *) GetPackFile(read_buffer, "pause.img", NULL);
-        blocks[6].name = (char *) GetPackFile(read_buffer, "s_eff.img", NULL);
-        blocks[7].name = (char *) GetPackFile(read_buffer, "whatsday.img", NULL);
-        blocks[8].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
-    } else {
-        int common_size;
-
-        LoadFile("gedit/system/esys_cmn.pak", read_buffer, &common_size);
-        wait_now_loading_vsync();
-
-        // The language's system image is read into the 1 KiB-aligned space after the common pack.
-        u_int *system_image = read_buffer + ((common_size >> 6) + 1) * 64;
-        char   system_path[64] = "gedit/system/sys.img";
-
-        if (LanguageCode > LANG_JAPANESE) {
-            sprintf(system_path, "gedit/system/sys_%d.img", LanguageCode);
-        }
-
-        LoadFile(system_path, system_image, NULL);
-        wait_now_loading_vsync();
-        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "cursor.img", NULL), -1, 0, 0);
-        TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
-
-        LOADTEXTURE_INFO2 system_blocks[] = {
-            {"#water_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",  0x15, 0},
-            {"#shadow_buff#640#" HALF_BUFFER_HEIGHT_STR "#4", 0x16, 0},
-            {"#blender#640#" HALF_BUFFER_HEIGHT_STR "#4",     0x18, 0},
-            {"#font_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",   0x1F, 0},
-            {"img/system.img",                                0x14, 0},
-            {"",                                              0x14, 0},
-            {"s_eff.img",                                     0x14, 0},
-            {"img/ankfont.img",                               0x1F, 0},
-            {"#frame_image#640#" SCREEN_HEIGHT_STR "#4",      0x13, 0},
-        };
-
-        memcpy(blocks, system_blocks, sizeof(system_blocks));
-        blocks[4].name = (char *) GetPackFile(read_buffer, "sys_cmn.img", NULL);
-        blocks[5].name = (char *) system_image;
-        blocks[6].name = (char *) GetPackFile(read_buffer, "s_eff.img", NULL);
-        blocks[7].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
+    if (LanguageCode > LANG_JAPANESE) {
+        sprintf(system_path, "gedit/system/esys_%d.pak", LanguageCode);
     }
 
+    LoadFile(system_path, read_buffer, NULL);
+    wait_now_loading_vsync();
+    TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
+    TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "cursor.img", NULL), -1, 0, 0);
+
+    LOADTEXTURE_INFO2 system_blocks[] = {
+        {"#water_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",  0x15, 0},
+        {"#shadow_buff#640#" HALF_BUFFER_HEIGHT_STR "#4", 0x16, 0},
+        {"#blender#640#" HALF_BUFFER_HEIGHT_STR "#4",     0x18, 0},
+        {"#font_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",   0x1F, 0},
+        {"img/system.img",                                0x14, 0},
+        {"img/pause.img",                                 0x14, 0},
+        {"s_eff.img",                                     0x14, 0},
+        {"whatsday.img",                                  0x14, 0},
+        {"img/ankfont.img",                               0x1F, 0},
+        {"#frame_image#640#" SCREEN_HEIGHT_STR "#4",      0x13, 0},
+    };
+
+    memcpy(blocks, system_blocks, sizeof(system_blocks));
+    blocks[4].name = (char *) GetPackFile(read_buffer, "system.img", NULL);
+    blocks[5].name = (char *) GetPackFile(read_buffer, "pause.img", NULL);
+    blocks[6].name = (char *) GetPackFile(read_buffer, "s_eff.img", NULL);
+    blocks[7].name = (char *) GetPackFile(read_buffer, "whatsday.img", NULL);
+    blocks[8].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
     TexManager.LoadTextureBlock(-1, blocks);
     wait_now_loading_vsync();
 

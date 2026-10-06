@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <vector>
 
 #include "draw2d_port.hpp"
@@ -457,6 +458,54 @@ PC_OVERRIDE void ClsMes::MakeFukidashi(sceVif1Packet *packet) {
     services.set_alpha(nullptr);
 }
 
+// Keep the message layout within the fixed character table.
+PC_OVERRIDE int ClsMes::SetMesWinTbl(int code, int mode, short x, short y) {
+    if (code >= -0x200 && code <= -0x101) {
+        if (this->win_line_num > 0) {
+            this->win_line[this->win_line_num - 1].space += code + 0x200;
+        }
+
+        return 0;
+    }
+
+    if (code >= -0x400 && code <= -0x301) {
+        if (code + 0x400 == 0) {
+            this->clut_now = this->clut_default;
+        } else if (code == -0x301) {
+            this->clut_now = 0xFF;
+        } else {
+            this->clut_now = code + 0x401;
+        }
+
+        return 0;
+    }
+
+    if (code >= -0xA00 && code <= -0x901) {
+        this->fukidashi_shape = code + 0xA00;
+        return 0;
+    }
+
+    if (this->win_line_num >= MES_WIN_LINE_MAX) {
+        return 0;
+    }
+
+    if (mode == 1) {
+        this->win_line[this->win_line_num].code = code + 0x1000;
+        this->win_line[this->win_line_num].x = x;
+        this->win_line[this->win_line_num].y = y;
+        this->win_line[this->win_line_num].clut = this->clut_now;
+        this->win_line_num++;
+    } else {
+        this->win_line[this->win_line_num].code = code;
+        this->win_line[this->win_line_num].x = x;
+        this->win_line[this->win_line_num].y = y;
+        this->win_line[this->win_line_num].clut = this->clut_now;
+        this->win_line_num++;
+    }
+
+    return 1;
+}
+
 PC_OVERRIDE void ClsMes::DrawMesWin() {
     CTexture *texture;
     int       offset_x;
@@ -599,7 +648,8 @@ PC_OVERRIDE void ClsMes::DrawMesWin() {
 
         int row = this->win_line[index].y / this->char_height;
 
-        if (this->line_pos[row].x < 0 || this->line_pos[row].y < 0) {
+        if (row >= static_cast<int>(std::size(this->line_pos)) || this->line_pos[row].x < 0 ||
+            this->line_pos[row].y < 0) {
             int      line_x = this->win_line[index].x + this->text_x;
             int      line_y = this->win_line[index].y + this->text_y;
             int      screen_x = offset_x + (line_x + dx);

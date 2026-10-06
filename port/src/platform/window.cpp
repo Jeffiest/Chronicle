@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <utility>
@@ -182,6 +183,30 @@ bool WindowDisplaySize(int &width, int &height, bool windowed) {
         }
     }
     return true;
+}
+
+std::vector<DisplayModeSize> WindowDisplayModes() {
+    std::vector<DisplayModeSize> sizes;
+    if (g_window == nullptr || g_headless) {
+        return sizes;
+    }
+    int               count = 0;
+    SDL_DisplayMode **modes = SDL_GetFullscreenDisplayModes(SDL_GetDisplayForWindow(g_window), &count);
+    if (modes == nullptr) {
+        return sizes;
+    }
+    for (int i = 0; i < count; ++i) {
+        DisplayModeSize size{modes[i]->w, modes[i]->h};
+        if (std::none_of(sizes.begin(), sizes.end(),
+                         [&](const DisplayModeSize &known) { return known.width == size.width && known.height == size.height; })) {
+            sizes.push_back(size);
+        }
+    }
+    SDL_free(modes);
+    std::sort(sizes.begin(), sizes.end(), [](const DisplayModeSize &a, const DisplayModeSize &b) {
+        return std::pair(a.width * a.height, a.width) < std::pair(b.width * b.height, b.width);
+    });
+    return sizes;
 }
 
 bool WindowPollEvents() {

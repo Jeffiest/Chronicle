@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "clsmes.hpp"
@@ -154,10 +155,11 @@ int Nearest(std::span<const double> choices, double value) {
     return best;
 }
 
-struct Resolution {
-    int width;
-    int height;
-};
+using Resolution = OptionResolution;
+
+// The smallest size the list offers from the display's own modes.
+constexpr int kMinWidth = 800;
+constexpr int kMinHeight = 600;
 
 // 0x0 is the monitor's resolution.
 constexpr Resolution kResolutions[] = {
@@ -186,12 +188,8 @@ void ListResolutions() {
     int           width = 0;
     int           height = 0;
     bool          known = WindowDisplaySize(width, height, !config.fullscreen && !Desktop(config));
-    g_sizes.clear();
-    for (const Resolution &size : kResolutions) {
-        if (!known || (size.width <= width && size.height <= height)) {
-            g_sizes.push_back(size);
-        }
-    }
+    g_sizes = OptionResolutionList(WindowDisplayModes(), config.window_width, config.window_height, known, width,
+                                   height);
 }
 
 int ResolutionChoice(const Config &config) {
@@ -1094,6 +1092,35 @@ void WriteOptions(CSaveData &save, const ConfigGameOptions &options) {
 }
 
 } // namespace
+
+std::vector<OptionResolution> OptionResolutionList(std::span<const DisplayModeSize> modes, int configured_width,
+                                                   int configured_height, bool display_known, int display_width,
+                                                   int display_height) {
+    std::vector<OptionResolution> sizes(std::begin(kResolutions), std::end(kResolutions));
+    for (const DisplayModeSize &mode : modes) {
+        if (mode.width >= kMinWidth && mode.height >= kMinHeight) {
+            sizes.push_back({mode.width, mode.height});
+        }
+    }
+    bool configured = configured_width > 0 && configured_height > 0;
+    if (configured) {
+        sizes.push_back({configured_width, configured_height});
+    }
+    // Desktop stays first; the rest run from the smallest area, narrower first.
+    std::sort(sizes.begin() + 1, sizes.end(), [](const OptionResolution &a, const OptionResolution &b) {
+        return std::pair(a.width * a.height, a.width) < std::pair(b.width * b.height, b.width);
+    });
+    std::vector<OptionResolution> listed;
+    for (const OptionResolution &size : sizes) {
+        bool fits = !display_known || (size.width <= display_width && size.height <= display_height) ||
+                    (configured && size.width == configured_width && size.height == configured_height);
+        bool again = !listed.empty() && listed.back().width == size.width && listed.back().height == size.height;
+        if (fits && !again) {
+            listed.push_back(size);
+        }
+    }
+    return listed;
+}
 
 bool MenuOptionOpen() {
     return g_screen.open;

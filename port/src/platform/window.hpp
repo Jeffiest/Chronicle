@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 struct SDL_Window;
 union SDL_Event;
@@ -64,6 +65,16 @@ bool WindowSize(int &width, int &height);
 // The display's size, or with windowed the room a window has on it: the desktop's panels and the
 // window's borders taken off. False headless or with no window.
 bool WindowDisplaySize(int &width, int &height, bool windowed);
+
+// A size in pixels, as a display lists its modes.
+struct DisplayModeSize {
+    int width = 0;
+    int height = 0;
+};
+
+// The sizes the window's display offers fullscreen, each once whatever its refresh rates or pixel
+// formats, the smallest first; empty headless or with no window.
+std::vector<DisplayModeSize> WindowDisplayModes();
 // Pumps events; false once the window is asked to close. A pixel-size change reaches the renderer.
 bool WindowPollEvents();
 // Sees every event WindowPollEvents pumps, before the window handles it.

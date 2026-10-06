@@ -19,7 +19,10 @@ struct WindowConfig {
 // Starts SDL's video subsystem and opens the window. On Windows a headless Vulkan window is hidden.
 // Elsewhere headless uses SDL's offscreen driver, which gives Vulkan a VK_EXT_headless_surface, and
 // SDL's dummy audio driver, which consumes the mix at the device rate without a device.
-void        WindowInit(const WindowConfig &config);
+void WindowInit(const WindowConfig &config);
+// Gives the window the size and fullscreen state WindowInit would have opened it with, on the
+// display it is on; headless, nothing. The renderer follows through WindowPollEvents.
+void        WindowSetMode(const WindowConfig &config);
 void        WindowShutdown();
 SDL_Window *WindowHandle();
 // Pumps events; false once the window is asked to close. A pixel-size change reaches the renderer.

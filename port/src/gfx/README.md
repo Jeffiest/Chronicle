@@ -15,7 +15,8 @@ else is internal. No game header is reachable from here: `platform/`, `gfx/` and
   `EndFrame` does nothing. Every frame starts on the main target. `EndFrame` presents. The game's
   ticks are recorded instead and rendered from their display lists (below).
 - `config.present_mode`: FIFO, Mailbox (FIFO where unsupported) or Immediate (Mailbox, then FIFO,
-  where unsupported).
+  where unsupported). `SetPresentMode` changes it at any time; the swapchain is recreated with it
+  as for a resize.
 - `config.offscreen` renders without a surface or swapchain: each frame is drawn to the main target
   alone, at the window's pixel size, and `EndFrame` submits it and presents nothing. `ReadbackFrame`,
   `SnapshotFrame`, `kPreviousFrame`, depth queries and resizes behave as with a swapchain, so a

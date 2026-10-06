@@ -114,6 +114,8 @@ bool HeadlessSurfaceAvailable();
 void RendererShutdown();
 // The window's pixel size changed; the swapchain and main target follow at the next BeginFrame.
 void RendererResize();
+// The swapchain is recreated with the mode at the next BeginFrame or tick render.
+void SetPresentMode(PresentMode mode);
 // False when no frame can be drawn (minimised window); draws until EndFrame are then dropped.
 bool BeginFrame();
 void EndFrame();

@@ -313,8 +313,8 @@ int CEditArea::DeleteMapParts(int parts_no, CMapParts *parts, float x, float y, 
                     AddAlt(cell_x, cell_y, -cell_code);
 
                     if (occupant >= 0) {
-                        CMapParts *occupant_parts = &parts[occupant];
-                        float      occupant_position[3];
+                        CMapParts    *occupant_parts = &parts[occupant];
+                        sceVu0FVECTOR occupant_position;
                         occupant_parts->GetPosition(occupant_position);
                         occupant_position[1] = GetAlt(cell_x, cell_y);
                         occupant_parts->SetPosition(occupant_position);

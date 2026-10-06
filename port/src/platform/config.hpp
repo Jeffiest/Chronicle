@@ -81,7 +81,8 @@ bool ConfigLoad();
 // of the game that holds a setting adds its own and looks only at its own keys.
 using ConfigChangeHook = void (*)(const Config &before, const Config &after);
 
-// Adding a hook twice runs it once.
+// Adding a hook twice runs it once. Hooks added or removed while a change is being applied take part
+// from the next change.
 void ConfigAddChangeHook(ConfigChangeHook hook);
 
 void ConfigRemoveChangeHook(ConfigChangeHook hook);
@@ -90,7 +91,9 @@ void ConfigRemoveChangeHook(ConfigChangeHook hook);
 // them back (a bad value is reported and becomes its default), become ConfigGet(), are saved (comments
 // in the file are not kept), and reach the running game through the change hooks, in the order they
 // were added; ConfigAppliesOnRestart names the settings that wait for the next start instead. Settings
-// equal to the current ones change nothing. Returns whether the settings are saved.
+// equal to the current ones change nothing, but are saved if the last save failed. Returns whether the
+// settings are saved. A call from a change hook is refused and returns false. Main thread only, as are
+// the hooks.
 bool ConfigChange(const Config &config);
 
 // Whether a change to the setting, by its config.json name ("game.debug_mode"), reaches the running

@@ -161,8 +161,9 @@ becomes its default), saved, and applied to the running game. The file is
 rewritten whole, as `ConfigSerialize` writes it, so comments in it are not
 kept; it is written to `config.json.tmp` and renamed over `config.json`, so a
 crash or a full disk leaves the old file or the new one, never part of one.
-Every setting applies at once except `game.debug_mode`, which takes effect at
-the next start (`ConfigAppliesOnRestart` says which, for the screen to show):
+Every setting applies at once except `game.debug_mode` (`DebugMode` and the
+debug chord), which takes effect at the next start (`ConfigAppliesOnRestart`
+says which, for the screen to show):
 the master volume, the input section (bindings, mouse and stick), the tick
 rate, `interpolation`, `max_fps` and `show_fps`, the present mode (the
 swapchain is recreated), the window's size and fullscreen state, and `aspect`
@@ -171,7 +172,11 @@ and `ui_scale` (at the next pump outside a frame: `gfx::SetFrameLayout`).
 headless window keeps its size. The render scale stays the one the window
 had at start, as after a resize by hand. Each part of the game that holds a
 setting applies its own through a hook (`ConfigAddChangeHook`); `main.cpp`'s
-is the host's.
+is the host's. `ConfigChange` returns whether the file was saved, and the
+same settings again retry a failed save without applying them again. It and
+the hooks run on the main thread; a `ConfigChange` from inside a hook is
+refused, and a hook added or removed during a change takes part from the
+next one.
 
 ### Keyboard and mouse
 
@@ -341,7 +346,7 @@ Holding it into the next mode does nothing until it is pressed again.
 After start-up, retail PAL flips `DebugMode` after every frame of the main
 loop where pad 2 holds L1+R1+L2+R2 and R3 is pressed (`ps2/src/main.cpp:963`);
 the port reads the same combination on pad 1 instead (`GameCheckDebugToggle`,
-past the game's pad lock), and only while `game.debug_mode` is on, printing
+past the game's pad lock), and only if `game.debug_mode` was on at start, printing
 `debug mode on` or `debug mode off`. It does not move the game anywhere:
 `DebugMode` is a flag the modes read. What it does once set:
 

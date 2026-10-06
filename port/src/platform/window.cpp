@@ -18,6 +18,12 @@ std::vector<void (*)(const SDL_Event &)> g_hooks;
     std::exit(1);
 }
 
+void Check(bool ok, const char *what) {
+    if (!ok) {
+        std::fprintf(stderr, "window: %s: %s\n", what, SDL_GetError());
+    }
+}
+
 struct Placement {
     int  width;
     int  height;
@@ -94,14 +100,21 @@ void WindowSetMode(const WindowConfig &config) {
     Placement     placement = Place(config, display);
     // Some platforms change a window asynchronously: SDL_SyncWindow waits for the change, so the
     // pixel-size event that resizes the renderer, as for a window resized by hand, is in the queue.
-    SDL_SetWindowFullscreen(g_window, placement.fullscreen);
-    SDL_SyncWindow(g_window);
+    Check(SDL_SetWindowFullscreen(g_window, placement.fullscreen), "SDL_SetWindowFullscreen");
+    Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
     if (placement.fullscreen) {
         return;
     }
-    SDL_SetWindowSize(g_window, placement.width, placement.height);
-    SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
-    SDL_SyncWindow(g_window);
+    // A maximized window keeps its size and place.
+    if (SDL_GetWindowFlags(g_window) & SDL_WINDOW_MAXIMIZED) {
+        Check(SDL_RestoreWindow(g_window), "SDL_RestoreWindow");
+        Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
+    }
+    Check(SDL_SetWindowSize(g_window, placement.width, placement.height), "SDL_SetWindowSize");
+    Check(SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED_DISPLAY(display),
+                                SDL_WINDOWPOS_CENTERED_DISPLAY(display)),
+          "SDL_SetWindowPosition");
+    Check(SDL_SyncWindow(g_window), "SDL_SyncWindow");
 }
 
 void WindowShutdown() {

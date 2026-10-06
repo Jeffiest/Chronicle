@@ -769,8 +769,8 @@ their tone by key range, then split index.
 ## Saves and host files
 
 The port has no memory card. Each save is a file of its own directly in the
-save directory, `<save>/darkcloudN` for N = 0, 1, 2 and on, with no upper
-bound, holding retail's 0x136A7-byte image unchanged: `CSaveData` (0x131C0
+save directory, `<save>/darkcloudN` for N = 0, 1, 2 and on, with no
+12-save cap (N has up to nine digits), holding retail's 0x136A7-byte image unchanged: `CSaveData` (0x131C0
 bytes), the version string (`darkcloudVer1.9`) in 0x20 bytes, and a checksum
 byte for every 64 bytes of save data. The name is the one the game gives the
 file on the card, so a save copied out of a card export loads as it is.
@@ -778,8 +778,8 @@ file on the card, so a save copied out of a card export loads as it is.
 (`SV_CONFIG_SYS`: the options, the last save used, the game clear flag)
 followed by a field of the port's own, the last save's number as a 32-bit
 little-endian integer, since the image keeps that number in a signed byte,
-which only holds 0 to 127; a 0x40-byte file copied out of a card loads too. `icon.sys` and the icons are
-not written.
+which only holds 0 to 127; a 0x40-byte file copied out of a card loads too.
+`icon.sys` and the icons are not written.
 
 `port/src/memorycardaccess.cpp` replaces the operations of
 `CMemoryCardAccess` with plain reads and writes of these files
@@ -787,16 +787,26 @@ not written.
 that starts it. Every write goes through `FilesWrite`
 (`port/src/platform/files.cpp`): a temporary file of its own beside the
 target, `<target>.<16 hex digits>.tmp`, created exclusively, written,
-flushed to the disk (`FlushFileBuffers`, `fsync` or macOS's `F_FULLFSYNC`)
-and closed, then moved onto the target (`MoveFileExW` with write-through;
-`rename` or, for a new save, `link`, then a sync of the directory). Until
-that move the target keeps what it held, and a failure removes the
-temporary file. One is left only when the game dies during a write; the
-game ignores it, and it can be deleted. Saving over a save replaces the
-file; a new save never does: when its number has been taken since the list
-was read, by a second copy of the game or a file copied in by hand, it goes
-to the next free number. Saves on POSIX therefore need a file system with
-hard links. The
+flushed to the disk and closed, then moved onto the target. Until that move
+the target keeps what it held. Removing the temporary file after a failure
+is best effort: one left by a game that died during a write, or by a
+removal that failed, is ignored by the game and can be deleted by hand.
+
+- Windows flushes with `FlushFileBuffers` and moves with `MoveFileExW` and
+  write-through.
+- POSIX flushes with `fsync`; macOS, whose `fsync` stops at the drive's
+  cache, uses `F_FULLFSYNC`, and falls back to `fsync` only on a file
+  system that does not offer it (`ENOTSUP`, `EINVAL`, `ENOTTY` and the
+  like); any other error fails the write. The move is `rename`, or for a new
+  save an exclusive rename (`renameat2` with `RENAME_NOREPLACE` on Linux,
+  `renamex_np` with `RENAME_EXCL` on macOS), then a sync of the directory. A
+  file system without the exclusive rename gets a hard link and the
+  temporary name's removal instead; one with neither cannot take a new save.
+
+Saving over a save replaces the file; a new save never does: when its number
+has been taken since the list was read, by a second copy of the game or a
+file copied in by hand, it goes to the next free number. Only regular files
+are read; a FIFO or anything else under a save's name is left unopened. The
 card the save screens still check is always there, formatted and with room,
 and so is its save directory; format, unformat, the write test and the
 conversion of NTSC 1.0 saves do nothing.

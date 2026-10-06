@@ -6,7 +6,11 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 
 #include <cerrno>
 #endif
@@ -70,6 +74,26 @@ FilesResult Commit(const fs::path &temp, const fs::path &path, bool replace) {
     return !replace && Taken() ? FilesResult::kExists : FilesResult::kFailed;
 }
 
+std::size_t ReadRegular(const fs::path &path, char *data, std::size_t size) {
+    File file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == kNoFile) {
+        return 0;
+    }
+    std::size_t total = 0;
+    if (GetFileType(file) == FILE_TYPE_DISK) {
+        while (total < size) {
+            DWORD chunk = size - total > 0x40000000 ? 0x40000000 : static_cast<DWORD>(size - total);
+            DWORD read = 0;
+            if (!ReadFile(file, data + total, chunk, &read, nullptr) || read == 0) {
+                break;
+            }
+            total += read;
+        }
+    }
+    CloseHandle(file);
+    return total;
+}
+
 #else
 
 using File = int;
@@ -81,6 +105,11 @@ File CreateExclusive(const fs::path &path) {
 
 bool Taken() {
     return errno == EEXIST;
+}
+
+// The errors of a call the file system does not offer, not of the storage behind it.
+bool Unsupported() {
+    return errno == ENOTSUP || errno == EOPNOTSUPP || errno == EINVAL || errno == ENOTTY || errno == ENOSYS;
 }
 
 bool WriteAll(File file, const char *data, std::size_t size) {
@@ -98,18 +127,34 @@ bool WriteAll(File file, const char *data, std::size_t size) {
     return true;
 }
 
-bool Sync(File file) {
+bool Fsync(File file) {
+    int result;
+    do {
+        result = fsync(file);
+    } while (result != 0 && errno == EINTR);
+    return result == 0;
+}
+
+// macOS's fsync stops at the drive's cache, so a file is fully synced there. A file system without
+// the full sync gets fsync instead; any other failure of it fails the write.
+bool SyncFile(File file) {
 #ifdef __APPLE__
-    // macOS's fsync stops at the drive's cache.
-    if (fcntl(file, F_FULLFSYNC) == 0) {
+    int result;
+    do {
+        result = fcntl(file, F_FULLFSYNC);
+    } while (result != 0 && errno == EINTR);
+    if (result == 0) {
         return true;
     }
+    if (!Unsupported()) {
+        return false;
+    }
 #endif
-    return fsync(file) == 0;
+    return Fsync(file);
 }
 
 bool SyncAndClose(File file) {
-    bool synced = Sync(file);
+    bool synced = SyncFile(file);
     return close(file) == 0 && synced;
 }
 
@@ -119,7 +164,25 @@ void Remove(const fs::path &path) {
 
 bool SyncDirectory(const fs::path &path) {
     File directory = open(path.parent_path().c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    return directory != kNoFile && SyncAndClose(directory);
+    if (directory == kNoFile) {
+        return false;
+    }
+    bool synced = Fsync(directory);
+    return close(directory) == 0 && synced;
+}
+
+// Moves temp onto path unless path exists, in one step where the system can: -1 with errno set
+// otherwise.
+int RenameExclusive(const fs::path &temp, const fs::path &path) {
+#if defined(__linux__) && defined(SYS_renameat2)
+    constexpr unsigned kNoReplace = 1; // RENAME_NOREPLACE
+    return static_cast<int>(syscall(SYS_renameat2, AT_FDCWD, temp.c_str(), AT_FDCWD, path.c_str(), kNoReplace));
+#elif defined(__APPLE__)
+    return renamex_np(temp.c_str(), path.c_str(), RENAME_EXCL);
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
 }
 
 FilesResult Commit(const fs::path &temp, const fs::path &path, bool replace) {
@@ -127,14 +190,44 @@ FilesResult Commit(const fs::path &temp, const fs::path &path, bool replace) {
         if (rename(temp.c_str(), path.c_str()) != 0) {
             return FilesResult::kFailed;
         }
-    } else {
-        // link fails rather than replace; the temporary name then goes.
+    } else if (RenameExclusive(temp, path) != 0) {
+        if (Taken()) {
+            return FilesResult::kExists;
+        }
+        if (!Unsupported()) {
+            return FilesResult::kFailed;
+        }
+        // Without the exclusive rename, a second name that cannot replace either: the
+        // temporary one then goes.
         if (link(temp.c_str(), path.c_str()) != 0) {
             return Taken() ? FilesResult::kExists : FilesResult::kFailed;
         }
         Remove(temp);
     }
     return SyncDirectory(path) ? FilesResult::kWritten : FilesResult::kFailed;
+}
+
+std::size_t ReadRegular(const fs::path &path, char *data, std::size_t size) {
+    File file = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (file == kNoFile) {
+        return 0;
+    }
+    std::size_t total = 0;
+    struct stat status;
+    if (fstat(file, &status) == 0 && S_ISREG(status.st_mode)) {
+        while (total < size) {
+            ssize_t got = read(file, data + total, size - total);
+            if (got < 0 && errno == EINTR) {
+                continue;
+            }
+            if (got <= 0) {
+                break;
+            }
+            total += static_cast<std::size_t>(got);
+        }
+    }
+    close(file);
+    return total;
 }
 
 #endif
@@ -164,4 +257,8 @@ FilesResult FilesWrite(const fs::path &path, const void *data, std::size_t size,
         Remove(temp);
     }
     return result;
+}
+
+std::size_t FilesRead(const fs::path &path, void *data, std::size_t size) {
+    return ReadRegular(path, static_cast<char *>(data), size);
 }

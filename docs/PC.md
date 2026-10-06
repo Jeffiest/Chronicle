@@ -126,7 +126,12 @@ key is optional; these are the defaults:
     "input": {
         "mouse_sensitivity": 0.1,   // right-stick deflection (1 = full) per pixel moved in one tick
         "stick_sensitivity": 1.33,  // gamepad stick scale before the game's dead zone (PCSX2's default)
-        "gyro_sensitivity": 0.5,    // right-stick deflection per radian per second the pad turns, while gyro is on
+        "stick_invert_x": false,    // the gamepad's camera stick, flipped left to right
+        "stick_invert_y": false,    // ...and up and down
+        "gyro": "held",             // when the gyroscope turns the camera: off, always, first_person (R2's view) or held (gyro_hold)
+        "gyro_sensitivity": 0.5,    // camera-stick deflection per radian per second the pad turns
+        "gyro_invert_x": false,
+        "gyro_invert_y": false,
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_release": ["Escape"], // keys that give the cursor back in a window ([]: none)
@@ -238,7 +243,7 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | F3 | none | the FPS counter on and off (see "The FPS counter") |
 | gamepad L4 (`paddle2`) | none | the developer menu, in debug mode |
 | gamepad R4 (`paddle1`) | none | the town or dungeon debug menu, in debug mode, without Select+L2 |
-| gamepad L5 (`paddle4`) | none | gyro camera on and off |
+| gamepad L5 (`paddle4`) | none | held, the gyroscope turns the camera (`gyro` set to `held`) |
 
 The square button is not a guard in this game: the guard is R1 held while
 locked on, so right click is R1. The camera turns the way the view moves on
@@ -250,7 +255,7 @@ default `ry = -MouseY` makes mouse up look up and `mouse_invert_y` flips it.
 
 The actions are `up down left right cross circle square triangle l1 r1 l2
 r2 l3 r3 start select lx- lx+ ly- ly+ rx- rx+ ry- ry+ lx ly rx ry`, and the
-port's own `fps_toggle`, `developer_menu`, `debug_menu` and `gyro_toggle`, which press no pad button. Keys are
+port's own `fps_toggle`, `developer_menu`, `debug_menu` and `gyro_hold`, which press no pad button. Keys are
 SDL names (any case, `_` for a space; `Grave`, `Backquote` or `Backtick` for
 the key left of 1); `Mouse1` to `Mouse5` are left, right,
 middle and the two side buttons. The port's own actions also take
@@ -270,10 +275,13 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   onto the DualShock 2's square, keeping its direction: the game's dead zone
   takes 38% of the travel and the town runs past 0.85, so an unscaled stick
   only runs at over 90% tilt, and a round one never on a diagonal.
-- **Gyro.** While `gyro_toggle` has it on, a gamepad's gyroscope turns the
-  camera when its right stick is centred: turning the pad left or right
-  turns the view, tilting it looks up or down, `gyro_sensitivity` times the
-  rate in radians per second, below 0.03 ignored as drift.
+- **Gyro.** When `gyro` says (always, only in first-person view, or while
+  `gyro_hold` is held), a gamepad's gyroscope turns the camera while the
+  camera stick is centred: the right stick, or the left in first-person view
+  (R2). Turning the pad left or right turns the view and tilting it looks up
+  or down, `gyro_sensitivity` times the rate in radians per second; below 0.03
+  is ignored as drift. `gyro_invert_x`/`_y` flip it, and `stick_invert_x`/`_y`
+  flip the camera stick the same way.
 - **Mouse.** The right stick at each pad read is the motion since the
   previous read, divided by the ticks between them, times
   `mouse_sensitivity` (0.1: ten pixels in one tick is full deflection,

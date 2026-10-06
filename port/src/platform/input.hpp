@@ -100,6 +100,8 @@ bool InputLeftStickLive();
 // The pad as the game reads it: the device state or the override, stick_dpad applied.
 const InputPadState &InputGetPad(int pad);
 
+void InputSetLookOnLeftStick(bool left);
+
 void InputSetRumble(int pad, InputRumble rumble);
 
 InputRumble InputGetRumble(int pad);
@@ -155,7 +157,7 @@ enum class InputHostAction {
     FpsToggle,
     DeveloperMenu,
     DebugMenu,
-    GyroToggle,
+    GyroHold,
 };
 
 // Whether a key, mouse button or gamepad button bound to the action is held, live or scripted.

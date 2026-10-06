@@ -16,6 +16,13 @@ enum class ConfigAspect {
     FourThree,
 };
 
+enum class ConfigGyro {
+    Off,
+    Always,
+    FirstPerson,
+    Held,
+};
+
 struct ConfigKeyBinding {
     std::string              action;
     std::vector<std::string> keys;
@@ -63,7 +70,12 @@ struct Config {
     std::vector<ConfigKeyBinding> key_bindings;
     float                         mouse_sensitivity = 0.1f;
     float                         stick_sensitivity = 1.33f;
+    bool                          stick_invert_x = false;
+    bool                          stick_invert_y = false;
+    ConfigGyro                    gyro = ConfigGyro::Held;
     float                         gyro_sensitivity = 0.5f;
+    bool                          gyro_invert_x = false;
+    bool                          gyro_invert_y = false;
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     std::vector<std::string>      mouse_release_keys = {"Escape"};

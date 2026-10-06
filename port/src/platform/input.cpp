@@ -78,7 +78,7 @@ constexpr Action kActions[] = {
     {"fps_toggle",   ActionKind::Host,     0,              kAxisLeftX,  0,  "F3"},
     {"developer_menu", ActionKind::Host,   0,              kAxisLeftX,  0,  "Gamepad:paddle2"},
     {"debug_menu",   ActionKind::Host,     0,              kAxisLeftX,  0,  "Gamepad:paddle1"},
-    {"gyro_toggle",  ActionKind::Host,     0,              kAxisLeftX,  0,  "Gamepad:paddle4"},
+    {"gyro_hold",    ActionKind::Host,     0,              kAxisLeftX,  0,  "Gamepad:paddle4"},
 };
 
 struct ButtonMap {
@@ -109,7 +109,7 @@ constexpr std::size_t kFirstHostAction = kActionCount - 4;
 constexpr std::size_t kHostActionCount = kActionCount - kFirstHostAction;
 static_assert(kActions[kFirstHostAction].name == "fps_toggle");
 static_assert(static_cast<std::size_t>(InputHostAction::FpsToggle) == 0);
-static_assert(static_cast<std::size_t>(InputHostAction::GyroToggle) == kHostActionCount - 1);
+static_assert(static_cast<std::size_t>(InputHostAction::GyroHold) == kHostActionCount - 1);
 
 // AxisCalibration (ps2/src/gamepad.cpp): a byte within 49 above or 50 below the centre reads as
 // zero, and the remaining 78 steps each side span the game's +-128.
@@ -287,8 +287,13 @@ std::uint8_t StickToByte(Sint16 value) {
 // input.stick_sensitivity (1.33 by default, PCSX2's analog sensitivity) and the circle is stretched
 // onto the square, keeping the direction.
 float g_stick_sensitivity = 1.33f;
-float g_gyro_sensitivity = 0.5f;
-bool  g_gyro_on = false;
+float      g_gyro_sensitivity = 0.5f;
+ConfigGyro g_gyro = ConfigGyro::Off;
+bool       g_gyro_invert_x = false;
+bool       g_gyro_invert_y = false;
+bool       g_stick_invert_x = false;
+bool       g_stick_invert_y = false;
+bool       g_look_left = false;
 
 void StickPairToBytes(Sint16 x, Sint16 y, std::uint8_t &byte_x, std::uint8_t &byte_y) {
     float fx = std::clamp(static_cast<float>(x) / 32767.0f, -1.0f, 1.0f);
@@ -322,6 +327,23 @@ std::uint8_t &AxisOf(InputPadState &state, Axis axis) {
     return state.right_y;
 }
 
+Sint16 Flip(Sint16 value) {
+    return value == SDL_JOYSTICK_AXIS_MIN ? SDL_JOYSTICK_AXIS_MAX : static_cast<Sint16>(-value);
+}
+
+bool GyroActive() {
+    switch (g_gyro) {
+        case ConfigGyro::Always:
+            return true;
+        case ConfigGyro::FirstPerson:
+            return g_look_left;
+        case ConfigGyro::Held:
+            return InputHostHeld(InputHostAction::GyroHold);
+        default:
+            return false;
+    }
+}
+
 void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
     for (const ButtonMap &map : kGamepadButtons) {
         if (SDL_GetGamepadButton(gamepad, map.button)) {
@@ -334,24 +356,35 @@ void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
     if (SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > kTriggerThreshold) {
         state.buttons |= kInputR2;
     }
-    StickPairToBytes(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX),
-                     SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY), state.left_x, state.left_y);
-    StickPairToBytes(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX),
-                     SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY), state.right_x, state.right_y);
-    float rate[3];
-    if (!g_gyro_on || Deflected(state.right_x) || Deflected(state.right_y) ||
-        !SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_GYRO, rate, 3)) {
+    Sint16 axes[4] = {SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX),
+                      SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY),
+                      SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX),
+                      SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY)};
+    int    look = g_look_left ? 0 : 2;
+    if (g_stick_invert_x) {
+        axes[look] = Flip(axes[look]);
+    }
+    if (g_stick_invert_y) {
+        axes[look + 1] = Flip(axes[look + 1]);
+    }
+    StickPairToBytes(axes[0], axes[1], state.left_x, state.left_y);
+    StickPairToBytes(axes[2], axes[3], state.right_x, state.right_y);
+    std::uint8_t &x = g_look_left ? state.left_x : state.right_x;
+    std::uint8_t &y = g_look_left ? state.left_y : state.right_y;
+    float         rate[3];
+    if (!GyroActive() || Deflected(x) || Deflected(y) || !SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_GYRO, rate, 3)) {
         return;
     }
     float yaw = std::fabs(rate[1]) > kGyroDeadband ? -rate[1] * g_gyro_sensitivity : 0.0f;
-    float pitch = std::fabs(rate[0]) > kGyroDeadband ? rate[0] * g_gyro_sensitivity : 0.0f;
-    state.right_x = InputStickByte(yaw);
-    state.right_y = InputStickByte(pitch);
+    float pitch = std::fabs(rate[0]) > kGyroDeadband ? -rate[0] * g_gyro_sensitivity : 0.0f;
+    x = InputStickByte(g_gyro_invert_x ? -yaw : yaw);
+    pitch = g_gyro_invert_y ? -pitch : pitch;
+    y = InputStickByte(g_look_left ? -pitch : pitch);
 }
 
 void EnableGyro(SDL_Gamepad *gamepad) {
     if (SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO)) {
-        SDL_SetGamepadSensorEnabled(gamepad, SDL_SENSOR_GYRO, g_gyro_on);
+        SDL_SetGamepadSensorEnabled(gamepad, SDL_SENSOR_GYRO, g_gyro != ConfigGyro::Off);
     }
 }
 
@@ -491,6 +524,18 @@ void InputApplyConfig(const Config &config) {
     }
     g_stick_sensitivity = config.stick_sensitivity;
     g_gyro_sensitivity = config.gyro_sensitivity;
+    g_gyro_invert_x = config.gyro_invert_x;
+    g_gyro_invert_y = config.gyro_invert_y;
+    g_stick_invert_x = config.stick_invert_x;
+    g_stick_invert_y = config.stick_invert_y;
+    if (config.gyro != g_gyro) {
+        g_gyro = config.gyro;
+        for (PadSlot &slot : g_slots) {
+            if (slot.gamepad != nullptr) {
+                EnableGyro(slot.gamepad);
+            }
+        }
+    }
     InputMouseSettings mouse;
     mouse.sensitivity = config.mouse_sensitivity;
     mouse.invert_y = config.mouse_invert_y;
@@ -515,7 +560,7 @@ void InputShutdown() {
     g_scripted = {};
     g_host_presses.fill(0);
     g_host_polled.fill(false);
-    g_gyro_on = false;
+    g_gyro = ConfigGyro::Off;
     for (PadSlot &slot : g_slots) {
         if (slot.gamepad != nullptr) {
             SDL_CloseGamepad(slot.gamepad);
@@ -532,14 +577,6 @@ void InputPoll() {
     EnsureBindings();
     if (g_gamepad_subsystem) {
         SyncGamepads();
-    }
-    if (InputHostPressed(InputHostAction::GyroToggle)) {
-        g_gyro_on = !g_gyro_on;
-        for (PadSlot &slot : g_slots) {
-            if (slot.gamepad != nullptr) {
-                EnableGyro(slot.gamepad);
-            }
-        }
     }
     for (int pad = 0; pad < kInputPadCount; ++pad) {
         InputPadState state;
@@ -821,6 +858,10 @@ bool InputHostHeld(InputHostAction action) {
         }
     }
     return HostPolledHeld(host);
+}
+
+void InputSetLookOnLeftStick(bool left) {
+    g_look_left = left;
 }
 
 bool InputHostPressed(InputHostAction action) {

@@ -106,6 +106,22 @@ bool ReadAspect(const Json &value, ConfigAspect &out) {
     return true;
 }
 
+constexpr const char *kGyroNames[] = {"off", "always", "first_person", "held"};
+
+bool ReadGyro(const Json &value, ConfigGyro &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    std::string gyro = Lower(value.get<std::string>());
+    for (std::size_t i = 0; i < std::size(kGyroNames); ++i) {
+        if (gyro == kGyroNames[i]) {
+            out = static_cast<ConfigGyro>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ReadList(const Json &value, std::vector<std::string> &out) {
     std::vector<std::string> items;
     if (value.is_string()) {
@@ -225,6 +241,21 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         }
         config.stick_sensitivity = sensitivity;
         return true;
+    }
+    if (name == "input.gyro") {
+        return ReadGyro(value, config.gyro);
+    }
+    if (name == "input.stick_invert_x") {
+        return ReadBool(value, config.stick_invert_x);
+    }
+    if (name == "input.stick_invert_y") {
+        return ReadBool(value, config.stick_invert_y);
+    }
+    if (name == "input.gyro_invert_x") {
+        return ReadBool(value, config.gyro_invert_x);
+    }
+    if (name == "input.gyro_invert_y") {
+        return ReadBool(value, config.gyro_invert_y);
     }
     if (name == "input.gyro_sensitivity") {
         float sensitivity = 0.0f;
@@ -431,7 +462,12 @@ std::string ConfigSerialize(const Config &config) {
     root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
     root["input"]["mouse_sensitivity"] = Shortest(config.mouse_sensitivity);
     root["input"]["stick_sensitivity"] = Shortest(config.stick_sensitivity);
+    root["input"]["stick_invert_x"] = config.stick_invert_x;
+    root["input"]["stick_invert_y"] = config.stick_invert_y;
+    root["input"]["gyro"] = kGyroNames[static_cast<std::size_t>(config.gyro)];
     root["input"]["gyro_sensitivity"] = Shortest(config.gyro_sensitivity);
+    root["input"]["gyro_invert_x"] = config.gyro_invert_x;
+    root["input"]["gyro_invert_y"] = config.gyro_invert_y;
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_release"] = config.mouse_release_keys;

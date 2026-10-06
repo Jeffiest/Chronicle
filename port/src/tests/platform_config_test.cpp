@@ -95,6 +95,12 @@ TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     Config defaults = ConfigParse("");
     ASSERT_TRUE(defaults.mouse_sensitivity == 0.1f && !defaults.mouse_invert_y && defaults.mouse_capture);
     ASSERT_TRUE(defaults.stick_sensitivity == 1.33f && defaults.gyro_sensitivity == 0.5f);
+    ASSERT_TRUE(defaults.gyro == ConfigGyro::Held && !defaults.gyro_invert_x && !defaults.stick_invert_y);
+    ASSERT_TRUE(ConfigParse(R"({"input": {"gyro": "first_person"}})").gyro == ConfigGyro::FirstPerson);
+    ASSERT_TRUE(ConfigParse(R"({"input": {"gyro": true}})").gyro == ConfigGyro::Held);
+    Config inverted =
+        ConfigParse(ConfigSerialize(ConfigParse(R"({"input": {"gyro": "always", "gyro_invert_y": true, "stick_invert_x": true}})")));
+    ASSERT_TRUE(inverted.gyro == ConfigGyro::Always && inverted.gyro_invert_y && inverted.stick_invert_x);
     ASSERT_TRUE(ConfigParse(R"({"input": {"gyro_sensitivity": 1.25}})").gyro_sensitivity == 1.25f);
     ASSERT_TRUE(ConfigParse(R"({"input": {"gyro_sensitivity": -1}})").gyro_sensitivity == 0.5f);
     ASSERT_TRUE(ConfigParse(ConfigSerialize(ConfigParse(R"({"input": {"gyro_sensitivity": 1.25}})"))).gyro_sensitivity ==

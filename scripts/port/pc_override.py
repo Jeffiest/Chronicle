@@ -190,19 +190,24 @@ def closing(code, opening):
 
 
 def grouped(statement):
-    """Whether a declaration statement declares more than one name: a comma outside every bracket,
-    template argument list and initialiser."""
-    depth, angle = 0, 0
+    """Whether a declaration statement declares more than one name: a comma outside every bracket
+    and template argument list. Angle brackets are template ones only before the initialiser, where
+    a < or << is an operator."""
+    depth, angle, initialiser = 0, 0, False
     for i, c in enumerate(statement):
         if c in "([{":
             depth += 1
         elif c in ")]}":
             depth -= 1
-        elif c == "<" and depth == 0 and re.search(r"\w\s*$", statement[:i]):
+        elif depth > 0:
+            continue
+        elif c == "=" and angle == 0:
+            initialiser = True
+        elif c == "<" and not initialiser and re.search(r"\w\s*$", statement[:i]):
             angle += 1
-        elif c == ">" and depth == 0 and angle > 0:
+        elif c == ">" and not initialiser and angle > 0:
             angle -= 1
-        elif c == "," and depth == 0 and angle == 0:
+        elif c == "," and angle == 0:
             return True
     return False
 

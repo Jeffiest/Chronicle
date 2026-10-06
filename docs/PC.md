@@ -788,7 +788,8 @@ save, so more files can join `save.dat` later.
 
 `state.json` is what the title needs before a save is loaded, which the
 card's configuration file held on the PS2: `last_save`, the folder of the
-last save loaded or written, where the save and load screens start, and
+last save loaded or written, where the save and load screens start (New
+Game keeps it whole, where retail's configuration copy keeps one byte), and
 `game_clear`, the clear flag from the current game (config word 14),
 which the title reads. It sits with the saves rather than in `config.json`
 because it is game progress and screen state, not a setting, and it is

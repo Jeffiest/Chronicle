@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../platform/input.hpp"
+#include "gameloop.hpp"
 #include "gamepad.hpp"
 #include "memcard.hpp"
 #include "memorycardaccess.hpp"
@@ -328,6 +329,19 @@ TEST(SaveSlots, StateKeepsTheLastSaveAndTheClearFlag) {
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_LOAD_CONFIG) == 1 && ConfigWord(kLastFile) == 8);
 
     fs::remove_all(root);
+}
+
+TEST(SaveSlots, NewGameKeepsTheWholeLastFile) {
+    PrepareSave();
+    for (s32 file_no : {127, 128, 200, 256, 999999998}) {
+        ConfigWord(kLastFile) = file_no;
+        ConfigWord(kGameClear) = 1;
+        MapNoOf(g_save) = 42;
+        ResetSaveKeepingConfig(g_save);
+        ASSERT_NE(MapNoOf(g_save), 42);
+        ASSERT_EQ(ConfigWord(kLastFile), file_no);
+        ASSERT_EQ(ConfigWord(kGameClear), 1);
+    }
 }
 
 TEST(SaveSlots, LoadingAnOlderSaveKeepsEndingState) {

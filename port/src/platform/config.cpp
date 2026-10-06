@@ -20,6 +20,9 @@ namespace {
 
 Config                        g_config;
 std::vector<ConfigChangeHook> g_change_hooks;
+// Whether config.json holds g_config, so a failed save is retried with the same settings.
+bool g_saved = false;
+bool g_changing = false;
 
 std::string_view Trim(std::string_view text) {
     constexpr std::string_view kSpace = " \t\r\n";
@@ -351,12 +354,9 @@ bool ConfigSave() {
     std::filesystem::path path = PathsSaveRoot() / "config.json";
     std::error_code       error;
     std::filesystem::create_directories(path.parent_path(), error);
-    if (!WriteReplacing(path, ConfigSerialize(g_config))) {
-        std::fprintf(stderr, "config: could not save %s\n", PathsDisplay(path).c_str());
-        return false;
-    }
-    std::fprintf(stderr, "config: saved %s\n", PathsDisplay(path).c_str());
-    return true;
+    g_saved = WriteReplacing(path, ConfigSerialize(g_config));
+    std::fprintf(stderr, "config: %s %s\n", g_saved ? "saved" : "could not save", PathsDisplay(path).c_str());
+    return g_saved;
 }
 
 bool ConfigLoad() {
@@ -373,6 +373,7 @@ bool ConfigLoad() {
     std::ostringstream text;
     text << file.rdbuf();
     g_config = ConfigParse(text.str());
+    g_saved = true;
     std::fprintf(stderr, "config: loaded %s\n", PathsDisplay(path).c_str());
     return true;
 }
@@ -388,19 +389,33 @@ void ConfigRemoveChangeHook(ConfigChangeHook hook) {
 }
 
 bool ConfigChange(const Config &config) {
+    // A hook that changed the settings again would leave the hooks after it seeing stale ones.
+    if (g_changing) {
+        std::fprintf(stderr, "config: ignoring a change made while one is being applied\n");
+        return false;
+    }
+
+    struct Guard {
+        Guard() { g_changing = true; }
+
+        ~Guard() { g_changing = false; }
+    } guard;
+
     Config after = ConfigParse(ConfigSerialize(config));
     if (after == g_config) {
-        return true;
+        return g_saved || ConfigSave();
     }
     Config before = std::exchange(g_config, std::move(after));
-    bool   saved = ConfigSave();
-    for (ConfigChangeHook hook : g_change_hooks) {
+    ConfigSave();
+    // A copy, so a hook may add or remove hooks; that counts from the next change.
+    const std::vector<ConfigChangeHook> hooks = g_change_hooks;
+    for (ConfigChangeHook hook : hooks) {
         hook(before, g_config);
     }
-    return saved;
+    return g_saved;
 }
 
 bool ConfigAppliesOnRestart(std::string_view key) {
-    // DebugMode is set from it once, before the first mode; the developer-menu chord reads it live.
+    // DebugMode and whether the debug chord may toggle it are set from it once, before the first mode.
     return key == "game.debug_mode";
 }

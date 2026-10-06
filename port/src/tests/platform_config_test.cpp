@@ -163,6 +163,16 @@ void RecordChange(const Config &before, const Config &after) {
     g_changes.emplace_back(before, after);
 }
 
+bool g_nested = true;
+
+// Changes the settings again and removes itself, both from inside a change.
+void ChangeAgain(const Config &before, const Config &after) {
+    Config again = after;
+    again.master_volume = 0.75f;
+    g_nested = ConfigChange(again);
+    ConfigRemoveChangeHook(ChangeAgain);
+}
+
 } // namespace
 
 TEST(PlatformConfig, ChangeAppliesAndSaves) {
@@ -189,8 +199,28 @@ TEST(PlatformConfig, ChangeAppliesAndSaves) {
     ASSERT_TRUE(ConfigChange(ConfigGet()));
     ASSERT_TRUE(g_changes.size() == 1);
 
+    // A hook may remove itself without the next one being skipped, and cannot change the settings
+    // under the hooks after it.
+    ConfigRemoveChangeHook(RecordChange);
+    ConfigAddChangeHook(ChangeAgain);
+    ConfigAddChangeHook(RecordChange);
+    // A save that fails (config.json is a directory) is retried by the same settings, which are not
+    // applied again.
+    std::filesystem::remove(root / "config.json");
+    std::filesystem::create_directory(root / "config.json");
+    config.master_volume = 0.5f;
+    ASSERT_TRUE(!ConfigChange(config));
+    ASSERT_TRUE(!g_nested);
+    ASSERT_TRUE(g_changes.size() == 2 && g_changes[1].second.master_volume == 0.5f);
+    ASSERT_TRUE(ConfigGet().master_volume == 0.5f);
+    ASSERT_TRUE(!ConfigChange(config));
+    std::filesystem::remove(root / "config.json");
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_TRUE(g_changes.size() == 2);
+
     ConfigRemoveChangeHook(RecordChange);
     ASSERT_TRUE(ConfigLoad());
-    ASSERT_TRUE(ConfigGet().master_volume == 0.25f && !ConfigGet().show_fps);
+    ASSERT_TRUE(ConfigGet().master_volume == 0.5f && !ConfigGet().show_fps);
     std::filesystem::remove_all(root);
 }

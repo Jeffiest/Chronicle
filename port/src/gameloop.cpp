@@ -68,6 +68,8 @@ PresentClock::time_point g_last_present;
 
 bool g_menu_chord_held = false;
 bool g_debug_r3_held = false;
+// game.debug_mode at start: like DebugMode, a change waits for the next start.
+bool g_debug_toggle_allowed = false;
 
 double SecondsSince(PresentClock::time_point start) {
     return std::chrono::duration<double>(PresentClock::now() - start).count();
@@ -496,14 +498,14 @@ bool GameSetJump(const char *spec) {
 }
 
 // Retail PAL tests pad 2's four shoulder buttons with R3's press edge after every frame; here they are
-// pad 1's, as the host latched it, and count only while the config file's debug mode is on.
+// pad 1's, as the host latched it, and count only if the config file's debug mode was on at start.
 void GameCheckDebugToggle() {
     constexpr std::uint16_t kShoulders = kInputL1 | kInputR1 | kInputL2 | kInputR2;
     std::uint16_t           buttons = InputGetPad(0).buttons;
     bool                    held = (buttons & kInputR3) != 0;
     bool                    pressed = held && !g_debug_r3_held;
     g_debug_r3_held = held;
-    if (!pressed || (buttons & kShoulders) != kShoulders || !ConfigGet().debug_mode) {
+    if (!pressed || (buttons & kShoulders) != kShoulders || !g_debug_toggle_allowed) {
         return;
     }
     DebugMode = !DebugMode;
@@ -665,6 +667,7 @@ int RunGame(int argc, char **argv) {
     // and file-system resets, DevInit's DMA reset and the DMA channel handles have no host
     // counterpart and are not called.
     DebugMode = ConfigGet().debug_mode ? 1 : 0;
+    g_debug_toggle_allowed = ConfigGet().debug_mode;
     mode = GAME_MODE_MENU;
     main_select_menu_no = 0;
     std::strcpy(main_select_param, "e01");

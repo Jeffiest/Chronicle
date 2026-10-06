@@ -42,7 +42,7 @@ LITERAL = re.compile(
     r'|"(?:\\.|[^"\\\n])*"'
     # A number whole, digit separators and all (1'000, 0xff'ff), so that its ' opens no character
     # literal; mask leaves it as it is.
-    r"|(?P<number>(?<![\w.])\.?\d(?:[eEpP][+-]|[\w.]|'(?=\w))*)"
+    r"|(?P<number>(?:\.\d|(?<![\w.])\d)(?:[eEpP][+-]|[\w.]|'(?=\w))*)"
     r"|'(?:\\.|[^'\\\n])*'",
     re.DOTALL,
 )

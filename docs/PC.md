@@ -1083,7 +1083,8 @@ that mirrors its unit: `port/src/mglib.cpp` holds the replacements for
 `ps2/src/mglib.cpp`. A name the unit's stub header renames (below) is tagged
 under its new name. What is replaced has to be a function with its body or a
 variable without constructor arguments (a pointer to a function, or an array
-of them, by the name inside its declarator), at file scope of a unit, with no
+of them, by the name inside its declarator), one name to a declaration, at
+file scope of a unit, with no
 preprocessor directive before its body, and an `#if` block in its body has to
 lie wholly inside it with every branch leaving the same braces open. It has to
 be one the port compiles: under `#ifdef` or `#ifndef` of `PORT` or `PAL`, in

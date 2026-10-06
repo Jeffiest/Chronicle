@@ -177,6 +177,20 @@ void ChangeAgain(const Config &before, const Config &after) {
 
 TEST(PlatformConfig, ChangeAppliesAndSaves) {
     std::filesystem::path root = std::filesystem::temp_directory_path() / ("dc_config_change_" + std::to_string(dc::test::ProcessId()));
+
+    struct Cleanup {
+        std::filesystem::path root;
+
+        ~Cleanup() {
+            ConfigRemoveChangeHook(RecordChange);
+            ConfigRemoveChangeHook(ChangeAgain);
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+        }
+    } cleanup{root};
+
+    g_changes.clear();
+    g_nested = true;
     std::filesystem::create_directories(root);
     PathsSetSaveRoot(root);
     std::ofstream(root / "config.json") << R"({"video": {"show_fps": false}})";
@@ -198,6 +212,8 @@ TEST(PlatformConfig, ChangeAppliesAndSaves) {
     // The same settings again change nothing.
     ASSERT_TRUE(ConfigChange(ConfigGet()));
     ASSERT_TRUE(g_changes.size() == 1);
+    ASSERT_TRUE(ConfigLoad());
+    ASSERT_TRUE(ConfigGet().master_volume == 0.25f && !ConfigGet().show_fps);
 
     // A hook may remove itself without the next one being skipped, and cannot change the settings
     // under the hooks after it.
@@ -214,13 +230,12 @@ TEST(PlatformConfig, ChangeAppliesAndSaves) {
     ASSERT_TRUE(g_changes.size() == 2 && g_changes[1].second.master_volume == 0.5f);
     ASSERT_TRUE(ConfigGet().master_volume == 0.5f);
     ASSERT_TRUE(!ConfigChange(config));
+    // Nor is the directory read as a config.json holding the defaults.
+    ASSERT_TRUE(!ConfigLoad());
+    ASSERT_TRUE(!ConfigChange(ConfigGet()));
     std::filesystem::remove(root / "config.json");
-    ASSERT_TRUE(ConfigChange(config));
-    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_TRUE(ConfigChange(ConfigGet()));
+    ASSERT_TRUE(std::filesystem::is_regular_file(root / "config.json"));
+    ASSERT_TRUE(ConfigChange(ConfigGet()));
     ASSERT_TRUE(g_changes.size() == 2);
-
-    ConfigRemoveChangeHook(RecordChange);
-    ASSERT_TRUE(ConfigLoad());
-    ASSERT_TRUE(ConfigGet().master_volume == 0.5f && !ConfigGet().show_fps);
-    std::filesystem::remove_all(root);
 }

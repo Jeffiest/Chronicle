@@ -362,7 +362,9 @@ bool ConfigSave() {
 bool ConfigLoad() {
     std::filesystem::path path = PathsSaveRoot() / "config.json";
     std::ifstream         file(path, std::ios::binary);
-    if (!file) {
+    // On Linux a directory opens, and reads as an empty file.
+    std::error_code error;
+    if (!file || !std::filesystem::is_regular_file(path, error)) {
         g_config = Config{};
         if (std::filesystem::exists(PathsSaveRoot() / "config.ini")) {
             std::fprintf(stderr, "config.ini is no longer read: move its settings to config.json (docs/PC.md)\n");

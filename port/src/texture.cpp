@@ -148,7 +148,7 @@ void MakeGroundPeriodic(const char *name, PortDecodedTexture &texture) {
 // Retail's EnterTexture, EnterTextureEX and EnterFixTexture share everything but where pixels
 // are staged and which VRAM end moves. The staging buffer and the VRAM arithmetic are kept as
 // retail does them: the game sizes later allocations from buffer_used (editloop's LoadTexture),
-// and the overflow checks stop the same loads retail stopped. The image goes to the renderer, and
+// and staging/per-block bounds still guard those allocations. The image goes to the renderer, and
 // TBP0/CBP become registry keys, not VRAM addresses.
 void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_char *image, int width, int height,
            int bpp, u_char *clut, int clut_colors, int mipmap, u_char *mip1, u_char *mip2, u_long tex1,
@@ -373,6 +373,23 @@ PC_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
 
 // Every texture is resident on the renderer from the moment it is entered, so a block never needs
 // uploading; only the bookkeeping retail keeps for it remains.
+PC_OVERRIDE void CTextureManager::EndEnterTextureBlock(int block) {
+    if (block < 0 || block >= 72) {
+        return;
+    }
+    if (buffer_used > buffer_size) {
+        Stop("texture buffer over", "quadwords", buffer_used);
+    }
+    CTextureBlock &entry = blocks[block];
+    entry.buffer_end = buffer + buffer_used;
+    if (entry.buffer_end == entry.buffer) {
+        entry.buffer = nullptr;
+        entry.buffer_end = nullptr;
+    }
+    // Native textures have separate storage: overlap with fixed textures' simulated PS2 VRAM
+    // does not overwrite either image. Retail's vram_fix check hangs when town menus load.
+}
+
 PC_OVERRIDE void CTextureManager::ReloadTexture(sceVif1Packet *packet, int block) {
     if (block < 0 || block >= 72) {
         last_block = -1;

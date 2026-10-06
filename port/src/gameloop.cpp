@@ -528,7 +528,8 @@ void GameCheckDebugToggle() {
 bool GameDeveloperMenuRequested() {
     constexpr std::uint16_t kChord = kInputSelect | kInputStart;
     bool                    held = (InputGetPad(0).buttons & kChord) == kChord;
-    bool                    pressed = held && !g_menu_chord_held;
+    bool                    bound = InputHostPressed(InputHostAction::DeveloperMenu);
+    bool                    pressed = (held && !g_menu_chord_held) || bound;
     g_menu_chord_held = held;
     return pressed && DebugMode != 0 && mode != GAME_MODE_MENU;
 }

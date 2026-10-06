@@ -226,6 +226,14 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         config.stick_sensitivity = sensitivity;
         return true;
     }
+    if (name == "input.gyro_sensitivity") {
+        float sensitivity = 0.0f;
+        if (!ReadNumber(value, sensitivity) || !(sensitivity > 0.0f) || !std::isfinite(sensitivity)) {
+            return false;
+        }
+        config.gyro_sensitivity = sensitivity;
+        return true;
+    }
     if (name == "input.mouse_invert_y") {
         return ReadBool(value, config.mouse_invert_y);
     }
@@ -423,6 +431,7 @@ std::string ConfigSerialize(const Config &config) {
     root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
     root["input"]["mouse_sensitivity"] = Shortest(config.mouse_sensitivity);
     root["input"]["stick_sensitivity"] = Shortest(config.stick_sensitivity);
+    root["input"]["gyro_sensitivity"] = Shortest(config.gyro_sensitivity);
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_release"] = config.mouse_release_keys;

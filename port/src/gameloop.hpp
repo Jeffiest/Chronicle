@@ -7,6 +7,8 @@
 
 #include "gfx/gfx.hpp"
 
+class CSaveData;
+
 // The game's main(): start-up, then one mode after another. The window, renderer, input and clock
 // must already be initialised; the tick callback is the game's to install, the idle hook and the
 // pump hooks the caller's. Returns kExitOk once a stop was requested or the frame budget is spent,
@@ -18,6 +20,10 @@ int RunGame(int argc, char **argv);
 void GameSetFrameBudget(std::int64_t frames);
 
 std::int64_t GameFrameCount();
+
+// Clears save for a new game as retail's main() does, keeping its configuration, and keeping the
+// last file's number whole where retail's round trip keeps one byte of it.
+void ResetSaveKeepingConfig(CSaveData &save);
 
 // Test hooks. GameSetJump takes "edit[:<map no>]" (the game's MapNo: 0-4 the towns, 11 and up
 // the sub maps, 99 the interior), "dungeon[:<n>]" (dungeon n, 0-6, map 200 + n, at its floor

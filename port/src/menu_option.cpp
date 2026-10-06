@@ -392,6 +392,18 @@ void RestoreStickSensitivity(Config &config, const Config &defaults) {
     config.stick_sensitivity = defaults.stick_sensitivity;
 }
 
+int GyroCount(const Config &) {
+    return 4;
+}
+
+int GyroChoice(const Config &config) {
+    return static_cast<int>(config.gyro);
+}
+
+void SetGyro(Config &config, int choice) {
+    config.gyro = static_cast<ConfigGyro>(choice);
+}
+
 int GyroSensitivityCount(const Config &) {
     return 39;
 }
@@ -465,9 +477,19 @@ const Row kControlRows[] = {
     Row{"input.stick_sensitivity", "Stick Sensitivity", "\"Stick Sensitivity\"\nHow far a gamepad's\nstick has to tilt.",
         -1, StickSensitivityCount, StickSensitivityChoice, SetStickSensitivity, StickSensitivityText, nullptr,
         RestoreStickSensitivity},
+    OnOffRow<&Config::stick_invert_x>("input.stick_invert_x", "Invert Stick X",
+                                      "\"Invert Stick X\"\nFlips the camera's\nleft and right."),
+    OnOffRow<&Config::stick_invert_y>("input.stick_invert_y", "Invert Stick Y",
+                                      "\"Invert Stick Y\"\nFlips the camera's\nup and down."),
+    Row{"input.gyro", "Gyro", "\"Gyro\"\nWhen tilting the pad\nturns the camera.", -1, GyroCount, GyroChoice, SetGyro,
+        nullptr, "Off|Always|First Person|While Held"},
     Row{"input.gyro_sensitivity", "Gyro Sensitivity", "\"Gyro Sensitivity\"\nHow fast tilting\nturns the camera.",
         -1, GyroSensitivityCount, GyroSensitivityChoice, SetGyroSensitivity, GyroSensitivityText, nullptr,
         RestoreGyroSensitivity},
+    OnOffRow<&Config::gyro_invert_x>("input.gyro_invert_x", "Invert Gyro X",
+                                     "\"Invert Gyro X\"\nFlips the gyro's\nleft and right."),
+    OnOffRow<&Config::gyro_invert_y>("input.gyro_invert_y", "Invert Gyro Y",
+                                     "\"Invert Gyro Y\"\nFlips the gyro's\nup and down."),
 };
 
 // A page of the screen. Every page so far is a list of rows; one that needs its own layout, such as

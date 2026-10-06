@@ -273,7 +273,7 @@ TEST(PlatformPad, BackButtonActions) {
     std::string_view paddles[][1] = {{"Gamepad:paddle2"}, {"Gamepad:paddle1"}, {"Gamepad:paddle4"}};
     ASSERT_TRUE(InputBindKeys("developer_menu", paddles[0]));
     ASSERT_TRUE(InputBindKeys("debug_menu", paddles[1]));
-    ASSERT_TRUE(InputBindKeys("gyro_toggle", paddles[2]));
+    ASSERT_TRUE(InputBindKeys("gyro_hold", paddles[2]));
     std::string_view f9[] = {"F9"};
     std::string_view f10[] = {"F10"};
     ASSERT_TRUE(InputBindKeys("debug_menu", f9));

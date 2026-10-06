@@ -40,6 +40,7 @@ int  EditLoop();
 void SndInit();
 
 extern s32 mode;
+extern s32 gameTask;
 extern s32 mc_mode;
 extern s32 NextMapNo;
 
@@ -789,6 +790,7 @@ int RunGame(int argc, char **argv) {
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
 
+            InputSetLookOnLeftStick(mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA);
             GamePad.UpDate();
             GamePad.VibrationEnable(ConfigWords()[kConfigVibrationOff] == 0);
             GamePad.Step();

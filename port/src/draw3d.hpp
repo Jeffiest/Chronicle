@@ -121,6 +121,10 @@ struct Draw3DStrip {
     int      texture = -1; // TexManager handle; -1 draws untextured
     u_long   tex0 = 0;
     u_long   tex1 = 0;
+    bool     ground_transition = false;
+    bool     ground_world_uv = false;
+    float    ground_uv_period = 160.0f;
+    bool     ground_uv_flip_v = false;
 };
 
 struct Draw3DVisual {

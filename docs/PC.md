@@ -87,7 +87,7 @@ key is optional; these are the defaults:
 {
     "game": {
         "tick_rate": 50,            // logic ticks (the game's VSyncs) per second
-        "debug_mode": true          // DebugMode: start in the developer menu; Start + Select returns to it
+        "debug_mode": false         // Start with debug controls off; the debug toggle chord enables them
     },
     "video": {
         "present_mode": "fifo",     // fifo, mailbox or immediate (each falls back to the next safer one)
@@ -221,7 +221,8 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   stick (`CGamePad::GetLX`/`GetLY`, also called by `GetLXf`, `AllOn` and
   `UpDate`'s menu mode) between its last two pad reads.
   `port/src/gamepad.cpp` replaces `pad_button_read` and `GetLX`/`GetLY`
-  with retail's bodies plus the notes the host needs. Menus with
+  with retail's bodies plus the notes the host needs, and routes pad 2
+  debug button reads to pad 1. Menus with
   `MenuModeOn(120)` (the title, the language select, the save screens, the
   dungeon and town menus) read the stick, so the game's own conversion
   turns a full WASD deflection (128) into the d-pad; a diagonal (91 per
@@ -293,11 +294,11 @@ PAL retail's `main` sets `DebugMode` when pad 2 holds L1+R1+L2+R2 through
 the warm-up; the game then starts in `GAME_MODE_MENU`, the developer menu
 (`MenuLoop`, `ps2/src/main.cpp`), instead of the language select, and leaves
 pad 2 unlocked. The port takes `DebugMode` from `game.debug_mode` in
-`config.json`, which is on by default, so it starts in the developer menu;
-with the flag off it starts at the language select as retail does, and
-nothing held or pressed changes that: the flag is the one way into debug
-mode. `darkcloud` prints `debug mode on: the developer menu` when it starts
-there.
+`config.json`, which is off by default. The port starts at the language select
+whether this flag is true or false. Setting it to true enables debug controls
+from startup; the debug toggle chord can also enable them during play.
+`darkcloud` prints `debug mode on` when the flag starts enabled. An explicit
+`--jump menu` opens the developer menu at startup.
 
 While `DebugMode` is set, Start and Select on pad 1 go to the developer menu
 at once from every mode: the language select, the memory card check, the
@@ -315,7 +316,7 @@ Holding it into the next mode does nothing until it is pressed again.
 After start-up, retail PAL flips `DebugMode` after every frame of the main
 loop where pad 2 holds L1+R1+L2+R2 and R3 is pressed (`ps2/src/main.cpp:963`);
 the port reads the same combination on pad 1 instead (`GameCheckDebugToggle`,
-past the game's pad lock), and only while `game.debug_mode` is on, printing
+past the game's pad lock), printing
 `debug mode on` or `debug mode off`. It does not move the game anywhere:
 `DebugMode` is a flag the modes read. What it does once set:
 
@@ -328,19 +329,60 @@ past the game's pad lock), and only while `game.debug_mode` is on, printing
   These are retail's own ways back, which the port's Start and Select
   (above) now takes ahead of: the interior's (`EditInLoop`) went to the
   title, not the menu.
-- In the town L3 shows the editor's debug overlay and R3 opens its debug
-  menu (`editloop.cpp:1849`); in an interior Select walks out of the door
-  (`edit_in.cpp:1342`); in the dungeon R3 opens the debug options outside an
-  event (`dun/gameloop.cpp:3109`); a town event pauses on Start and stops on
-  R3 (`editloop3.cpp:8678`); shops, menus and battles have their own, some
-  on pad 2.
+- In the town Select+L2+L3 shows the editor's debug overlay and
+  Select+L2+R3 opens its debug menu (`editloop.cpp:1849`); in an interior
+  Select walks out of the door (`edit_in.cpp:1342`); in the dungeon
+  Select+L2+R3 opens the debug options outside an event
+  (`dun/gameloop.cpp:3109`); a town event pauses on Start and stops on
+  Select+L2+R3 (`editloop3.cpp:8678`); shops, menus and battles have their own, some
+  using the retail pad 2 button checks.
 - Nothing on the language select, the attract movie, the title or the
   opening reads it; the port's Start and Select is the one thing that works
   there.
 
-A boot without debug mode locks pad 2 (`GamePad.KeyLock2(1)`, as retail),
-so the game's own debug functions that read pad 2 stay dead. In the
-developer menu, up and down (pad 1) pick a row,
+The PC port routes the game's `On2` and `Down2` button checks to pad 1 only
+while `DebugMode` is on and **Select+L2 are held**. Hold those two buttons, then
+press the shortcut shown below. Physical pad 2 buttons no longer activate
+these shortcuts. L3 and R3 editor/debug menu presses also require Select+L2.
+Ordinary button reads still use pad 1 without PAL's pad 2 Start/Select
+overrides. While Select+L2 is held, Cross and Circle presses go to debug
+shortcuts without triggering their ordinary menu actions. Other debug buttons
+may also perform their ordinary actions. The separate
+L1+R1+L2+R2 then R3 debug toggle and Start+Select developer menu shortcut
+retain their existing behavior.
+
+| Screen or mode | Buttons after holding Select+L2 | Debug action |
+|---|---|---|
+| Town and interior | L3/R3 | Show the debug overlay or open/close its menu |
+| Dungeon | R3 | Open the debug options menu outside events |
+| Town event | R3 | Stop the event |
+| Town/editor | Square; D-pad Down/Up/Left/Right | Clear events; stop time, set the next hour, or move time backward/forward |
+| Town ground editor | Cross/Circle/Triangle | Clear, save, or load ground data |
+| Town event | Cross | Skip the paused event |
+| Interior | Square | Clear events |
+| Dungeon | Cross/Square | Toggle step hold or battle display clearing |
+| Dungeon entrance | R1; Cross/Circle held | Unlock all floors; raise/lower the selected floor's kill count |
+| Dungeon character change | Cross | Add a Stand-In Powder to the inventory |
+| Character menu | Cross/Circle | Add/remove a party member |
+| Weapon list | Cross; R1 or R2; Triangle; Circle; Square | Raise level; set weapon flags; max weapon stats; reset flags; cycle element and monster values |
+| Weapon stats | D-pad Right/Left; Cross/Circle; Triangle | Raise/lower the selected stat or durability; max selected stat |
+| Item/character status | Cross/Circle/Square/Triangle held | Adjust life, defense, water, or money according to the selected row |
+| Debug item list | Cross | Grant all eligible weapons |
+| World map | Cross | Mark the next unvisited place or dungeon as visited |
+| Shop boards | Triangle/Cross held; R1/R2 | Add/remove 1,000 Gilda; print board data with R1 (R2 has no visible result) |
+| Shop transaction | D-pad Up/Down held | Raise/lower the party's Gilda one point per frame |
+| Shop held item | D-pad Up | Print the selected item's data |
+| Fishing menus | Triangle; Cross/Circle held | Record a Mardan Garayan catch; raise/lower prize points |
+| Fishing records | Cross | Record a random catch |
+| Town parts board | Cross/Circle/R1/L1/Triangle; Cross+Circle; Cross+Down | Fill, empty, dump, or complete parts, including all parts and NPC flags |
+| Save screen | R1/Triangle/Cross/L3; Cross+Circle | Start card unformat, format, write test, or conversion; unformat selected card |
+| Opening book | Cross | Finish the opening book animation |
+| Item model viewer | Circle; Triangle/Square held | Close the viewer; enlarge/shrink its model |
+
+Where a debug button is also an ordinary menu button, actions other than
+Cross and Circle can still run alongside the debug shortcut.
+
+In the developer menu, up and down (pad 1) pick a row,
 left and right change its number, circle or triangle enters it:
 
 | Row | Goes to |
@@ -356,16 +398,14 @@ left and right change its number, circle or triangle enters it:
 | `Language N` | sets `LanguageCode` (PAL default 2, British English) |
 
 ```
-0 pad2 l1 r1 l2 r2
-1 pad2
-10 down
+0 down
+2
+10 circle
 12
-20 circle
-22
 ```
 
-enters town 1 (Norune); `0 key:grave` with `1` releasing it does the same
-from the keyboard.
+with `--jump menu` enters town 1 (Norune); `0 key:grave` with `1` releasing it
+does the same from the keyboard.
 
 ## Start-up and the main loop
 
@@ -607,14 +647,19 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   the scenery behind it and came back as blocks. Each pass blurs only what
   lies beyond its own plane: the frame is drawn into a target sharing its
   depth buffer under the plane's depth test (the rest stays transparent
-  black, so the image is premultiplied by its coverage), resized to half size
-  (and for the second pass to quarter size and back to half, which rounds the
-  texels off) and laid back in retail's bands, the frame first scaled down by
-  the image's coverage and the image then added. The images are as wide as
-  what the target shows, so the blur and the haze reach the window's edges;
+  black, so the image is premultiplied by its coverage). Ordinary depth of
+  field then uses half-size and quarter-size copies. Heat haze keeps both
+  images at the frame's full pixel resolution and moves their sampling
+  positions without a low-resolution copy. The images are laid back in
+  retail's bands, the frame first scaled down by the image's coverage and
+  the image then added. They are as wide as what the target shows, so the
+  blur and the haze reach the window's edges;
   the two outermost haze columns do not wander, which on the PS2 left a
-  ragged strip of the sharp frame in the overscan; `frame_image` is no longer
-  written.
+  ragged strip of the sharp frame in the overscan. For heat haze, eight depth
+  samples build a gradual coverage mask around each focus distance. The
+  bands also test against depth at the front of that range, keeping nearby
+  objects sharp while the background haze fades in. `frame_image` is no
+  longer written.
 - **Water** (`port/src/water_draw.cpp`) refracts the frame at its own
   resolution instead of the game's field copy, and only from where water
   shows: a ripple's sample that lands on a bank or a character in front of the
@@ -1009,7 +1054,9 @@ renames what the unit takes from MWCC or from the PS2 link alone:
   `PortEdSetVillagerNextPos`, for the port's `EdMoveVillager`, and declares
   its static `EdEventScript` `extern` first, for the port's `EdRunEvent`
   (`port/src/runscript.cpp`): retail's has no return statement and leaves
-  `CRunScript::run`'s result in `v0` for `EdEventInit`.
+  `CRunScript::run`'s result in `v0` for `EdEventInit`. Walking villagers in
+  Muska Racka use its fixed ground model's collision, so their feet follow
+  the sculpted terrain instead of the editable grid's flat polygons.
 - `main` gets an overload of `LoadFileMenuData` for a `const char *`: one call
   names its file with a comma expression ending in a string literal.
 - `mathutil` gets the Metrowerks runtime's own `std::exception` and
@@ -1027,7 +1074,9 @@ renames what the unit takes from MWCC or from the PS2 link alone:
   retail lifts a part off the ground by its own distance from the eye, which
   leaves neighbouring road tiles at different heights and the ground showing
   through the step between them at any resolution above the PS2's; the port
-  lifts every part by the height retail gives one 100 units away.
+  lifts other parts by the height retail gives one 100 units away and roads by
+  a shared 0.5-unit height so the uneven ground cannot intermittently cover
+  their surface as the camera follows the player.
 - `title/op_d` declares the state and the helpers `OpD_InitProcess`,
   `OpD_InitProcess2` and `OpD_DrawProcess` share with the rest of the unit
   `extern` under `OpD_*` names before the unit declares them `static`, and

@@ -82,7 +82,7 @@ TEST(PlatformConfig, LoadsFromSaveRoot) {
     ASSERT_TRUE(!ConfigLoad());
     ASSERT_TRUE(std::filesystem::exists(root / "config.json"));
     ASSERT_TRUE(ConfigLoad());
-    ASSERT_TRUE(ConfigGet().tick_rate == 50.0 && ConfigGet().debug_mode);
+    ASSERT_TRUE(ConfigGet().tick_rate == 50.0 && !ConfigGet().debug_mode);
     std::ofstream(root / "config.json") << R"({"game": {"tick_rate": 60}})";
     ASSERT_TRUE(ConfigLoad());
     ASSERT_TRUE(ConfigGet().tick_rate == 60.0);
@@ -114,11 +114,11 @@ TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     ASSERT_TRUE(ConfigParse(R"({"input": {"mouse_release": []}})").mouse_release_keys.empty());
 }
 
-TEST(PlatformConfig, DebugModeDefaultsOn) {
-    ASSERT_TRUE(ConfigParse("").debug_mode);
+TEST(PlatformConfig, DebugModeDefaultsOff) {
+    ASSERT_TRUE(!ConfigParse("").debug_mode);
     ASSERT_TRUE(ConfigParse(R"({"game": {"debug_mode": true}})").debug_mode);
     ASSERT_TRUE(!ConfigParse(R"({"game": {"debug_mode": false}})").debug_mode);
-    ASSERT_TRUE(ConfigParse(R"({"game": {"debug_mode": "off"}})").debug_mode);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"debug_mode": "off"}})").debug_mode);
 }
 
 TEST(PlatformConfig, ShowFpsAndTheHostKeys) {

@@ -334,3 +334,233 @@ int CDungeonMap::SetCharaDoor(int chara_no) {
 
     return num;
 }
+
+// Draw every populated dungeon cell and let each frame's bounds reject geometry outside the view.
+// A cell-origin distance or facing test can clip terrain that still reaches the camera.
+void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) {
+    float           cam_pos[4];
+    float           cam_ref[4];
+    float           view_delta[4];
+    float           view[4];
+    float           sound_pos[4];
+    float           cell_delta[4];
+    float           ambient[4];
+    float           old_ambient[4];
+    ITEM_FREE_AREA *free_area;
+    float           volume;
+    float           pan;
+    float           dist;
+    float           delta_x;
+    float           nearest;
+    float           world_x;
+    float           world_z;
+    float           delta_z;
+    int             sound_no;
+    int             row;
+    int             col;
+    int             cell_no;
+    int             npc_no;
+    int             area_no;
+    int             rect_no;
+
+    ((CCamera *) camera)->GetPos(cam_pos);
+    ((CCamera *) camera)->GetRef(cam_ref);
+    view_delta[0] = cam_ref[0] - cam_pos[0];
+    view_delta[1] = cam_ref[1] - cam_pos[1];
+    view_delta[2] = cam_ref[2] - cam_pos[2];
+    view_delta[3] = 0.0f;
+    sceVu0Normalize(view, view_delta);
+    free_area = ItemFreeAreaAll[selectMapNo];
+
+    this->ClearNPC_Cash();
+    nearest = 10000.0f;
+
+    for (row = 0; row < 20; row++) {
+        for (col = 0; col < 20; col++) {
+            world_x = 160.0f * col;
+            delta_x = world_x - cam_pos[0];
+            world_z = 160.0f * row;
+            delta_z = world_z - cam_pos[2];
+
+            cell_delta[0] = delta_x;
+            cell_delta[1] = 0.0f;
+            cell_delta[2] = delta_z;
+            cell_delta[3] = 0.0f;
+            dist = DistVector(cell_delta);
+            cell_no = col + row * 20;
+            this->cells[cell_no].camera_dist = dist;
+
+            if (this->cells[cell_no].parts_no == MAP_PARTS_NONE) {
+                this->cells[cell_no].visible = false;
+                continue;
+            }
+
+            if (this->cells[cell_no].parts_no == MAP_PARTS_KEY_XIAO) {
+                if (UserStatus->cur_georama == 2 && dist < nearest) {
+                    nearest = dist;
+                    sound_pos[0] = world_x;
+                    sound_pos[1] = 0.0f;
+                    sound_pos[2] = world_z;
+                    sound_pos[3] = 1.0f;
+                    sound_no = 65;
+                }
+            }
+
+            if (this->cells[cell_no].parts_no == 75 && dist < nearest) {
+                nearest = dist;
+                sound_pos[0] = world_x;
+                sound_pos[1] = 0.0f;
+                sound_pos[2] = world_z;
+                sound_pos[3] = 1.0f;
+                sound_no = 75;
+            }
+
+            this->cells[cell_no].visible = true;
+
+            int            direction = this->cells[cell_no].direction;
+            CDungeonParts *direction_part = &this->parts[this->cells[cell_no].parts_no];
+            direction_part->direction = direction;
+            {
+                CDungeonParts *position_part = &this->parts[this->cells[cell_no].parts_no];
+                position_part->pos[0] = world_x;
+                position_part->pos[1] = 0.0f;
+                position_part->pos[2] = world_z;
+                position_part->pos[3] = 1.0f;
+            }
+
+            for (npc_no = 0; npc_no < 4; npc_no++) {
+                if (this->npc[npc_no].parts_no == this->cells[cell_no].parts_no &&
+                    this->npc[npc_no].draw_num < 16 &&
+                    (dist < 160.0f || view[0] * (delta_x - view_delta[0]) +
+                                            view[2] * (delta_z - view_delta[2]) > 0.0f)) {
+                    this->ReservNPC_Draw(npc_no, world_x, 0.0f, world_z, this->cells[cell_no].direction);
+                }
+            }
+
+            if (selectMapNo != DUNGEON_MOON_SEA && UserStatus->cur_georama == 4) {
+                MGGetAmbient(old_ambient);
+                MGGetAmbient(ambient);
+
+                if (dist <= 480.0f) {
+                    ambient[3] = 128.0f;
+                } else {
+                    ambient[3] = 128.0f - (dist - 480.0f);
+
+                    if (ambient[3] < 0.0f) {
+                        ambient[3] = 0.0f;
+                    }
+                }
+
+                MGSetAmbient(ambient);
+            }
+
+            this->parts[this->cells[cell_no].parts_no].Draw();
+
+            if (selectMapNo != DUNGEON_MOON_SEA && UserStatus->cur_georama == 4) {
+                MGSetAmbient(old_ambient);
+            }
+
+            if (DebugStatus[6] != 0) {
+                for (area_no = 0; free_area[area_no].parts_no != MAP_PARTS_NONE; area_no++) {
+                    if (free_area[area_no].parts_no != this->cells[cell_no].parts_no) {
+                        continue;
+                    }
+
+                    for (rect_no = 0; rect_no < free_area[area_no].rect_num; rect_no++) {
+                        float corner[4][4];
+                        int   screen[4][4];
+                        int   all_visible;
+                        int   corner_no;
+                        int   rotation;
+
+                        rotation = (int) (float) free_area[area_no].direction;
+                        rotation = rotation + this->cells[cell_no].direction;
+
+                        if (rotation > 3) {
+                            rotation -= 4;
+                        }
+
+                        all_visible = 1;
+                        float radians = (PI * ((4 - rotation) * 90)) / 180.0f;
+                        float x[4];
+                        float z[4];
+                        float height;
+                        float left = free_area[area_no].rect[rect_no].x0;
+                        x[0] = 10.0f * left;
+                        height = 10.0f * free_area[area_no].rect[rect_no].y0;
+                        z[0] = 10.0f * free_area[area_no].rect[rect_no].z0;
+                        x[3] = 10.0f * free_area[area_no].rect[rect_no].x1;
+                        z[3] = 10.0f * free_area[area_no].rect[rect_no].z1;
+                        x[1] = x[3];
+                        z[1] = z[0];
+                        x[2] = x[0];
+                        z[2] = z[3];
+
+                        for (corner_no = 0; corner_no < 4; corner_no++) {
+                            corner[corner_no][0] = -z[corner_no] * sinf(radians) - x[corner_no] * cosf(radians);
+                            corner[corner_no][2] = -x[corner_no] * sinf(radians) + z[corner_no] * cosf(radians);
+                            corner[corner_no][0] *= -1.0f;
+                            corner[corner_no][0] += world_x;
+                            corner[corner_no][1] = 2.0f + height;
+                            corner[corner_no][2] += world_z;
+                            corner[corner_no][3] = 1.0f;
+
+                            if (MGRotTransPers(screen[corner_no], corner[corner_no], 0) == 0) {
+                                all_visible = 0;
+                            }
+                        }
+
+                        if (all_visible != 0) {
+                            setColSprite(Vif1Packet, screen[0], screen[1], screen[2], screen[3], 0x80, 0, 0, 0x40);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (nearest < 10000.0f) {
+        SndGetVolPan(&volume, &pan, sound_pos, 10.0f, 500.0f);
+        SndSetSeVolf(sound_no, volume, 0);
+        SndSetSePanf(sound_no, pan, 0);
+    }
+}
+
+void CDungeonMap::DrawDummyModel(CCamera *) {
+    if (this->dummy_num == 0) {
+        return;
+    }
+
+    for (int i = 0; i < this->dummy_num; i++) {
+        if (this->dummy_frame[this->dummy_model[i]] != NULL) {
+            this->dummy_frame[this->dummy_model[i]]->SetPosition(this->dummy_pos[i]);
+            MGDraw(this->dummy_frame[this->dummy_model[i]]);
+        }
+    }
+}
+
+// Moon Sea places Atla across an open field, so distance from the player does not hide them.
+void CDungeonMap::DrawAtraBoll(float *pos) {
+    float draw_pos[4];
+
+    if (this->atra_model == NULL) {
+        return;
+    }
+
+    for (int i = 0; i < this->atra_num; i++) {
+        if (this->atra[i].used != 0 &&
+            (selectMapNo == DUNGEON_MOON_SEA ||
+             DistVector(this->atra[i].pos, pos) <= 160.0f * this->draw_dist_scale)) {
+            sceVu0CopyVector(draw_pos, this->atra[i].pos);
+            draw_pos[1] += sinf(this->atra[i].phase);
+            this->atra_model->SetPosition(draw_pos);
+            MGDraw(this->atra_model);
+
+            if (this->atra[i].phase <= 360.0f) {
+                this->atra[i].phase += 0.1f;
+            } else {
+                this->atra[i].phase = 0.0f;
+            }
+        }
+    }
+}

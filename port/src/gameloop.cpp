@@ -496,14 +496,14 @@ bool GameSetJump(const char *spec) {
 }
 
 // Retail PAL tests pad 2's four shoulder buttons with R3's press edge after every frame; here they are
-// pad 1's, as the host latched it, and count only while the config file's debug mode is on.
+// pad 1's, as the host latched it, so the chord can enable debug mode after an ordinary boot.
 void GameCheckDebugToggle() {
     constexpr std::uint16_t kShoulders = kInputL1 | kInputR1 | kInputL2 | kInputR2;
     std::uint16_t           buttons = InputGetPad(0).buttons;
     bool                    held = (buttons & kInputR3) != 0;
     bool                    pressed = held && !g_debug_r3_held;
     g_debug_r3_held = held;
-    if (!pressed || (buttons & kShoulders) != kShoulders || !ConfigGet().debug_mode) {
+    if (!pressed || (buttons & kShoulders) != kShoulders) {
         return;
     }
     DebugMode = !DebugMode;
@@ -695,9 +695,9 @@ int RunGame(int argc, char **argv) {
         GamePad.UpDate();
     }
     if (DebugMode && !g_jump.set) {
-        std::fprintf(stderr, "debug mode on: the developer menu\n");
+        std::fprintf(stderr, "debug mode on\n");
     }
-    if (!DebugMode) {
+    if (!g_jump.set) {
         MapNo = -1;
         mode = GAME_MODE_LANGUAGE;
         GamePad.KeyLock2(1);

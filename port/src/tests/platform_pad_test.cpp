@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include <libpad.h>
 
+#include "../gameloop.hpp"
 #include "../platform/input.hpp"
 #include "gamepad.hpp"
+#include "mainselect.hpp"
 
 // CGamePad::Init waits on sceGsSyncV, which lives in the libgraph stub, so
 // these tests do what Init does to the library themselves (scePadInit and
@@ -144,6 +146,81 @@ TEST(PlatformPad, GamepadUpdatesThroughLibpad) {
 
     ASSERT_TRUE(GamePad.On2(PAD_CROSS) == 0);
     ASSERT_TRUE(GamePad.GetLX2() == 0);
+}
+
+TEST(PlatformPad, DebugButtonsUseMainController) {
+    OpenPads();
+    DebugMode = 0;
+    SetPad(0, 0);
+    SetPad(1, 0);
+    for (int i = 0; i < 4; ++i) {
+        GamePad.UpDate();
+    }
+
+    SetPad(1, PAD_TRIANGLE);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.On2(PAD_TRIANGLE) == 0);
+    ASSERT_TRUE(GamePad.Down2(PAD_TRIANGLE) == 0);
+
+    SetPad(0, PAD_CROSS);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.On(PAD_CROSS));
+    ASSERT_TRUE(GamePad.Down(PAD_CROSS));
+    ASSERT_TRUE(GamePad.On2(PAD_CROSS) == 0);
+    ASSERT_TRUE(GamePad.Down2(PAD_CROSS) == 0);
+
+    DebugMode = 1;
+    SetPad(0, 0);
+    GamePad.UpDate();
+    SetPad(0, PAD_CROSS);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.On2(PAD_CROSS) == 0);
+    ASSERT_TRUE(GamePad.Down2(PAD_CROSS) == 0);
+
+    SetPad(0, PAD_R3);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_R3) == 0);
+
+    SetPad(0, PAD_SELECT | PAD_L2);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.On(PAD_CROSS) == 0);
+    ASSERT_TRUE(GamePad.Down(PAD_CROSS) == 0);
+
+    SetPad(0, PAD_SELECT | PAD_L2 | PAD_CROSS | PAD_CIRCLE | PAD_R3);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_CROSS) == 0);
+    ASSERT_TRUE(GamePad.Down(PAD_CIRCLE) == 0);
+    ASSERT_TRUE(GamePad.On2(PAD_CROSS));
+    ASSERT_TRUE(GamePad.Down2(PAD_CROSS));
+    ASSERT_TRUE(GamePad.Down2(PAD_CIRCLE));
+    ASSERT_TRUE(GamePad.Down(PAD_R3));
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.On2(PAD_CROSS));
+    ASSERT_TRUE(GamePad.Down2(PAD_CROSS) == 0);
+    ASSERT_TRUE(GamePad.Down2(PAD_CIRCLE) == 0);
+
+    DebugMode = 0;
+    ASSERT_TRUE(GamePad.On2(PAD_CROSS) == 0);
+}
+
+TEST(PlatformPad, DebugToggleWorksAfterOrdinaryBoot) {
+    OpenPads();
+    DebugMode = 0;
+    SetPad(0, PAD_L1 | PAD_R1 | PAD_L2 | PAD_R2);
+    GameCheckDebugToggle();
+    ASSERT_TRUE(DebugMode == 0);
+
+    SetPad(0, PAD_L1 | PAD_R1 | PAD_L2 | PAD_R2 | PAD_R3);
+    GameCheckDebugToggle();
+    ASSERT_TRUE(DebugMode == 1);
+    GameCheckDebugToggle();
+    ASSERT_TRUE(DebugMode == 1);
+
+    SetPad(0, 0);
+    GameCheckDebugToggle();
+    SetPad(0, PAD_L1 | PAD_R1 | PAD_L2 | PAD_R2 | PAD_R3);
+    GameCheckDebugToggle();
+    ASSERT_TRUE(DebugMode == 0);
 }
 
 TEST(PlatformPad, AxesGoThroughCalibration) {

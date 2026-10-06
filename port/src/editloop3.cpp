@@ -79,8 +79,9 @@ void KeepNearVillagers(CCamera *camera, CCharacter *player) {
 
 } // namespace
 
-// Retail's EdMoveVillager, with KeepNearVillagers in place of GetNearVill and the choice of the
-// two nearest.
+// Retail's EdMoveVillager, with a larger detail distance and the fixed ground model's collision
+// added for walking villagers. The editable grid's flat polygons alone can place them above the
+// sculpted Muska Racka terrain.
 void EdMoveVillager(VILLAGER_INFO *villagers) {
     CEditGround *ground = EdExchangeInfo.ground;
     CCharacter  *player = EdExchangeInfo.player;
@@ -155,7 +156,11 @@ void EdMoveVillager(VILLAGER_INFO *villagers) {
                 EdVillager[i].FootSoundEnable(1);
                 WorkBuffer__2->used = 0;
                 CCPoly    *polys = (CCPoly *) WorkBuffer__2->Alloc(2000);
-                int        count = ground->PickUpEditAreaPoly(polys, position[0], position[1], position[2]);
+                int        count = 0;
+                bool       use_terrain = ground->map_no == TOWN_MUSKA_LACKA && villagers[i].initial_motion != 0;
+                if (!use_terrain) {
+                    count = ground->PickUpEditAreaPoly(polys, position[0], position[1], position[2]);
+                }
                 CMapParts *parts = ground->GetParts(position[0], position[1], position[2]);
 
                 if (parts != NULL) {
@@ -171,6 +176,24 @@ void EdMoveVillager(VILLAGER_INFO *villagers) {
                     if (frame != NULL) {
                         count += frame->PickUpNearPoly(polys + count, box);
                     }
+                }
+
+                if (use_terrain) {
+                    CBoxVu0 box;
+                    box.max[0] = position[0] + 1.0f;
+                    box.min[0] = position[0] - 1.0f;
+                    box.max[2] = position[2] + 1.0f;
+                    box.min[2] = position[2] - 1.0f;
+                    box.max[1] = 1000.0f;
+                    box.min[1] = -1000.0f;
+                    CFrame *terrain = ground->fixed_parts[0].GetCollisionFrame();
+                    if (terrain != NULL) {
+                        count += terrain->PickUpNearPoly(polys + count, box);
+                    }
+                }
+
+                if (count == 0) {
+                    count = ground->PickUpEditAreaPoly(polys, position[0], position[1], position[2]);
                 }
 
                 if (count > 0) {

@@ -1,6 +1,8 @@
 #include <libgraph.h>
 #include <libvu0.h>
 
+#include <cmath>
+
 #include "boxvu0.hpp"
 #include "draw3d.hpp"
 #include "frame.hpp"
@@ -14,8 +16,8 @@
 namespace {
 
 // frame.cpp's static ShadowMatrix: the planar projection along light 0 onto the plane through
-// point with the given normal. The plane is carried as d with x . d == 1 on it, which fails for a
-// plane through the origin, so such a point is pushed a tenth of a unit back along the normal.
+// point with the given normal. A plane through the origin is pushed a tenth of a unit back along
+// the normal, matching the game's chosen plane while avoiding a division by its offset.
 void ShadowMatrix(sceVu0FMATRIX matrix, sceVu0FMATRIX light, float *point, float *normal) {
     sceVu0FVECTOR direction = {light[0][0], light[1][0], light[2][0], 0.0f};
     sceVu0FVECTOR plane;
@@ -30,34 +32,35 @@ void ShadowMatrix(sceVu0FMATRIX matrix, sceVu0FMATRIX light, float *point, float
         plane[2] -= 0.1f * axis[2];
         t = sceVu0InnerProduct(axis, plane);
     }
-    t = 1.0f / t;
-    float dx = axis[0] * t;
-    float dy = axis[1] * t;
-    float dz = axis[2] * t;
-
     sceVu0Normalize(direction, direction);
     float nx = direction[0];
     float ny = direction[1];
     float nz = direction[2];
-    float depth = dx * nx + dy * ny + dz * nz;
-    float scale = -1.0f / depth;
+    float depth = axis[0] * nx + axis[1] * ny + axis[2] * nz;
+    float axis_length = std::sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+    if (!std::isfinite(depth) || !std::isfinite(t) || !std::isfinite(axis_length) ||
+        std::fabs(depth) <= 1e-3f * axis_length) {
+        sceVu0UnitMatrix(matrix);
+        return;
+    }
+    float inverse = 1.0f / depth;
 
-    matrix[0][0] = scale * (dx * nx - depth);
-    matrix[1][0] = scale * (dy * nx);
-    matrix[2][0] = scale * (dz * nx);
-    matrix[3][0] = scale * -nx;
-    matrix[0][1] = scale * (dx * ny);
-    matrix[1][1] = scale * (dy * ny - depth);
-    matrix[2][1] = scale * (dz * ny);
-    matrix[3][1] = scale * -ny;
-    matrix[0][2] = scale * (dx * nz);
-    matrix[1][2] = scale * (dy * nz);
-    matrix[2][2] = scale * (dz * nz - depth);
-    matrix[3][2] = scale * -nz;
+    matrix[0][0] = 1.0f - nx * axis[0] * inverse;
+    matrix[1][0] = -nx * axis[1] * inverse;
+    matrix[2][0] = -nx * axis[2] * inverse;
+    matrix[3][0] = nx * t * inverse;
+    matrix[0][1] = -ny * axis[0] * inverse;
+    matrix[1][1] = 1.0f - ny * axis[1] * inverse;
+    matrix[2][1] = -ny * axis[2] * inverse;
+    matrix[3][1] = ny * t * inverse;
+    matrix[0][2] = -nz * axis[0] * inverse;
+    matrix[1][2] = -nz * axis[1] * inverse;
+    matrix[2][2] = 1.0f - nz * axis[2] * inverse;
+    matrix[3][2] = nz * t * inverse;
     matrix[0][3] = 0.0f;
     matrix[1][3] = 0.0f;
     matrix[2][3] = 0.0f;
-    matrix[3][3] = scale * -depth;
+    matrix[3][3] = 1.0f;
 }
 
 // frame.cpp's static ShadowClipBox: the bound of the frame's corners and of the same corners

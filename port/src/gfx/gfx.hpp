@@ -395,6 +395,7 @@ enum MeshFlags : uint32_t {
     // where the vertex itself lands, and Vertex3D::uv is an offset from there in the image's
     // normalised units. A display render's interpolated camera moves the sample with the vertex.
     kMeshScreenUv = 1u << 6,
+    kMeshWorldUv = 1u << 7,
 };
 
 // Matches the std140 block in shaders/mesh.vert. Colours are modulations with 1.0 as GS 0x80.
@@ -409,6 +410,7 @@ struct MeshConstants {
     float    specular[4];
     float    fog[4];           // F = clamp(fog[0] + fog[1] / w, fog[2], fog[3]), GS units 0..255
     float    clip_plane[2][4]; // object space, kept where dot(plane, (p, 1)) >= 0
+    float    world_uv[2][4]; // world x/z rows for terrain sampled across map cells
     uint32_t flags = 0;
     uint32_t light_count = 0;
     uint32_t pad[2] = {};

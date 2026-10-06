@@ -20,3 +20,7 @@ FilesResult FilesWrite(const std::filesystem::path &path, const void *data, std:
 // Reads up to size bytes of the regular file at path and returns how many; anything else at path,
 // a directory or a FIFO, reads as nothing, without waiting on it.
 std::size_t FilesRead(const std::filesystem::path &path, void *data, std::size_t size);
+
+// Creates a directory at path, where nothing may be: kExists when anything is. Publishes with a
+// write-through move on Windows; on POSIX syncs the parent. A failed sync may leave the new name.
+FilesResult FilesCreateDirectory(const std::filesystem::path &path);

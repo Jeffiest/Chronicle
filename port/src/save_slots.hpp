@@ -6,18 +6,23 @@
 
 #include "memorycardaccess.hpp"
 
-// The port keeps no memory card. Each save is <save root>/darkcloudN, the image retail writes to
-// the card as darkcloudN, and the card's configuration file is <save root>/sysconfig.bin.
+// The port keeps no memory card. Its saves are in <save root>/saves: a folder for each save, named
+// after the number its board shows, N + 1 for the game's file N, holding save.dat, the image retail
+// wrote to the card as darkcloudN. Shared state.json sits beside the numbered folders.
+
+std::filesystem::path SaveSlotsRoot();
+
+std::filesystem::path SaveSlotDirectory(int file_no);
 
 std::filesystem::path SaveSlotPath(int file_no);
 
-std::filesystem::path SaveConfigPath();
+std::filesystem::path SaveStatePath();
 
-// The N of a file named darkcloudN, or -1 for any other name.
+// The file a save folder's name stands for, or -1 for any other name.
 int SaveSlotFileNo(std::string_view name);
 
-// The N of every darkcloudN in the save root, ascending, whatever each holds: a directory or an
-// unreadable file keeps its number from a new save too.
+// The file of every save folder's name, ascending, whatever each holds: a folder without a whole
+// save, or a file under such a name, keeps its number from a new save too.
 std::vector<int> SaveSlotFiles();
 
 // The lowest N that ascending files does not hold.

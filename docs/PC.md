@@ -768,23 +768,43 @@ their tone by key range, then split index.
 
 ## Saves and host files
 
-The port has no memory card. Each save is a file of its own directly in the
-save directory, `<save>/darkcloudN` for N = 0, 1, 2 and on, with no
-12-save cap (N has up to nine digits), holding retail's 0x136A7-byte image unchanged: `CSaveData` (0x131C0
+The port has no memory card. Its saves are in `<save>/saves/`, a folder for
+each save named after the number its board shows, from 1, with no 12-save
+cap (up to nine digits):
+
+```
+<save>/saves/
+    1/save.dat
+    2/save.dat
+    state.json
+```
+
+`save.dat` is retail's 0x136A7-byte image unchanged: `CSaveData` (0x131C0
 bytes), the version string (`darkcloudVer1.9`) in 0x20 bytes, and a checksum
-byte for every 64 bytes of save data. The name is the one the game gives the
-file on the card, so a save copied out of a card export loads as it is.
-`<save>/sysconfig.bin` is the card's 0x40-byte configuration file
-(`SV_CONFIG_SYS`: the options, the last save used, the game clear flag)
-followed by a field of the port's own, the last save's number as a 32-bit
-little-endian integer, since the image keeps that number in a signed byte,
-which only holds 0 to 127; a 0x40-byte file copied out of a card loads too.
-`icon.sys` and the icons are not written.
+byte for every 64 bytes of save data, the bytes the game wrote to the card
+as `darkcloudN`, so a save copied out of a card export loads as it is. Board
+(and folder) N is the game's file N - 1. A folder holds what belongs to its
+save, so more files can join `save.dat` later.
+
+`state.json` is what the title needs before a save is loaded, which the
+card's configuration file held on the PS2: `last_save`, the folder of the
+last save loaded or written, where the save and load screens start, and
+`game_clear`, the clear flag from the current game (config word 14),
+which the title reads. It sits with the saves rather than in `config.json`
+because it is game progress and screen state, not a setting, and it is
+written with the saves. It contains only these two keys; `last_save` is 0
+when there is no remembered slot. `state.json` contains no options, and
+`save.dat` retains retail's image layout. Without `state.json`, or with one
+that is not a JSON object, the game keeps its own values. Unknown keys,
+invalid types and slot numbers outside 0..999999999 are ignored. Files
+larger than 64 KiB are rejected. A successful load remembers its slot too;
+if that state write fails, it reports the failure to stderr and still loads
+the valid save.
 
 `port/src/memorycardaccess.cpp` replaces the operations of
 `CMemoryCardAccess` with plain reads and writes of these files
-(`port/src/save_slots.cpp` names and lists them); each finishes in the step
-that starts it. Every write goes through `FilesWrite`
+(`port/src/save_slots.cpp` names and lists them, `port/src/platform/save_state.cpp`
+reads and writes `state.json`); each finishes in the step that starts it. Every write goes through `FilesWrite`
 (`port/src/platform/files.cpp`): a temporary file of its own beside the
 target, `<target>.<16 hex digits>.tmp`, created exclusively, written,
 flushed to the disk and closed, then moved onto the target. Until that move
@@ -803,9 +823,17 @@ removal that failed, is ignored by the game and can be deleted by hand.
   file system without the exclusive rename gets a hard link and the
   temporary name's removal instead; one with neither cannot take a new save.
 
-Saving over a save replaces the file; a new save never does: when its number
-has been taken since the list was read, by a second copy of the game or a
-file copied in by hand, it goes to the next free number. Only regular-file
+Saving over a save replaces its `save.dat`. A new save takes its folder by
+creating it (a unique temporary directory published with
+`MoveFileExW(MOVEFILE_WRITE_THROUGH)` on Windows, or `mkdir` followed by a
+sync of `saves/` on POSIX),
+which fails when anything has that name, then writes `save.dat` into it
+without replacing; when its number has been taken since the list was read,
+by a second copy of the game or a folder copied in by hand, it goes to the
+next free number. A new save that fails removes the folder it made while
+the folder is still empty; a directory-sync failure can leave an empty
+reserved folder. Creating `saves/` also syncs its new name. Temporary
+directories use the same ignored `.tmp` suffix as temporary files. Only regular-file
 handles are read; other entries are skipped without reading their contents.
 The card the save screens still check is always there, formatted and with room,
 and so is its save directory; format, unformat, the write test and the
@@ -833,27 +861,46 @@ retail's steps, less the card:
   (298), and Cross after it closes the screen where retail went back to the
   card choice; an alert only a card raised reads "Saving failed." (266) or
   "Loading failed." (274).
-- The save after the ending writes `sysconfig.bin` in its step. When that
+- The save after the ending writes `state.json` in its step. When that
   fails, "Saving failed." shows; Cross asks again and Circle closes the
   screen. Retail waited on the write for ever.
-- A file is listed only when its name is `darkcloud` and a number as `%d`
-  writes it (`darkcloud01` is not file 1), it is at least a save long, its
-  version is this one's and every checksum is right. Anything else under such
-  a name, a save of another version, a damaged one or a directory, is left
-  alone and keeps its number from a new save. Retail deleted a save of
-  another version once its message (299) was dismissed.
+- A save is listed only when its folder's name is a number from 1 with no
+  leading zero (`01` is not save 1) and its `save.dat` is at least a save
+  long, of this version and with every checksum right. Anything else under
+  such a name, a save of another version, a damaged one, a folder without a
+  save or a file in a folder's place, is left alone and keeps its number from
+  a new save. Retail deleted a save of another version once its message (299)
+  was dismissed.
 - A board names the save's map from a table of 62; a map number outside it
   shows as the first.
 
-Saves in the card layout earlier builds wrote are not moved by the game. By
-hand, in `<save>/mc0/BESCES-50295dkcloud/` (or the same folder of a card
-export):
+Saves in the card layout earlier builds wrote, or in a card export, are not
+moved by the game. By hand, from `<save>/mc0/BESCES-50295dkcloud/` (or the
+same folder of a card export):
 
 | File | Goes to |
 |---|---|
-| `darkcloudN` | `<save>/darkcloudN` |
-| `BESCES-50295dkcloud`, the configuration | `<save>/sysconfig.bin` |
+| `darkcloudN` | `<save>/saves/<N + 1>/save.dat`: `darkcloud0` to `saves/1/save.dat` |
+| `BESCES-50295dkcloud`, the configuration | not used; the next save writes `state.json` |
 | `icon.sys`, `dkicon.ico`, `dkicon_c.ico`, `dkicon_d.ico` | not used |
+
+The flat `<save>/darkcloudN` and `<save>/sysconfig.bin` of earlier builds of
+this layout are not read either: `darkcloudN` moves to `saves/<N + 1>/save.dat`
+the same way.
+
+For example, to copy File 1 from an export on Windows, choose a free board
+number, create its folder and copy just the save payload, without replacing
+anything already there:
+
+```powershell
+$slot = '<save>/saves/1'
+if (Test-Path -LiteralPath $slot) { throw 'Choose an unused slot number' }
+New-Item -ItemType Directory -Path $slot -ErrorAction Stop
+[IO.File]::Copy('<export>/BESCES-50295dkcloud/darkcloud0', "$slot/save.dat", $false)
+```
+
+The folder number may differ from the exported file number. Keep the
+original export; no icons or configuration file need to accompany the copy.
 
 `sce/libmc.cpp` still implements libmc on `<save>/mc0/` and `<save>/mc1/`, a
 directory per card, every command finishing inside the call that issues it

@@ -154,6 +154,30 @@ are examples of the form (the defaults are in the table below); a
 `config.ini` from an earlier build is not read, and `darkcloud` says so when
 it finds one without a `config.json`.
 
+The file is read once, at start. A settings screen in the game changes the
+settings through `ConfigChange(config)` (`platform/config.hpp`): the settings
+are taken as the file would read them back (a bad value is reported and
+becomes its default), saved, and applied to the running game. The file is
+rewritten whole, as `ConfigSerialize` writes it, so comments in it are not
+kept; it is written to `config.json.tmp` and renamed over `config.json`, so a
+crash or a full disk leaves the old file or the new one, never part of one.
+Every setting applies at once except `game.debug_mode` (the initial value of
+`DebugMode`), which takes effect at the next start (`ConfigAppliesOnRestart`
+says which, for the screen to show):
+the master volume, the input section (bindings, mouse and stick), the tick
+rate, `interpolation`, `max_fps` and `show_fps`, the present mode (the
+swapchain is recreated), the window's size and fullscreen state, and `aspect`
+and `ui_scale` (at the next pump outside a frame: `gfx::SetFrameLayout`).
+`--width`, `--height` and `--show-fps` keep their hold over the file, and a
+headless window keeps its size. The render scale stays the one the window
+had at start, as after a resize by hand. Each part of the game that holds a
+setting applies its own through a hook (`ConfigAddChangeHook`); `main.cpp`'s
+is the host's. `ConfigChange` returns whether the file was saved, and the
+same settings again retry a failed save without applying them again. It and
+the hooks run on the main thread; a `ConfigChange` from inside a hook is
+refused, and a hook added or removed during a change takes part from the
+next one.
+
 ### Keyboard and mouse
 
 The keyboard and the mouse drive pad 1 next to the first gamepad
@@ -426,7 +450,8 @@ cache at `<save>/pipeline_cache.bin` and a progress callback that prints
 `audio::DefaultMixer()` at its rate with the config's master gain; the clock
 gets the config's tick rate (unbounded when headless); a pump hook is
 installed that pumps window events (a close request stops the game) and
-samples input; then `RunGame`. After it returns: the screenshot, then
+samples input and applies a pending frame layout; the config change hook
+is added; then `RunGame`. After it returns: the screenshot, then
 `AudioOutputStop`, `InputShutdown`, `RendererShutdown`, `WindowShutdown`.
 `main.cpp` also forwards the names MWCC gives the calls in retail `main`
 (below).
@@ -518,7 +543,7 @@ on a translucent black backdrop, on whole pixels: one per logical unit,
 rounded):
 
 ```
-FPS 143.9  TICK 50.0/50  DRAWS 412
+FPS 143.9  TICK 60.0/60  DRAWS 412
 ```
 
 the frames presented per second and the logic ticks rendered per second,
@@ -563,9 +588,10 @@ game header or SDK type reaches them. Game types meet them only in the
 replacement units.
 
 - **Window** (`platform/window`): SDL3 window, resizable, high pixel density,
-  optionally fullscreen; `WindowPollEvents` pumps events, reports a close,
-  and forwards pixel-size changes to the renderer. `WindowAddEventHook` lets
-  input see every event.
+  optionally fullscreen; `WindowSetMode` changes its size and fullscreen
+  state as the config does at start; `WindowPollEvents` pumps events, reports
+  a close, and forwards pixel-size changes to the renderer.
+  `WindowAddEventHook` lets input see every event.
 - **Input** (`platform/input`, `platform/mouse`, `sce/libpad.cpp`,
   `gamepad.cpp`): two DualShock 2-shaped pads from SDL gamepads, the
   keyboard and the mouse, with rumble. libpad's nine
@@ -584,7 +610,7 @@ replacement units.
   window alive and the pads fresh whatever the loading screen does.
   `sceGsSyncV` returns the parity of the tick, as the interlaced field
   alternated: `CGamePad::Init` and `main` spin until it reads 1. The tick
-  rate is a setting (50 Hz by default); presentation is not tied to it (below).
+  rate is a setting (60 Hz by default); presentation is not tied to it (below).
   `ClockWaitNextTick(hook)` runs a hook over and over while it waits, with the
   elapsed fraction of the tick; `MGEndFrame` presents display frames through it.
 - **Config** (`platform/config`) and **paths** (`platform/paths`): above.

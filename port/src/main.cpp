@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -53,6 +54,10 @@ struct Options {
     bool         fast_load = false;
     bool         show_fps = false;
 };
+
+Options g_options;
+// A change of video.aspect or video.ui_scale, for the next pump outside a frame.
+std::optional<gfx::FrameLayout> g_pending_layout;
 
 [[noreturn]] void Usage(const char *program) {
     std::fprintf(stderr,
@@ -163,6 +168,10 @@ void PumpHost() {
     if (!WindowPollEvents()) {
         GameRequestStop();
     }
+    if (g_pending_layout && !gfx::InFrame()) {
+        gfx::SetFrameLayout(*g_pending_layout);
+        g_pending_layout.reset();
+    }
     InputPoll();
     InputScriptApply(GameFrameCount());
 }
@@ -221,6 +230,49 @@ gfx::PresentMode PresentMode(ConfigPresentMode mode) {
     }
 }
 
+// --width and --height hold over the config's size, and a headless window keeps its own.
+WindowConfig WindowSettings(const Config &config) {
+    WindowConfig window;
+    window.width = g_options.width > 0 ? g_options.width : config.window_width;
+    window.height = g_options.height > 0 ? g_options.height : config.window_height;
+    window.fullscreen = config.fullscreen;
+    window.headless = g_options.headless;
+    return window;
+}
+
+gfx::FrameLayout Layout(const Config &config) {
+    return {config.aspect == ConfigAspect::Auto ? gfx::AspectMode::Fill : gfx::AspectMode::Letterbox,
+            config.ui_scale};
+}
+
+GamePresentSettings PresentSettings(const Config &config) {
+    return {.interpolation = config.interpolation,
+            .max_fps = config.max_fps,
+            .display_per_tick = g_options.display_per_tick,
+            .show_fps = g_options.show_fps || (config.show_fps && !g_options.headless)};
+}
+
+// Called mid-tick, from a settings screen: what cannot change inside a frame waits for PumpHost.
+void ApplyConfigChange(const Config &before, const Config &after) {
+    audio::DefaultMixer().SetMasterGain(after.master_volume);
+    InputApplyConfig(after);
+    if (after.tick_rate != before.tick_rate) {
+        ClockSetTickRate(after.tick_rate);
+    }
+    if (after.interpolation != before.interpolation || after.max_fps != before.max_fps ||
+        after.show_fps != before.show_fps) {
+        GameSetPresentSettings(PresentSettings(after));
+    }
+    if (after.window_width != before.window_width || after.window_height != before.window_height ||
+        after.fullscreen != before.fullscreen) {
+        WindowSetMode(WindowSettings(after));
+    }
+    gfx::SetPresentMode(PresentMode(after.present_mode));
+    if (after.aspect != before.aspect || after.ui_scale != before.ui_scale) {
+        g_pending_layout = Layout(after);
+    }
+}
+
 // DC_PRESENT_STATS=1: what the ticks drew and what rendering them cost.
 void ReportPresentStats() {
     const char *setting = std::getenv("DC_PRESENT_STATS");
@@ -259,7 +311,8 @@ int Screenshot(const char *path) {
 
 int Run(int argc, const char **argv) {
     argc = PathsConsumeArgs(argc, argv);
-    Options options = ParseOptions(argc, argv);
+    g_options = ParseOptions(argc, argv);
+    Options &options = g_options;
     FirstRunIfNoData(options.headless);
     if (options.jump == nullptr) {
         options.jump = std::getenv("DC_JUMP");
@@ -276,12 +329,8 @@ int Run(int argc, const char **argv) {
     ConfigLoad();
     const Config &config = ConfigGet();
 
-    WindowConfig window;
-    window.width = options.width > 0 ? options.width : config.window_width;
-    window.height = options.height > 0 ? options.height : config.window_height;
-    window.fullscreen = config.fullscreen;
-    window.headless = options.headless;
-    bool offscreen = options.offscreen || (options.headless && !gfx::HeadlessSurfaceAvailable());
+    WindowConfig window = WindowSettings(config);
+    bool         offscreen = options.offscreen || (options.headless && !gfx::HeadlessSurfaceAvailable());
     window.vulkan = !offscreen;
     WindowInit(window);
     InputInit();
@@ -291,9 +340,7 @@ int Run(int argc, const char **argv) {
     renderer.pipeline_cache = PathsSaveRoot() / "pipeline_cache.bin";
     renderer.progress = ReportShaderProgress;
     renderer.offscreen = offscreen;
-    renderer.layout.aspect =
-        config.aspect == ConfigAspect::Auto ? gfx::AspectMode::Fill : gfx::AspectMode::Letterbox;
-    renderer.layout.ui_scale = config.ui_scale;
+    renderer.layout = Layout(config);
     gfx::RendererInit(WindowHandle(), renderer);
 
     audio::DefaultMixer().SetMasterGain(config.master_volume);
@@ -303,10 +350,8 @@ int Run(int argc, const char **argv) {
     ClockSetUnbounded(options.headless);
     ClockAddPumpHook(PumpHost);
     GameSetFrameBudget(options.frames);
-    GameSetPresentSettings({.interpolation = config.interpolation,
-                            .max_fps = config.max_fps,
-                            .display_per_tick = options.display_per_tick,
-                            .show_fps = options.show_fps || (config.show_fps && !options.headless)});
+    GameSetPresentSettings(PresentSettings(config));
+    ConfigAddChangeHook(ApplyConfigChange);
 
     int status = RunGame(argc, const_cast<char **>(argv));
     if (status == kExitOk && options.screenshot != nullptr) {
@@ -314,6 +359,7 @@ int Run(int argc, const char **argv) {
     }
     ReportPresentStats();
 
+    ConfigRemoveChangeHook(ApplyConfigChange);
     ClockRemovePumpHook(PumpHost);
     AudioOutputStop();
     InputShutdown();

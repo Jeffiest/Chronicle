@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 
+struct Config;
 union SDL_Event;
 
 // Host input shaped like two DualShock 2 controllers. The first gamepad, the keyboard and the mouse
@@ -72,6 +73,10 @@ struct InputRumble {
 // Opens SDL's gamepad subsystem, applies config.json's input section and watches the window's events.
 // Input works without a gamepad subsystem or a window (nothing but overrides then).
 void InputInit();
+
+// Applies config's input section over the default bindings and mouse settings, as InputInit does
+// with ConfigGet() and a change of settings does while the game runs.
+void InputApplyConfig(const Config &config);
 
 void InputShutdown();
 

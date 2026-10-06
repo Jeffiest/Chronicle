@@ -237,7 +237,6 @@ PC_OVERRIDE int CMemoryCardAccess::SaveToMc(int file_no) {
         return -1;
     }
     FilesResult result = FilesResult::kWritten;
-    bool        created_slot = false;
 
     if (SaveSlotNew) {
         if (FilesCreateDirectory(SaveSlotsRoot()) == FilesResult::kFailed) {
@@ -254,7 +253,6 @@ PC_OVERRIDE int CMemoryCardAccess::SaveToMc(int file_no) {
             file_no = SaveSlotFirstFree(files);
             result = FilesCreateDirectory(SaveSlotDirectory(file_no));
         }
-        created_slot = result == FilesResult::kWritten;
     }
 
     if (result == FilesResult::kWritten) {
@@ -262,12 +260,7 @@ PC_OVERRIDE int CMemoryCardAccess::SaveToMc(int file_no) {
     }
 
     if (result != FilesResult::kWritten) {
-        // Only the folder this save created, and only while it is empty.
-        if (created_slot && result != FilesResult::kExists) {
-            std::error_code error;
-            fs::remove(SaveSlotDirectory(file_no), error);
-        }
-
+        // Leave failed claims reserved: the pathname may now belong to another actor.
         return -1;
     }
 
@@ -282,10 +275,15 @@ PC_OVERRIDE int CMemoryCardAccess::LoadFromMc(int file_no) {
         return -1;
     }
 
+    // Remember only the cursor, retaining title state before the older payload replaces it.
+    // Missing or malformed state falls back to the current session's values.
+    SaveState state = CurrentState();
+    SaveStateRead(SaveStatePath(), state);
     memcpy(SaveData, g_image, sizeof(CSaveData));
     ConfigWord(kConfigLastFile) = file_no;
+    state.last_save = file_no + 1;
     // Cursor memory is useful across restarts, but its failure must not reject a valid save.
-    if (!SaveStateWrite(SaveStatePath(), CurrentState())) {
+    if (!SaveStateWrite(SaveStatePath(), state)) {
         std::fprintf(stderr, "save state: could not remember loaded save %d\n", file_no + 1);
     }
     return 1;

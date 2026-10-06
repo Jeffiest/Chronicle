@@ -797,9 +797,11 @@ when there is no remembered slot. `state.json` contains no options, and
 `save.dat` retains retail's image layout. Without `state.json`, or with one
 that is not a JSON object, the game keeps its own values. Unknown keys,
 invalid types and slot numbers outside 0..999999999 are ignored. Files
-larger than 64 KiB are rejected. A successful load remembers its slot too;
-if that state write fails, it reports the failure to stderr and still loads
-the valid save.
+larger than 64 KiB are rejected. A successful load remembers its slot without
+changing the persisted clear flag, falling back to the session's pre-load
+flag when state cannot supply one. If that state write fails, it reports the
+failure to stderr and still loads the valid save. Saving and the ending's
+state write explicitly record the current game's clear flag.
 
 `port/src/memorycardaccess.cpp` replaces the operations of
 `CMemoryCardAccess` with plain reads and writes of these files
@@ -830,9 +832,10 @@ sync of `saves/` on POSIX),
 which fails when anything has that name, then writes `save.dat` into it
 without replacing; when its number has been taken since the list was read,
 by a second copy of the game or a folder copied in by hand, it goes to the
-next free number. A new save that fails removes the folder it made while
-the folder is still empty; a directory-sync failure can leave an empty
-reserved folder. Creating `saves/` also syncs its new name. Temporary
+next free number. A failed new save leaves its claimed numbered folder
+reserved, even when empty: the pathname could have been replaced by another
+actor since creation. A retry uses the next free number. Creating `saves/`
+also syncs its new name. Temporary
 directories use the same ignored `.tmp` suffix as temporary files. Only regular-file
 handles are read; other entries are skipped without reading their contents.
 The card the save screens still check is always there, formatted and with room,

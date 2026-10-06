@@ -10,6 +10,9 @@ if (-not $sdl) { "SDL3.dll not found under win-deps - run setup_win_deps.ps1."; 
 Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $dist | Out-Null
 Copy-Item $exe $dist
+# Co-op needs its mod; it ships switched off and the launcher turns it on when you host or join.
+$coop = "$root\win-save\mods\coop"
+if (Test-Path $coop) { New-Item -ItemType Directory -Force "$dist\save\mods" | Out-Null; Copy-Item $coop "$dist\save\mods" -Recurse }
 $launcher = "$root\ChronicleLauncher.exe"
 if (Test-Path $launcher) { Copy-Item $launcher $dist } else { "note: ChronicleLauncher.exe not found (run build_launcher.ps1); packaging without it." }
 Copy-Item $sdl.FullName $dist          # the SDL3.dll the exe was linked against
@@ -21,8 +24,8 @@ Dark Cloud (PAL) - Windows build
 You need: a Windows 10/11 PC, a graphics card with an up-to-date driver (Vulkan 1.3 or newer),
 and your own disc image of the European (PAL) release of Dark Cloud.  No game data is included here.
 
-1. Double-click ChronicleLauncher.exe (settings, co-op and mods in one window), or darkcloud.exe to start the game directly.
-2. When asked, choose your disc image (.iso). The game extracts what it needs; this takes a few minutes, once.
+1. Unzip everything into a normal folder (not inside the zip, not Program Files), then double-click ChronicleLauncher.exe, or darkcloud.exe to start the game directly.
+2. The first time, the game asks for your disc image (.iso) and extracts what it needs into a data folder beside it; this takes a few minutes, once. Your saves and settings live in the save folder beside it.
 3. A settings screen follows. Pick your screen mode, frame rate limit and so on, then press "Save and start".
 
 Later

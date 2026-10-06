@@ -160,8 +160,7 @@ def start_game(c, log=None):
     exe = find_exe()
     if exe is None:
         return None, 'darkcloud.exe not found next to the launcher (or in Chronicle-win-build).'
-    if not Path(c['data']).is_dir():
-        return None, 'The game data folder does not exist:\n' + c['data']
+    # A missing data folder is fine: the game itself then asks for the disc image and extracts it there.
     save = Path(c['save'])
     port = valid_port(c['net_port'])
     if c['net_mode'] != 'off' and port is None:

@@ -357,6 +357,10 @@ PATCHES = [
      '                blocks[2] = EdMenuExTextureBlock2;\n                { extern void ModsPageNote(); ModsPageNote(); }\n                InitMenuManual(blocks, work);'),
     ('ps2/src/menu_draw.cpp', 'void InitMenuMesSet(int mode, short *messages) {\n    CommonMenuMes1.tex_buff = MesWinTexBuff_01;',
      'void InitMenuMesSet(int mode, short *messages) {\n    { void ModTextPatchMenu(void *); ModTextPatchMenu(messages); }\n    CommonMenuMes1.tex_buff = MesWinTexBuff_01;'),
+    # Packaged copies: with no data/ or save/ next to anything, fall back to the folder holding the exe, never to the current directory
+    # (a shortcut or a console opened elsewhere moved the saves around).
+    ('port/src/platform/paths.cpp', '        std::error_code error;\n        return fs::current_path(error) / name;\n    }\n    return base / "chronicle" / name;',
+     '        std::error_code error;\n        fs::path        executable = ExecutableDirectory();\n        return (executable.empty() ? fs::current_path(error) : executable) / name;\n    }\n    return base / "chronicle" / name;'),
 ]
 
 def apply_patches():

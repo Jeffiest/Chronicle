@@ -805,9 +805,9 @@ removal that failed, is ignored by the game and can be deleted by hand.
 
 Saving over a save replaces the file; a new save never does: when its number
 has been taken since the list was read, by a second copy of the game or a
-file copied in by hand, it goes to the next free number. Only regular files
-are read; a FIFO or anything else under a save's name is left unopened. The
-card the save screens still check is always there, formatted and with room,
+file copied in by hand, it goes to the next free number. Only regular-file
+handles are read; other entries are skipped without reading their contents.
+The card the save screens still check is always there, formatted and with room,
 and so is its save directory; format, unformat, the write test and the
 conversion of NTSC 1.0 saves do nothing.
 
@@ -1110,8 +1110,7 @@ that mirrors its unit: `port/src/mglib.cpp` holds the replacements for
 `ps2/src/mglib.cpp`. A name the unit's stub header renames (below) is tagged
 under its new name. What is replaced has to be a function with its body or a
 variable without constructor arguments (a pointer to a function, or an array
-of them, by the name inside its declarator), one name to a declaration, at
-file scope of a unit, with no
+of them, by the name inside its declarator), at file scope of a unit, with no
 preprocessor directive before its body, and an `#if` block in its body has to
 lie wholly inside it with every branch leaving the same braces open. It has to
 be one the port compiles: under `#ifdef` or `#ifndef` of `PORT` or `PAL`, in
@@ -1121,7 +1120,11 @@ script stops the build on a definition it cannot take out whole, on an
 with a line continued by a backslash outside a preprocessor directive. A
 `static` function cannot be replaced this way; it keeps the body `ps2/src`
 gives it. Nor can one defined in a class body, a namespace or a header: the
-check finds nothing to replace.
+check finds nothing to replace. A variable takes one name per declaration,
+and its declaration has no comma outside `()`, `[]` and `{}`: angle brackets do not
+count, so a template type with a comma (`std::pair<int, int>`, or
+`make<int, int>()` in its initialiser) needs a `using` alias, and the script
+stops on one rather than guess.
 
 
 ## Per-unit adjustments

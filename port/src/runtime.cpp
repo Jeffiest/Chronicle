@@ -30,8 +30,8 @@ namespace {
 unsigned int g_rand_state = 1;
 }
 
-// glibc declares these noexcept; Apple's libc does not.
-#ifdef __APPLE__
+// glibc declares these noexcept; Apple's libc and the Windows CRT do not.
+#if defined(__APPLE__) || defined(_WIN32)
 #define LIBC_NOEXCEPT
 #else
 #define LIBC_NOEXCEPT noexcept
@@ -74,3 +74,30 @@ PC_OVERRIDE void LoadOverlay(int mode) {
 PC_OVERRIDE extern "C" int mwLoadOverlay(char *path, void *address) {
     return 1;
 }
+
+// ps2/src's stand-ins for what the PS2 runtime generated that use names only the PS2 link
+// defines: four constructors MWCC wrote, __unexpected, std::exception's virtual table and the
+// overlay address table. Nothing in the port reaches them, but a COFF link wants every name an
+// object uses defined. These take their place.
+PC_OVERRIDE extern "C" void *__ct__10CCharacterFv(void *self) {
+    PS2_UNIMPLEMENTED();
+}
+
+PC_OVERRIDE extern "C" void *__ct__13CTextureAnimeFv(void *self) {
+    PS2_UNIMPLEMENTED();
+}
+
+PC_OVERRIDE extern "C" void *__ct__7CObjectFv(void *self) {
+    PS2_UNIMPLEMENTED();
+}
+
+PC_OVERRIDE extern "C" void *__ct__8CHitMarkFv(void *self) {
+    PS2_UNIMPLEMENTED();
+}
+
+PC_OVERRIDE extern "C" void __unexpected(void *exception_record) {
+    PS2_UNIMPLEMENTED();
+}
+
+PC_OVERRIDE extern "C" void *__vt__Q23std9exception[4] = {};
+PC_OVERRIDE void            *_overlay_group_addresses[2] = {};

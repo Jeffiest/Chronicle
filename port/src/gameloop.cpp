@@ -370,9 +370,11 @@ void GameFollowMapJump() {
 void GameApplyLoopResult(int loop_mode, int result) {
     switch (loop_mode) {
         case GAME_MODE_LANGUAGE:
+            // Retail's memory card check came next and went on to the attract movie; the port has
+            // no card to check.
             if (result != 0) {
-                MapNo = -1;
-                mode = GAME_MODE_MEMORY_CHECK;
+                MapNo = 801;
+                mode = GAME_MODE_RUSH_MOVIE;
             }
             break;
         case GAME_MODE_TITLE:

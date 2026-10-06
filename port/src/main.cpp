@@ -247,7 +247,8 @@ GamePresentSettings PresentSettings(const Config &config) {
     return {.interpolation = config.interpolation,
             .max_fps = config.max_fps,
             .display_per_tick = g_options.display_per_tick,
-            .show_fps = g_options.show_fps || (config.show_fps && !g_options.headless)};
+            .show_fps = g_options.show_fps || (config.show_fps && !g_options.headless),
+            .fps_detail = config.fps_detail};
 }
 
 void ApplyDiscord(const Config &config) {
@@ -266,7 +267,7 @@ void ApplyConfigChange(const Config &before, const Config &after) {
         ClockSetTickRate(after.tick_rate);
     }
     if (after.interpolation != before.interpolation || after.max_fps != before.max_fps ||
-        after.show_fps != before.show_fps) {
+        after.show_fps != before.show_fps || after.fps_detail != before.fps_detail) {
         GameSetPresentSettings(PresentSettings(after));
     }
     gfx::SetPresentMode(PresentMode(after.present_mode));

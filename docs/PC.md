@@ -115,6 +115,7 @@ key is optional; these are the defaults:
         "aspect": "auto",           // auto: the world fills the window, the HUD in its corners, other 2D in the centred 4:3 frame; 4:3: letterboxed
         "ui_scale": 1.0,            // 0.25 to 4: the HUD and menus scaled about the window's centre (not the Options screen)
         "show_fps": true,           // the FPS counter at the window's top-left corner (headless: --show-fps)
+        "fps_detail": "all",        // what it shows: fps (the frame rate alone), ticks (and the logic ticks) or all (and the draws)
         "detail_distance": 0,       // how far full detail reaches (world units); 0: at any distance
         "shadow_distance": 0,       // how far town parts cast full shadows (world units); 0: at any distance
         "soft_focus": true          // the game's farside soft focus
@@ -595,6 +596,9 @@ rounded):
 ```
 FPS 143.9  TICK 60.0/60  DRAWS 412
 ```
+
+(`video.fps_detail`, and Options > Display > FPS Info, choose how much of it: `fps` is `FPS 143.9`
+alone, `ticks` adds the tick rate, `all`, the default, adds the draws.)
 
 the frames presented per second and the logic ticks rendered per second,
 each over the last half second or so, the configured tick rate, and the

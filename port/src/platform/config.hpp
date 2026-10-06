@@ -11,6 +11,13 @@ enum class ConfigPresentMode {
     Immediate,
 };
 
+// What the FPS counter shows: the frame rate alone, with the logic ticks, or all of it with the draws.
+enum class ConfigFpsDetail {
+    Fps,
+    Ticks,
+    All,
+};
+
 enum class ConfigAspect {
     Auto,
     FourThree,
@@ -64,6 +71,7 @@ struct Config {
     ConfigAspect                  aspect = ConfigAspect::Auto;
     float                         ui_scale = 1.0f;
     bool                          show_fps = true;
+    ConfigFpsDetail               fps_detail = ConfigFpsDetail::All;
     float                         detail_distance = 0.0f;
     float                         shadow_distance = 0.0f;
     float                         master_volume = 1.0f;

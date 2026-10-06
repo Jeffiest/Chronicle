@@ -286,6 +286,20 @@ void SetPresentMode(Config &config, int choice) {
     config.present_mode = kPresentModes[choice];
 }
 
+constexpr ConfigFpsDetail kFpsDetails[] = {ConfigFpsDetail::Fps, ConfigFpsDetail::Ticks, ConfigFpsDetail::All};
+
+int FpsDetailCount(const Config &) {
+    return static_cast<int>(std::size(kFpsDetails));
+}
+
+int FpsDetailChoice(const Config &config) {
+    return static_cast<int>(std::ranges::find(kFpsDetails, config.fps_detail) - std::begin(kFpsDetails));
+}
+
+void SetFpsDetail(Config &config, int choice) {
+    config.fps_detail = kFpsDetails[choice];
+}
+
 int MaxFpsCount(const Config &) {
     return static_cast<int>(std::size(kMaxFps));
 }
@@ -458,6 +472,9 @@ const Row kDisplayRows[] = {
     OnOffRow<&Config::interpolation>("video.interpolation", "Smooth Motion",
                                      "\"Smooth Motion\"\nDraws frames between\nthe game's steps."),
     OnOffRow<&Config::show_fps>("video.show_fps", "FPS Counter", "\"FPS Counter\"\nShows the frame rate\nin the corner."),
+    Row{"video.fps_detail", "FPS Info",
+        "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.", -1, FpsDetailCount,
+        FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"},
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
 };
 

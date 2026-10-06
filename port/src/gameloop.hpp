@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "gfx/gfx.hpp"
+#include "platform/config.hpp"
 
 class CSaveData;
 
@@ -84,7 +85,8 @@ struct GamePresentSettings {
     // The FPS counter over every presented frame, at first; input.bindings.fps_toggle flips it. It is drawn
     // after the list into the presented image only, never into a canonical image, so it is not in
     // kPreviousFrame, frame copies or GameScreenshot.
-    bool show_fps = false;
+    bool            show_fps = false;
+    ConfigFpsDetail fps_detail = ConfigFpsDetail::All;
 };
 
 void GameSetPresentSettings(const GamePresentSettings &settings);

@@ -135,6 +135,18 @@ TEST(PlatformConfig, DebugModeDefaultsOff) {
     ASSERT_TRUE(!ConfigParse(R"({"game": {"debug_mode": "off"}})").debug_mode);
 }
 
+TEST(PlatformConfig, FpsDetail) {
+    ASSERT_TRUE(ConfigParse("").fps_detail == ConfigFpsDetail::All);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": "fps"}})").fps_detail == ConfigFpsDetail::Fps);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": "Ticks"}})").fps_detail == ConfigFpsDetail::Ticks);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": "everything"}})").fps_detail == ConfigFpsDetail::All);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": 3}})").fps_detail == ConfigFpsDetail::All);
+
+    Config config;
+    config.fps_detail = ConfigFpsDetail::Ticks;
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).fps_detail == ConfigFpsDetail::Ticks);
+}
+
 TEST(PlatformConfig, ShowFpsAndTheHostKeys) {
     ASSERT_TRUE(ConfigParse("").show_fps);
     ASSERT_TRUE(!ConfigParse(R"({"video": {"show_fps": false}})").show_fps);

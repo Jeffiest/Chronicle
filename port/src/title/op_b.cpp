@@ -277,9 +277,6 @@ PC_OVERRIDE void FaceChange(int actor_no) {
     }
 }
 
-extern CDataAlloc2<1> CharaDataBuffer__2[7];
-extern CCharacter     Chara__3[23];
-
 namespace {
 
 // The largest of the couple's motion files is 1,187,152 bytes.

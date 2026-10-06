@@ -234,9 +234,28 @@ std::string GameTextDecode(const s16 *codes) {
 }
 
 int GameTextFile::Set(int id, std::string_view utf8) {
+    if (id < INT16_MIN || id > INT16_MAX) {
+        return -1;
+    }
+
     std::vector<s16> codes;
     const int        missing = GameTextEncode(utf8, codes);
 
+    // Offsets grow with the id, so the file fits when the last message's start does.
+    const auto   found = messages_.find(id);
+    const bool   added = found == messages_.end();
+    const size_t count = messages_.size() + (added ? 1 : 0);
+    const size_t total = codes_ - (added ? 0 : found->second.size()) + codes.size();
+    size_t       last = codes.size();
+
+    if (!messages_.empty() && messages_.rbegin()->first > id) {
+        last = messages_.rbegin()->second.size();
+    }
+    if (1 + count + total - last > INT16_MAX) {
+        return -1;
+    }
+
+    codes_ = total;
     messages_[id] = std::move(codes);
     dirty_ = true;
     return missing;
@@ -244,27 +263,19 @@ int GameTextFile::Set(int id, std::string_view utf8) {
 
 short *GameTextFile::Data() {
     if (dirty_) {
-        // ClsMes::GetTextLineDataTop finds a message at &buff[1 + count] plus its s16 offset, so
-        // the messages that would start past that reach are left out. SetBuff takes buff[1] as an
-        // offset to a text pointer nothing reads.
-        size_t count = 0;
-        size_t length = 0;
-        for (const auto &message : messages_) {
-            if (1 + messages_.size() + length > INT16_MAX) {
-                break;
-            }
-            length += message.second.size();
-            count++;
-        }
+        // SetBuff takes buff[1] as an offset to a text pointer nothing reads.
+        const size_t count = messages_.size();
 
         data_.assign(2 + count * 2, 0);
+        data_.reserve(data_.size() + codes_);
         data_[0] = static_cast<s16>(count);
 
-        auto message = messages_.begin();
-        for (size_t i = 0; i < count; i++, message++) {
-            data_[2 + i * 2] = static_cast<s16>(message->first);
-            data_[3 + i * 2] = static_cast<s16>(data_.size() - (1 + count));
-            data_.insert(data_.end(), message->second.begin(), message->second.end());
+        size_t entry = 0;
+        for (const auto &[id, codes] : messages_) {
+            data_[2 + entry * 2] = static_cast<s16>(id);
+            data_[3 + entry * 2] = static_cast<s16>(data_.size() - (1 + count));
+            data_.insert(data_.end(), codes.begin(), codes.end());
+            entry++;
         }
 
         dirty_ = false;
@@ -287,10 +298,13 @@ GameText::GameText() : colour_(FONT_COLOR_WHITE) {
 }
 
 int GameText::Set(std::string_view utf8) {
-    if (utf8 != text_ || mes_.mes_made < 0) {
+    if (!set_ || utf8 != text_) {
+        set_ = true;
         text_ = utf8;
         missing_ = file_.Set(0, utf8);
-        Layout();
+        if (missing_ >= 0 && !Layout()) {
+            missing_ = -1;
+        }
     }
 
     return missing_;
@@ -306,7 +320,7 @@ void GameText::SetColour(u32 colour) {
     }
 }
 
-void GameText::Layout() {
+bool GameText::Layout() {
     mes_.SetBuff(file_.Data());
     if (SystemMes != nullptr) {
         mes_.SetBuff_system(SystemMes);
@@ -315,6 +329,16 @@ void GameText::Layout() {
     mes_.clut_now = mes_.clut_default;
     mes_.mes_made = -1;
     mes_.MakeMesWin(0);
+
+    // A full table takes nothing more (SetMesWinTbl), so a text that did not fit lacks its end.
+    if (mes_.win_line_num > 0 && mes_.win_line[mes_.win_line_num - 1].code == MES_CODE_END) {
+        return true;
+    }
+
+    mes_.mes_made = -1;
+    mes_.text_len = 0;
+    mes_.text_width = 0;
+    return false;
 }
 
 void GameText::Draw(int x, int y, int alpha) {

@@ -86,3 +86,41 @@ TEST(GameText, FileReadsAsAMessageFile) {
     EXPECT_EQ(GameTextDecode(mes.GetTextLineDataTop(3)), "Mouse sensitivity\n0.10");
     EXPECT_EQ(mes.GetTextLineDataTop(4), nullptr);
 }
+
+TEST(GameText, WindowCapacity) {
+    GameText text;
+    EXPECT_EQ(text.Set(std::string(MES_WIN_LINE_MAX - 1, 'A')), 0);
+    EXPECT_EQ(text.Width(), (MES_WIN_LINE_MAX - 1) * 11);
+    EXPECT_EQ(text.Set(std::string(MES_WIN_LINE_MAX, 'A')), -1);
+    EXPECT_EQ(text.Width(), 0);
+    EXPECT_LT(text.Mes().mes_made, 0);
+    EXPECT_EQ(text.Mes().win_line_num, MES_WIN_LINE_MAX);
+
+    std::string lines = "A";
+    for (int line = 1; line < 11; line++) {
+        lines += "\nA";
+    }
+    EXPECT_EQ(text.Set(lines), 0);
+    EXPECT_EQ(text.Mes().text_rows, 11);
+    text.Draw(0, 0);
+}
+
+TEST(GameText, FileLimits) {
+    GameTextFile file;
+    EXPECT_EQ(file.Set(-0x8001, "A"), -1);
+    EXPECT_EQ(file.Set(0x8000, "A"), -1);
+    EXPECT_EQ(file.Set(-0x8000, "low"), 0);
+    EXPECT_EQ(file.Set(0x7FFF, "high"), 0);
+
+    // "high" comes last by id and starts 4 + 4 + (n + 1) codes past &buff[1 + count].
+    EXPECT_EQ(file.Set(0, std::string(0x7FF7, 'A')), -1);
+    EXPECT_EQ(file.Data()[0], 2);
+    EXPECT_EQ(file.Set(0, std::string(0x7FF6, 'A')), 0);
+
+    ClsMes mes;
+    mes.SetBuff(file.Data());
+    EXPECT_EQ(mes.buff[0], 3);
+    EXPECT_EQ(GameTextDecode(mes.GetTextLineDataTop(-0x8000)), "low");
+    EXPECT_EQ(GameTextDecode(mes.GetTextLineDataTop(0x7FFF)), "high");
+    EXPECT_EQ(GameTextDecode(mes.GetTextLineDataTop(0)).size(), 0x7FF6U);
+}

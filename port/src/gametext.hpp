@@ -31,10 +31,13 @@ int GameTextEncode(std::string_view utf8, std::vector<s16> &out);
 std::string GameTextDecode(const s16 *codes);
 
 // A message file of port text, laid out as ClsMes::SetBuff reads one: the count, then each
-// message's number and where its text starts, then the texts.
+// message's number and where its text starts, then the texts, all s16. So an id is -0x8000 to
+// 0x7FFF, and every message but the last (by id) has to start within 0x7FFF codes of the table's
+// middle, &buff[1 + count]: about 32,000 codes of text in all.
 class GameTextFile {
 public:
-    // Sets message id's text; gives back how many characters GameTextEncode replaced.
+    // Sets message id's text; gives back how many characters GameTextEncode replaced, or -1,
+    // leaving the file as it was, where the id or the file would not fit.
     int Set(int id, std::string_view utf8);
 
     // The file, for ClsMes::SetBuff; valid until the next Set.
@@ -43,6 +46,7 @@ public:
 private:
     std::map<int, std::vector<s16>> messages_;
     std::vector<s16>                data_;
+    size_t                          codes_ = 0;
     bool                            dirty_ = true;
 };
 
@@ -55,7 +59,9 @@ public:
     GameText(const GameText &) = delete;
     GameText &operator=(const GameText &) = delete;
 
-    // Lays the text out again when it changed; gives back how many characters became '?'.
+    // Lays the text out again when it changed; gives back how many characters became '?', or -1
+    // where it does not fit the window's MES_WIN_LINE_MAX laid-out characters (names and values
+    // that "{N}" codes name count as theirs), and then nothing draws and Width is 0.
     int Set(std::string_view utf8);
 
     // A FontColor, as FontColorTbl holds them; FONT_COLOR_WHITE until set.
@@ -73,11 +79,12 @@ public:
     ClsMes &Mes() { return mes_; }
 
 private:
-    void Layout();
+    bool Layout();
 
     ClsMes       mes_;
     GameTextFile file_;
     std::string  text_;
     u32          colour_;
     int          missing_ = 0;
+    bool         set_ = false;
 };

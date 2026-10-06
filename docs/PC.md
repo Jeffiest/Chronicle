@@ -803,6 +803,17 @@ text drawn as the menus draw their help line (`InitMenuMesSet`'s
 the text, `SetColour` a `FontColor`, then `Draw(x, y, alpha)` from a menu's
 draw function; `Width` gives its width for aligning a value.
 
+Both have retail's fixed sizes. A window lays out at most `MES_WIN_LINE_MAX`
+(720) characters, counting the end and what a `{N}` name, value or system
+message code expands to; retail's `SetMesWinTbl` writes on past the table, so
+the port's (`port/src/clsmes.cpp`) takes no more, and `GameText::Set` gives back
+-1, draws nothing and has a width of 0 for a text that did not fit. A line past
+the window's ten `line_pos` entries draws in the block layout, as a line
+without one does. A message file is s16 throughout: an id is -0x8000 to
+0x7FFF, and each message but the last (by id) must start within 0x7FFF codes
+of `&buff[1 + count]`; `GameTextFile::Set` gives back -1 and leaves the file
+as it was where either would not hold.
+
 ## Arenas
 
 `CDataAlloc2<1>::Alloc/Alloc64/Align64` and the carving in

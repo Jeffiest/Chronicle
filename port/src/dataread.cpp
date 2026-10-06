@@ -1,4 +1,5 @@
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +20,20 @@ namespace {
 
 std::unordered_map<std::string, fs::path> data_index;
 bool                                      data_indexed;
+bool                                      data_ntsc;
+
+// Only the PAL disc splits the editor's system pack into a common one and one per language.
+constexpr const char *kPalOnlyFile = "gedit/system/esys_cmn.pak";
+
+// Files the PAL code asks for under names the NTSC disc does not have, and the NTSC file that
+// holds the same thing.
+constexpr struct {
+    const char *pal;
+    const char *ntsc;
+} kNtscNames[] = {
+    {"meswin/mes_tex_1.pak", "meswin/mes_tex.pak"},
+    {"meswin/mes_tex_2.pak", "meswin/mes_tex.pak"},
+};
 BG_READ_INFO                              bg_read_info[32];
 
 // Everything up to the first colon is a device, as retail's LoadFile2 has it; sim: and host:
@@ -61,7 +76,16 @@ const fs::path *Lookup(std::string_view path) {
     if (!data_indexed) {
         InitCDFile();
     }
-    auto found = data_index.find(dcdata::FoldPath(StripDevice(path)));
+    std::string key = dcdata::FoldPath(StripDevice(path));
+    auto        found = data_index.find(key);
+    if (found == data_index.end() && data_ntsc) {
+        for (const auto &name : kNtscNames) {
+            if (key == name.pal) {
+                found = data_index.find(name.ntsc);
+                break;
+            }
+        }
+    }
     return found == data_index.end() ? nullptr : &found->second;
 }
 
@@ -112,7 +136,13 @@ PC_OVERRIDE void InitCDFile() {
         NoData(root, "is empty");
     }
     data_indexed = true;
+    data_ntsc = data_index.find(kPalOnlyFile) == data_index.end();
+    std::fprintf(stderr, "data: %s disc\n", data_ntsc ? "NTSC" : "PAL");
     CheckAgainstIndex(root);
+}
+
+bool PortNtscData() {
+    return data_ntsc;
 }
 
 PC_OVERRIDE int LoadFile(char *path, void *buffer, int *out_size) {

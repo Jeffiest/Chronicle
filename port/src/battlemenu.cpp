@@ -1,6 +1,8 @@
 #include "battlemenu.hpp"
 
 #include "clsmes.hpp"
+#include "dataread.hpp"
+#include "dataread_port.hpp"
 #include "memcard.hpp"
 #include "menu_draw.hpp"
 #include "menu_manual.hpp"
@@ -11,6 +13,9 @@
 #include "snd.hpp"
 #include "texture.hpp"
 #include "weaponlevelup.hpp"
+
+// The bodies are retail's, which pass string literals as char *.
+#pragma clang diagnostic ignored "-Wwritable-strings"
 
 // BattleMenuDraw is replaced only to drop retail's VU1 program call; the renderer has no programs.
 // The static helpers it calls cannot be reached from here, so they are carried over as retail has
@@ -311,4 +316,70 @@ PC_OVERRIDE void BattleMenuDraw() {
     }
 
     setbilinear(1);
+}
+
+namespace {
+
+// battlemenu.cpp's, which is static there.
+void BtlMenuTexBlockEnter() {
+    MenuCharaFace = TexManager.GetTexture("charaface", BtlMenuReadBlock);
+    BtStatus = TexManager.GetTexture("btstatus2", BtlMenuReadBlock);
+    WepIcon = TexManager.GetTexture("wepicon", -1);
+    ItemIcon = TexManager.GetTexture("itemicon", BtlMenuReadBlock);
+    PerBoardTex = TexManager.GetTexture("perbrd", BtlMenuReadBlock);
+    WepStatus = TexManager.GetTexture("wepstatus", BtlMenuExtBlock);
+    VillageName = TexManager.GetTexture("vilname", -1);
+    VillageBar = TexManager.GetTexture("viltag", -1);
+}
+
+} // namespace
+
+// The PAL disc keeps the weapon status sheet in its own image, btlmenu2.img, loaded into the
+// extension block; the NTSC disc has it inside btlmenu.img. Every lookup of it (the static
+// BtlMenuTexBlockEnter, called from all over the menu) asks the extension block, so on NTSC data
+// the sheet is filed under that block once btlmenu.img is in.
+PC_OVERRIDE void BattleMenuTexEnter() {
+    LOADTEXTURE_INFO2 textures[6] = {
+        {"#frame_image#640#480#4",   0, 0},
+        {"#dbgwork_menu#256#256#3",  0, 0},
+        {NULL,                       0, 0},
+        {"#frame_image_2#640#480#4", 0, 0},
+        {NULL,                       0, 0},
+        {NULL,                       0, 0}
+    };
+
+    textures[0].block_no = BtlMenuReadBlock;
+    textures[1].block_no = BtlMenuReadBlock;
+    textures[2].block_no = BtlMenuReadBlock;
+    textures[3].block_no = BtlMenuExtBlock;
+    textures[4].block_no = BtlMenuExtBlock;
+    BG_READ_INFO *file = GetReadBGFile(0);
+    textures[2].name = (char *) GetPackFile((u_int *) file->buffer, "btlmenu.img", NULL);
+
+    if (!PortNtscData()) {
+        textures[4].name = (char *) GetPackFile((u_int *) file->buffer, "btlmenu2.img", NULL);
+    }
+
+    int blocks[3] = {0, 0, -1};
+    blocks[0] = BtlMenuReadBlock;
+    blocks[1] = BtlMenuExtBlock;
+    MenuTextureDelete(blocks);
+    TexManager.CleanUpTextureList();
+    TexManager.LoadTextureBlockEX(-1, textures);
+
+    if (PortNtscData()) {
+        int handle = TexManager.GetTextureHandle("wepstatus", BtlMenuReadBlock);
+
+        if (handle >= 0) {
+            TexManager.GetTexture(handle)->block = BtlMenuExtBlock;
+        }
+    }
+
+    BtlMenuTexBlockEnter();
+    GetAtraMsgReadBuf = (short *) GetPackFile((u_int *) file->buffer, "atrames.bin", NULL);
+    short *mes = (short *) GetPackFile((u_int *) file->buffer, "allmenu.mes", NULL);
+    InitMenuMesSet(MENU_MES_SET_ALLMENU, mes);
+    CommonMenuMes2.stay_frame = false;
+    BtlMenuReadEndFlag = 1;
+    MenuMes.SetBuffInfo(mes);
 }

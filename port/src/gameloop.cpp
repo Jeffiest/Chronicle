@@ -1,4 +1,5 @@
 #include "gameloop.hpp"
+#include "dataread_port.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -669,6 +670,9 @@ int RunGame(int argc, char **argv) {
     main_select_menu_no = 0;
     std::strcpy(main_select_param, "e01");
     InitCDFile();
+    if (PortNtscData() && LanguageCode == LANG_ENGLISH_UK) {
+        LanguageCode = LANG_ENGLISH_US;
+    }
     MGInit();
     InitMemoryFile();
     BufferAllClear();

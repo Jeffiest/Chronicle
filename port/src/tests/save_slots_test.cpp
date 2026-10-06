@@ -330,6 +330,84 @@ TEST(SaveSlots, StateKeepsTheLastSaveAndTheClearFlag) {
     fs::remove_all(root);
 }
 
+TEST(SaveSlots, LoadingAnOlderSaveKeepsEndingState) {
+    fs::path root = UseTempSaveRoot();
+    PrepareSave();
+    ConfigWord(kGameClear) = 0;
+    g_mc.SetBuff(g_menu_buffer);
+    ASSERT_EQ(SaveNew(2), 1);
+    std::vector<char> image = ReadSave(root, 2);
+
+    // The real ending operation writes only state, leaving the pre-ending image unchanged.
+    ConfigWord(kGameClear) = 1;
+    ConfigWord(kLastFile) = 8;
+    SaveMenu.mode = SAVE_MENU_MODE_ENDING;
+    SaveMenu.access_kind = SAVE_ACCESS_SAVE;
+    SaveMenu.key_no = SAVE_KEY_SAVE_ENDING;
+    SaveMenuFunc[SaveMenu.key_no]();
+    ASSERT_EQ(SaveMenu.key_no, SAVE_KEY_END_SAVE_ENDING);
+    SaveState state;
+    ASSERT_TRUE(SaveStateRead(SaveStatePath(), state));
+    ASSERT_TRUE(state.game_clear);
+    ASSERT_EQ(state.last_save, 9);
+
+    g_mc.file_no = 2;
+    ASSERT_EQ(RunOperation(g_mc, MC_OPERATION_LOAD), 1);
+    ASSERT_EQ(ConfigWord(kGameClear), 0);
+    ASSERT_EQ(ReadSave(root, 2), image);
+    ASSERT_TRUE(SaveStateRead(SaveStatePath(), state));
+    ASSERT_TRUE(state.game_clear);
+    ASSERT_EQ(state.last_save, 3);
+
+    // Fresh title-equivalent state must still unlock the cleared game after this load.
+    ConfigWord(kGameClear) = 0;
+    ConfigWord(kLastFile) = -1;
+    ASSERT_EQ(RunOperation(g_mc, MC_OPERATION_LOAD_CONFIG), 1);
+    ASSERT_EQ(ConfigWord(kGameClear), 1);
+    ASSERT_EQ(ConfigWord(kLastFile), 2);
+
+    // Explicit no-clear state remains authoritative too, even in a cleared session.
+    ConfigWord(kGameClear) = 0;
+    SaveMenu.key_no = SAVE_KEY_SAVE_ENDING;
+    SaveMenuFunc[SaveMenu.key_no]();
+    ASSERT_EQ(SaveMenu.key_no, SAVE_KEY_END_SAVE_ENDING);
+    ConfigWord(kGameClear) = 1;
+    ASSERT_EQ(RunOperation(g_mc, MC_OPERATION_LOAD), 1);
+    ASSERT_TRUE(SaveStateRead(SaveStatePath(), state));
+    ASSERT_FALSE(state.game_clear);
+
+    fs::remove_all(root);
+}
+
+TEST(SaveSlots, LoadCursorFallsBackToPreLoadSessionState) {
+    fs::path root = UseTempSaveRoot();
+    PrepareSave();
+    ConfigWord(kGameClear) = 0;
+    g_mc.SetBuff(g_menu_buffer);
+    ASSERT_EQ(SaveNew(0), 1);
+    g_mc.file_no = 0;
+
+    for (const char *text : {"", "malformed", "[]", "{}", R"({"game_clear":1})"}) {
+        for (int clear : {0, 1}) {
+            fs::remove(SaveStatePath());
+            if (*text) {
+                std::string content = text;
+                WriteFile(SaveStatePath(), {content.begin(), content.end()});
+            }
+            ConfigWord(kGameClear) = clear;
+            ConfigWord(kLastFile) = 8;
+            ASSERT_EQ(RunOperation(g_mc, MC_OPERATION_LOAD), 1) << text;
+            ASSERT_EQ(ConfigWord(kGameClear), 0);
+            SaveState state;
+            ASSERT_TRUE(SaveStateRead(SaveStatePath(), state));
+            ASSERT_EQ(state.game_clear, clear != 0) << text;
+            ASSERT_EQ(state.last_save, 1);
+        }
+    }
+
+    fs::remove_all(root);
+}
+
 TEST(SaveSlots, UnusableFilesStayAndKeepTheirNumbers) {
     fs::path root = UseTempSaveRoot();
     PrepareSave();
@@ -406,7 +484,11 @@ TEST(SaveSlots, FailedPublicationKeepsOccupiedFolders) {
     ASSERT_TRUE(ReadSave(root, 0) == image && fs::is_directory(SlotOf(root, 0) / "extra"));
     ASSERT_TRUE(fs::is_regular_file(SlotOf(root, 1) / "save.dat"));
     g_mc.file_no = 0;
+    MapNoOf(g_save) = 7;
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_LOAD) == 1);
+    ASSERT_EQ(MapNoOf(g_save), 42);
+    ASSERT_EQ(ConfigWord(kLastFile), 0);
+    ASSERT_TRUE(fs::is_directory(root / "saves" / "state.json"));
     fs::remove_all(root);
 }
 

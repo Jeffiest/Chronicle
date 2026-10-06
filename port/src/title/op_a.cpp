@@ -110,6 +110,8 @@ static void setCloudTexScroll();
 void FaceChange(int actor_no);
 void LoadCharaData(int buffer_no, int actor_no);
 void LoadMotionData();
+/* The port's buffer for each dancer's next step, which retail keeps in read_buffer (op_b.cpp). */
+u_int *OpeningDancePack(int dancer);
 
 /* Each of the couple's motion files is one key range — the frame it starts at and the frame it ends
    at — written straight over the character's own first key, so that a file loaded in the background
@@ -172,8 +174,8 @@ PC_OVERRIDE void OpA_InitProcess() {
     CSnd.SE_Play(MIDI_PORT_SE_TITLE, 16, 20, 0, 0);
     wait_now_loading_vsync();
     SetDanceMotion();
-    LoadFile("opdat/chara/01p19a1b.chr", (void *) ((char *) read_buffer + 0x10C900), 0);
-    LoadFile("opdat/chara/01p17a1b.chr", (void *) read_buffer, 0);
+    LoadFile("opdat/chara/01p19a1b.chr", (void *) OpeningDancePack(0), 0);
+    LoadFile("opdat/chara/01p17a1b.chr", (void *) OpeningDancePack(1), 0);
     StartReadBG();
     DanceWait = 0.0f;
     DanceCnt = 1;
@@ -735,7 +737,8 @@ PC_OVERRIDE void OpA_DrawProcess() {
         case 10:
         case 24:
         case 25: {
-            float dof[] = {50.0f};
+            // DepthOfField projects both distances at every level.
+            float dof[2] = {50.0f, 50.0f};
 
             DepthOfField(dof, 1, 56, 0);
         } break;

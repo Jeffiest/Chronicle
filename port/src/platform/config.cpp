@@ -86,6 +86,34 @@ const char *PresentModeName(ConfigPresentMode mode) {
     }
 }
 
+bool ReadFpsDetail(const Json &value, ConfigFpsDetail &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    std::string detail = Lower(value.get<std::string>());
+    if (detail == "fps") {
+        out = ConfigFpsDetail::Fps;
+    } else if (detail == "ticks") {
+        out = ConfigFpsDetail::Ticks;
+    } else if (detail == "all") {
+        out = ConfigFpsDetail::All;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+const char *FpsDetailName(ConfigFpsDetail detail) {
+    switch (detail) {
+        case ConfigFpsDetail::Fps:
+            return "fps";
+        case ConfigFpsDetail::Ticks:
+            return "ticks";
+        default:
+            return "all";
+    }
+}
+
 // The double that prints as the float does: 0.1f as 0.1, not 0.10000000149011612.
 double Shortest(float value) {
     return std::stod(std::format("{}", value));
@@ -104,6 +132,22 @@ bool ReadAspect(const Json &value, ConfigAspect &out) {
         return false;
     }
     return true;
+}
+
+constexpr const char *kGyroNames[] = {"off", "always", "first_person", "held"};
+
+bool ReadGyro(const Json &value, ConfigGyro &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    std::string gyro = Lower(value.get<std::string>());
+    for (std::size_t i = 0; i < std::size(kGyroNames); ++i) {
+        if (gyro == kGyroNames[i]) {
+            out = static_cast<ConfigGyro>(i);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool ReadList(const Json &value, std::vector<std::string> &out) {
@@ -226,6 +270,21 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         config.stick_sensitivity = sensitivity;
         return true;
     }
+    if (name == "input.gyro") {
+        return ReadGyro(value, config.gyro);
+    }
+    if (name == "input.stick_invert_x") {
+        return ReadBool(value, config.stick_invert_x);
+    }
+    if (name == "input.stick_invert_y") {
+        return ReadBool(value, config.stick_invert_y);
+    }
+    if (name == "input.gyro_invert_x") {
+        return ReadBool(value, config.gyro_invert_x);
+    }
+    if (name == "input.gyro_invert_y") {
+        return ReadBool(value, config.gyro_invert_y);
+    }
     if (name == "input.gyro_sensitivity") {
         float sensitivity = 0.0f;
         if (!ReadNumber(value, sensitivity) || !(sensitivity > 0.0f) || !std::isfinite(sensitivity)) {
@@ -240,6 +299,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "input.mouse_capture") {
         return ReadBool(value, config.mouse_capture);
     }
+    if (name == "input.mouse_zoom") {
+        return ReadBool(value, config.mouse_zoom);
+    }
     if (name == "input.mouse_release") {
         return ReadList(value, config.mouse_release_keys);
     }
@@ -253,6 +315,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         }
         config.tick_rate = rate;
         return true;
+    }
+    if (name == "game.qte_always_win") {
+        return ReadBool(value, config.qte_always_win);
     }
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
@@ -303,6 +368,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     }
     if (name == "video.show_fps") {
         return ReadBool(value, config.show_fps);
+    }
+    if (name == "video.fps_detail") {
+        return ReadFpsDetail(value, config.fps_detail);
     }
     if (name == "video.detail_distance") {
         float distance = 0.0f;
@@ -411,6 +479,7 @@ std::string ConfigSerialize(const Config &config) {
     Json root;
     root["game"]["tick_rate"] = config.tick_rate;
     root["game"]["debug_mode"] = config.debug_mode;
+    root["game"]["qte_always_win"] = config.qte_always_win;
     const ConfigGameOptions &options = config.options;
     root["game"]["save_cursor_position"] = options.save_cursor_position;
     root["game"]["message_speed"] = options.fast_messages ? "fast" : "normal";
@@ -430,6 +499,7 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["aspect"] = config.aspect == ConfigAspect::FourThree ? "4:3" : "auto";
     root["video"]["ui_scale"] = Shortest(config.ui_scale);
     root["video"]["show_fps"] = config.show_fps;
+    root["video"]["fps_detail"] = FpsDetailName(config.fps_detail);
     root["video"]["detail_distance"] = Shortest(config.detail_distance);
     root["video"]["shadow_distance"] = Shortest(config.shadow_distance);
     root["video"]["soft_focus"] = options.soft_focus;
@@ -439,9 +509,15 @@ std::string ConfigSerialize(const Config &config) {
     root["audio"]["soundtrack"] = config.soundtrack ? "custom" : "ps2";
     root["input"]["mouse_sensitivity"] = Shortest(config.mouse_sensitivity);
     root["input"]["stick_sensitivity"] = Shortest(config.stick_sensitivity);
+    root["input"]["stick_invert_x"] = config.stick_invert_x;
+    root["input"]["stick_invert_y"] = config.stick_invert_y;
+    root["input"]["gyro"] = kGyroNames[static_cast<std::size_t>(config.gyro)];
     root["input"]["gyro_sensitivity"] = Shortest(config.gyro_sensitivity);
+    root["input"]["gyro_invert_x"] = config.gyro_invert_x;
+    root["input"]["gyro_invert_y"] = config.gyro_invert_y;
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
+    root["input"]["mouse_zoom"] = config.mouse_zoom;
     root["input"]["mouse_release"] = config.mouse_release_keys;
     root["input"]["vibration"] = options.vibration;
     root["input"]["bindings"] = std::move(bindings);

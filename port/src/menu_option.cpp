@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "clsmes.hpp"
@@ -70,6 +71,7 @@ constexpr int kValueRight = 554;
 constexpr int kBarX = 580;
 constexpr int kExitX = 136;
 constexpr int kExitY = 352;
+constexpr int kExitHeight = 31;
 // A help window's frame round its middle (MenuHelpWinDraw): 24 pixels a side and 22 above and below.
 constexpr int kPlateSide = 24;
 constexpr int kPlateHeight = 44;
@@ -161,10 +163,11 @@ int Nearest(std::span<const double> choices, double value) {
     return best;
 }
 
-struct Resolution {
-    int width;
-    int height;
-};
+using Resolution = OptionResolution;
+
+// The smallest size the list offers from the display's own modes.
+constexpr int kMinWidth = 800;
+constexpr int kMinHeight = 600;
 
 // 0x0 is the monitor's resolution.
 constexpr Resolution kResolutions[] = {
@@ -193,12 +196,8 @@ void ListResolutions() {
     int           width = 0;
     int           height = 0;
     bool          known = WindowDisplaySize(width, height, !config.fullscreen && !Desktop(config));
-    g_sizes.clear();
-    for (const Resolution &size : kResolutions) {
-        if (!known || (size.width <= width && size.height <= height)) {
-            g_sizes.push_back(size);
-        }
-    }
+    g_sizes = OptionResolutionList(WindowDisplayModes(), config.window_width, config.window_height, known, width,
+                                   height);
 }
 
 int ResolutionChoice(const Config &config) {
@@ -293,6 +292,20 @@ void SetPresentMode(Config &config, int choice) {
     config.present_mode = kPresentModes[choice];
 }
 
+constexpr ConfigFpsDetail kFpsDetails[] = {ConfigFpsDetail::Fps, ConfigFpsDetail::Ticks, ConfigFpsDetail::All};
+
+int FpsDetailCount(const Config &) {
+    return static_cast<int>(std::size(kFpsDetails));
+}
+
+int FpsDetailChoice(const Config &config) {
+    return static_cast<int>(std::ranges::find(kFpsDetails, config.fps_detail) - std::begin(kFpsDetails));
+}
+
+void SetFpsDetail(Config &config, int choice) {
+    config.fps_detail = kFpsDetails[choice];
+}
+
 int MaxFpsCount(const Config &) {
     return static_cast<int>(std::size(kMaxFps));
 }
@@ -377,6 +390,72 @@ void RestoreMouseSensitivity(Config &config, const Config &defaults) {
     config.mouse_sensitivity = defaults.mouse_sensitivity;
 }
 
+constexpr const char *kZoomResetBindings[] = {"Mouse3", "Mouse4", "Mouse5", "Home", ""};
+constexpr const char *kZoomResetNames[] = {"Middle Mouse", "Mouse4", "Mouse5", "Home", "Disabled"};
+
+const std::vector<std::string> &ZoomResetBindings(const Config &config) {
+    static const std::vector<std::string> defaults = {"Mouse3"};
+    auto                                  binding = std::ranges::find(config.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    return binding == config.key_bindings.end() ? defaults : binding->keys;
+}
+
+int ZoomResetChoice(const Config &config) {
+    const auto &keys = ZoomResetBindings(config);
+    if (keys.empty()) {
+        return 4;
+    }
+    for (int choice = 0; choice < 4; ++choice) {
+        if (keys.size() == 1 && keys.front() == kZoomResetBindings[choice]) {
+            return choice;
+        }
+    }
+    return 5; // The file's custom binding remains a selectable choice until explicitly changed.
+}
+
+int ZoomResetCount(const Config &config) { return ZoomResetChoice(config) == 5 ? 6 : 5; }
+
+void SetZoomReset(Config &config, int choice) {
+    if (choice < 0 || choice >= 5) {
+        return;
+    }
+    auto                     binding = std::ranges::find(config.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    std::vector<std::string> keys;
+    if (choice < 4) {
+        keys.push_back(kZoomResetBindings[choice]);
+    }
+    if (binding == config.key_bindings.end()) {
+        config.key_bindings.push_back({"zoom_reset", std::move(keys)});
+    } else {
+        binding->keys = std::move(keys);
+    }
+}
+
+std::string ZoomResetText(const Config &config) {
+    int choice = ZoomResetChoice(config);
+    if (choice < 5) {
+        return kZoomResetNames[choice];
+    }
+    std::string text;
+    for (const auto &key : ZoomResetBindings(config)) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+        text += key;
+    }
+    return text;
+}
+
+void RestoreZoomReset(Config &config, const Config &defaults) {
+    auto binding = std::ranges::find(config.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    if (binding != config.key_bindings.end()) {
+        config.key_bindings.erase(binding);
+    }
+    auto default_binding = std::ranges::find(defaults.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    if (default_binding != defaults.key_bindings.end()) {
+        config.key_bindings.push_back(*default_binding);
+    }
+}
+
 // 0.50 to 2.50 in twentieths.
 int StickSensitivityCount(const Config &) {
     return 41;
@@ -397,6 +476,18 @@ std::string StickSensitivityText(const Config &config) {
 
 void RestoreStickSensitivity(Config &config, const Config &defaults) {
     config.stick_sensitivity = defaults.stick_sensitivity;
+}
+
+int GyroCount(const Config &) {
+    return 4;
+}
+
+int GyroChoice(const Config &config) {
+    return static_cast<int>(config.gyro);
+}
+
+void SetGyro(Config &config, int choice) {
+    config.gyro = static_cast<ConfigGyro>(choice);
 }
 
 int GyroSensitivityCount(const Config &) {
@@ -431,8 +522,10 @@ const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::player_damage, true>("game.player_damage", "Party Damage", "On|Off", 0x166),
     GameRow<&ConfigGameOptions::enemy_hp, true>("game.enemy_hp", "Enemy HP", "On|Off", 0x167),
     GameRow<&ConfigGameOptions::names, true>("game.names", "Names", "On|Off", 0x168),
-    OnOffRow<&Config::discord_rich_presence>("discord.rich_presence", "Enable Discord Rich Presence",
+    OnOffRow<&Config::discord_rich_presence>("discord.rich_presence", "Enable Discord",
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
+    OnOffRow<&Config::qte_always_win>("game.qte_always_win", "Always Win QTEs",
+                                      "\"Always Win QTEs\"\nButton prompts always\nend in a perfect."),
 };
 
 const Row kDisplayRows[] = {
@@ -453,6 +546,9 @@ const Row kDisplayRows[] = {
     OnOffRow<&Config::interpolation>("video.interpolation", "Smooth Motion",
                                      "\"Smooth Motion\"\nDraws frames between\nthe game's steps."),
     OnOffRow<&Config::show_fps>("video.show_fps", "FPS Counter", "\"FPS Counter\"\nShows the frame rate\nin the corner."),
+    Row{"video.fps_detail", "FPS Info",
+        "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.", -1, FpsDetailCount,
+        FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"},
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
 };
 
@@ -474,12 +570,26 @@ const Row kControlRows[] = {
         RestoreMouseSensitivity},
     OnOffRow<&Config::mouse_invert_y>("input.mouse_invert_y", "Invert Mouse Y",
                                       "\"Invert Mouse Y\"\nMoving the mouse up\nlooks down."),
+    OnOffRow<&Config::mouse_zoom>("input.mouse_zoom", "Mouse Wheel Zoom",
+                                  "\"Mouse Wheel Zoom\"\nScroll to move closer\nor farther from your\ncharacter."),
+    Row{"input.bindings.zoom_reset", "Reset Zoom", "\"Reset Zoom\"\nRestores the normal\ncamera distance.",
+        -1, ZoomResetCount, ZoomResetChoice, SetZoomReset, ZoomResetText, nullptr, RestoreZoomReset},
     Row{"input.stick_sensitivity", "Stick Sensitivity", "\"Stick Sensitivity\"\nHow far a gamepad's\nstick has to tilt.",
         -1, StickSensitivityCount, StickSensitivityChoice, SetStickSensitivity, StickSensitivityText, nullptr,
         RestoreStickSensitivity},
+    OnOffRow<&Config::stick_invert_x>("input.stick_invert_x", "Invert Stick X",
+                                      "\"Invert Stick X\"\nFlips the camera's\nleft and right."),
+    OnOffRow<&Config::stick_invert_y>("input.stick_invert_y", "Invert Stick Y",
+                                      "\"Invert Stick Y\"\nFlips the camera's\nup and down."),
+    Row{"input.gyro", "Gyro", "\"Gyro\"\nWhen tilting the pad\nturns the camera.", -1, GyroCount, GyroChoice, SetGyro,
+        nullptr, "Off|Always|First Person|While Held"},
     Row{"input.gyro_sensitivity", "Gyro Sensitivity", "\"Gyro Sensitivity\"\nHow fast tilting\nturns the camera.",
         -1, GyroSensitivityCount, GyroSensitivityChoice, SetGyroSensitivity, GyroSensitivityText, nullptr,
         RestoreGyroSensitivity},
+    OnOffRow<&Config::gyro_invert_x>("input.gyro_invert_x", "Invert Gyro X",
+                                     "\"Invert Gyro X\"\nFlips the gyro's\nleft and right."),
+    OnOffRow<&Config::gyro_invert_y>("input.gyro_invert_y", "Invert Gyro Y",
+                                     "\"Invert Gyro Y\"\nFlips the gyro's\nup and down."),
 };
 
 // A page of the screen. Every page so far is a list of rows; one that needs its own layout, such as
@@ -872,7 +982,7 @@ void RunMouse() {
             over_row = r;
         }
     }
-    if (Inside(x, y, kExitX, kExitY, kExitX + 60, kExitY + 29)) {
+    if (Inside(x, y, kExitX, kExitY, kExitX + 60, kExitY + kExitHeight)) {
         over_row = rows;
     }
     for (int t = 0; t < kTabCount; ++t) {
@@ -1032,12 +1142,15 @@ void DrawScrollBar(int alpha) {
                      alpha);
 }
 
+constexpr int   kBracketBeats = 30;
+constexpr float kBracketClose = 4.0f;
+
 // Retail's bracket corners round the chosen part, and its bobbing hand left of them or at the
 // mouse's pointer.
 void DrawCursor(int left, int right, int top, int alpha, int hand_left = -1) {
     static int bracket_count = 0;
     static int hand_count = 0;
-    float      pulse = 0.2f * bracket_count;
+    float      pulse = kBracketClose * static_cast<float>(bracket_count) / static_cast<float>(kBracketBeats - 1);
     int        x0 = static_cast<int>(left + pulse);
     int        x1 = static_cast<int>(right - pulse);
     int        y0 = static_cast<int>(top + pulse);
@@ -1046,7 +1159,7 @@ void DrawCursor(int left, int right, int top, int alpha, int hand_left = -1) {
     DrawSprite(x1, y0, 0xC2, 0xF8, 16, 16, alpha);
     DrawSprite(x0, y1, 0xB2, 0x108, 16, 16, alpha);
     DrawSprite(x1, y1, 0xC2, 0x108, 16, 16, alpha);
-    bracket_count = (bracket_count + 1) % 30;
+    bracket_count = (bracket_count + 1) % kBracketBeats;
 
     float target_x = static_cast<float>(hand_left >= 0 ? hand_left : left - 38);
     float target_y = static_cast<float>(top + 9);
@@ -1084,6 +1197,45 @@ void WriteOptions(CSaveData &save, const ConfigGameOptions &options) {
 }
 
 } // namespace
+
+int OptionZoomResetChoice(const Config &config) { return ZoomResetChoice(config); }
+
+int OptionZoomResetCount(const Config &config) { return ZoomResetCount(config); }
+
+std::string OptionZoomResetText(const Config &config) { return ZoomResetText(config); }
+
+void OptionSetZoomReset(Config &config, int choice) { SetZoomReset(config, choice); }
+
+void OptionRestoreZoomReset(Config &config, const Config &defaults) { RestoreZoomReset(config, defaults); }
+
+std::vector<OptionResolution> OptionResolutionList(std::span<const DisplayModeSize> modes, int configured_width,
+                                                   int configured_height, bool display_known, int display_width,
+                                                   int display_height) {
+    std::vector<OptionResolution> sizes(std::begin(kResolutions), std::end(kResolutions));
+    for (const DisplayModeSize &mode : modes) {
+        if (mode.width >= kMinWidth && mode.height >= kMinHeight) {
+            sizes.push_back({mode.width, mode.height});
+        }
+    }
+    bool configured = configured_width > 0 && configured_height > 0;
+    if (configured) {
+        sizes.push_back({configured_width, configured_height});
+    }
+    // Desktop stays first; the rest run from the smallest area, narrower first.
+    std::sort(sizes.begin() + 1, sizes.end(), [](const OptionResolution &a, const OptionResolution &b) {
+        return std::pair(a.width * a.height, a.width) < std::pair(b.width * b.height, b.width);
+    });
+    std::vector<OptionResolution> listed;
+    for (const OptionResolution &size : sizes) {
+        bool fits = !display_known || (size.width <= display_width && size.height <= display_height) ||
+                    (configured && size.width == configured_width && size.height == configured_height);
+        bool again = !listed.empty() && listed.back().width == size.width && listed.back().height == size.height;
+        if (fits && !again) {
+            listed.push_back(size);
+        }
+    }
+    return listed;
+}
 
 bool MenuOptionOpen() {
     return g_screen.open;
@@ -1274,7 +1426,7 @@ PC_OVERRIDE void DrawMenuOption() {
     DrawTabPlate(alpha);
     DrawScrollBar(alpha);
     MenuTextureReload(g_screen.block_no);
-    DrawSprite(kExitX, kExitY, 452, 224, 60, 29, alpha);
+    DrawSprite(kExitX, kExitY, 452, 224, 60, kExitHeight, alpha);
 
     if (g_screen.step == OPTION_STEP_RUN) {
         // The brackets go round whatever a click would act on.

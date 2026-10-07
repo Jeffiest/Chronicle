@@ -11,9 +11,23 @@ enum class ConfigPresentMode {
     Immediate,
 };
 
+// What the FPS counter shows: the frame rate alone, with the logic ticks, or all of it with the draws.
+enum class ConfigFpsDetail {
+    Fps,
+    Ticks,
+    All,
+};
+
 enum class ConfigAspect {
     Auto,
     FourThree,
+};
+
+enum class ConfigGyro {
+    Off,
+    Always,
+    FirstPerson,
+    Held,
 };
 
 struct ConfigKeyBinding {
@@ -47,6 +61,7 @@ struct ConfigGameOptions {
 struct Config {
     double            tick_rate = 60.0;
     bool              debug_mode = false;
+    bool              qte_always_win = false;
     ConfigPresentMode present_mode = ConfigPresentMode::Fifo;
     bool              interpolation = true;
     double            max_fps = 0.0;
@@ -57,6 +72,7 @@ struct Config {
     ConfigAspect                  aspect = ConfigAspect::Auto;
     float                         ui_scale = 1.0f;
     bool                          show_fps = true;
+    ConfigFpsDetail               fps_detail = ConfigFpsDetail::All;
     float                         detail_distance = 0.0f;
     float                         shadow_distance = 0.0f;
     float                         master_volume = 1.0f;
@@ -64,11 +80,17 @@ struct Config {
     // audio.soundtrack "custom": play recordings from soundtrack/ beside save/ and data/.
     bool                          soundtrack = false;
     std::vector<ConfigKeyBinding> key_bindings;
-    float                         mouse_sensitivity = 0.1f;
+    float                         mouse_sensitivity = 0.2f;
     float                         stick_sensitivity = 1.33f;
+    bool                          stick_invert_x = false;
+    bool                          stick_invert_y = false;
+    ConfigGyro                    gyro = ConfigGyro::Held;
     float                         gyro_sensitivity = 0.5f;
+    bool                          gyro_invert_x = false;
+    bool                          gyro_invert_y = false;
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
+    bool                          mouse_zoom = false;
     std::vector<std::string>      mouse_release_keys = {"Escape"};
     ConfigGameOptions             options;
     bool                          discord_rich_presence = true;

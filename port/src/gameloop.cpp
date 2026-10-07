@@ -12,10 +12,13 @@
 #include "btsysscript.hpp"
 #include "dataread.hpp"
 #include "dataset.hpp"
+#include "draw2d_port.hpp"
 #include "dun/gameloop.hpp"
+#include "editloop.hpp"
 #include "exitcodes.hpp"
 #include "gamemode.hpp"
 #include "gamepad.hpp"
+#include "gametext.hpp"
 #include "langset.hpp"
 #include "main.hpp"
 #include "mainselect.hpp"
@@ -31,6 +34,7 @@
 #include "presence.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
+#include "texture.hpp"
 #include "title/opening.hpp"
 #include "title/rushmovi.hpp"
 #include "title/title.hpp"
@@ -40,6 +44,8 @@ int  EditLoop();
 void SndInit();
 
 extern s32 mode;
+extern s32 gameTask;
+extern int viewMode;
 extern s32 mc_mode;
 extern s32 NextMapNo;
 
@@ -83,6 +89,8 @@ struct FpsOverlay {
     std::string         text;
     gfx::LogicalMapping mapping = {};
     gfx::DisplayListRef list;
+    // The message font's texture the list was recorded with, 0 for the port's own font.
+    u_long font = 0;
 };
 
 FpsOverlay g_fps;
@@ -98,17 +106,66 @@ bool SameMapping(const gfx::LogicalMapping &a, const gfx::LogicalMapping &b) {
            a.offset_y == b.offset_y && a.pixel_width == b.pixel_width && a.pixel_height == b.pixel_height;
 }
 
-// Recorded again only when the text or the window's mapping changed.
+// The message font's gaiji texture while a mode has all of the message font's textures loaded,
+// else nullptr.
+CTexture *MessageFont() {
+    CTexture *gaiji = TexManager.GetTexture(const_cast<char *>("gaiji"), -1);
+    if (gaiji == nullptr || TexManager.GetTexture(const_cast<char *>("fontbase"), -1) == nullptr ||
+        TexManager.GetTexture(const_cast<char *>("syst04"), -1) == nullptr) {
+        return nullptr;
+    }
+    return gaiji;
+}
+
+// The counter's line in the game's message font, drawn as the menus draw their text but into a
+// display list of its own, at the top-left corner of what the window shows. Null where the font
+// cannot lay it out.
+gfx::DisplayListRef RecordFpsInGameFont(const std::string &line) {
+    static GameText *text = [] {
+        auto *made = new GameText;
+        made->KeepGameRandom(true);
+        return made;
+    }();
+    if (text->Set(line) < 0) {
+        return nullptr;
+    }
+    gfx::BeginRecording();
+    if (!gfx::Recording()) {
+        return nullptr;
+    }
+    // Drawing the text sets the sprite filter and the texture block as the menus' text does. The
+    // game's next tick takes both as it left them, so they are put back as they were.
+    const int bilinear = PortBilinear();
+    const int block = TexManager.last_block;
+    {
+        gfx::UiAnchorScope anchor(gfx::UiAnchor::Side(-1, -1));
+        text->Draw(6, 2);
+    }
+    setbilinear(bilinear);
+    TexManager.last_block = block;
+    return gfx::EndRecording();
+}
+
+// Recorded again only when the text, the window's mapping or the message font changed. The game's
+// message font while a mode has it loaded, the overlay's own 5x7 font otherwise (loading screens,
+// the moments between modes): the font draws the same words either way.
 const gfx::DisplayList *FpsOverlayList() {
     if (!g_fps.on) {
         return nullptr;
     }
     std::string         text = GameFpsText();
     gfx::LogicalMapping mapping = gfx::GetLogicalMapping(gfx::kMainTarget);
-    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping)) {
-        g_fps.list = OverlayRecord(text);
+    CTexture           *font = MessageFont();
+    u_long              font_key = font != nullptr ? font->tex0 : 0;
+    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping) || font_key != g_fps.font) {
+        g_fps.list = font != nullptr ? RecordFpsInGameFont(text) : nullptr;
+        if (!g_fps.list) {
+            font_key = 0;
+            g_fps.list = OverlayRecord(text);
+        }
         g_fps.text = std::move(text);
         g_fps.mapping = mapping;
+        g_fps.font = font_key;
     }
     return g_fps.list.get();
 }
@@ -664,14 +721,26 @@ bool GameShowingFps() {
 }
 
 std::string GameFpsText() {
-    return std::format("FPS {:.1f}  TICK {:.1f}/{:g}  DRAWS {}", g_fps.frames.PerSecond(),
-                       g_fps.ticks.PerSecond(), ClockTickRate(), g_stats.last_draws);
+    std::string text = std::format("FPS {:.1f}", g_fps.frames.PerSecond());
+    if (g_present.fps_detail != ConfigFpsDetail::Fps) {
+        text += std::format("  TICK {:.1f}/{:g}", g_fps.ticks.PerSecond(), ClockTickRate());
+    }
+    if (g_present.fps_detail == ConfigFpsDetail::All) {
+        text += std::format("  DRAWS {}", g_stats.last_draws);
+    }
+    return text;
 }
 
 // kPreviousFrame outside a frame is the newest main image: the canonical render, or the loading
 // screen's frame after it. ReadbackFrame would read a display frame, overlay and all.
 bool GameScreenshot(std::vector<std::uint8_t> &rgba, std::uint32_t &width, std::uint32_t &height) {
     return gfx::ReadbackTexture(gfx::kPreviousFrame, rgba, width, height);
+}
+
+bool GameScreenshotWithFps(std::vector<std::uint8_t> &rgba, std::uint32_t &width, std::uint32_t &height) {
+    const gfx::DisplayList *overlay = FpsOverlayList();
+    return overlay != nullptr && gfx::RenderList(*overlay, 1.0f, {.present = false, .host = true}) &&
+           gfx::ReadbackFrame(rgba, width, height);
 }
 
 int RunGame(int argc, char **argv) {
@@ -789,6 +858,8 @@ int RunGame(int argc, char **argv) {
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
 
+            InputSetLookOnLeftStick((mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA) ||
+                                    (mode == GAME_MODE_EDIT && viewMode != 0 && EdInteriorFlag == 0));
             GamePad.UpDate();
             GamePad.VibrationEnable(ConfigWords()[kConfigVibrationOff] == 0);
             GamePad.Step();

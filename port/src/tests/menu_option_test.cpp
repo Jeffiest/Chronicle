@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "memorycardaccess.hpp"
 #include "menu_option.hpp"
 #include "savedata.hpp"
@@ -71,4 +74,101 @@ TEST(MenuOption, OptionsLiveInConfigNotInSaves) {
     ASSERT_EQ(words[5], 1);
     ASSERT_EQ(reinterpret_cast<CUserStatus *>(g_options_save.GetDngStatus())->minimap_status, 3);
     SaveData = nullptr;
+}
+
+namespace {
+
+std::vector<DisplayModeSize> Modes() {
+    return {
+        {1920, 1200},
+        {640,  480 },
+        {1920, 1080},
+        {2560, 1080},
+        {1920, 1080},
+        {800,  600 },
+    };
+}
+
+bool Has(const std::vector<OptionResolution> &list, int width, int height) {
+    return std::any_of(list.begin(), list.end(),
+                       [&](const OptionResolution &size) { return size.width == width && size.height == height; });
+}
+
+} // namespace
+
+// The row offers the display's own modes beside the curated sizes, each once, smallest first after
+// Desktop, and nothing the display cannot show.
+TEST(MenuOption, ResolutionListMergesDisplayModes) {
+    std::vector<DisplayModeSize>  modes = Modes();
+    std::vector<OptionResolution> list = OptionResolutionList(modes, 0, 0, true, 1920, 1200);
+    ASSERT_FALSE(list.empty());
+    ASSERT_EQ(list.front().width, 0);
+    ASSERT_EQ(list.front().height, 0);
+    ASSERT_TRUE(Has(list, 1920, 1200));
+    ASSERT_TRUE(Has(list, 800, 600));
+    ASSERT_TRUE(Has(list, 1366, 768));
+    ASSERT_FALSE(Has(list, 640, 480)) << "below the smallest size offered";
+    ASSERT_FALSE(Has(list, 2560, 1080)) << "wider than the display";
+    ASSERT_FALSE(Has(list, 2560, 1440));
+    ASSERT_EQ(std::count_if(list.begin(), list.end(), [](const OptionResolution &size) { return size.width == 1920 && size.height == 1080; }), 1);
+    for (size_t i = 2; i < list.size(); ++i) {
+        ASSERT_LE(list[i - 1].width * list[i - 1].height, list[i].width * list[i].height);
+    }
+}
+
+// A size config.json holds stays in the list when the display would not list it, and a display
+// that cannot be asked leaves the curated sizes whole.
+TEST(MenuOption, ResolutionListKeepsConfiguredSize) {
+    std::vector<OptionResolution> list = OptionResolutionList({}, 1234, 777, true, 1920, 1080);
+    ASSERT_TRUE(Has(list, 1234, 777));
+    ASSERT_TRUE(Has(list, 1920, 1080));
+    ASSERT_FALSE(Has(list, 2560, 1440));
+
+    list = OptionResolutionList({}, 0, 0, false, 0, 0);
+    ASSERT_TRUE(Has(list, 3840, 2160));
+    ASSERT_EQ(list.front().width, 0);
+}
+
+TEST(MenuOption, ZoomResetPresetsPreserveOtherBindingsAndRestoreDefault) {
+    Config config;
+    config.key_bindings.push_back({
+        "cross", {"Space", "Z"}
+    });
+    ASSERT_EQ(OptionZoomResetChoice(config), 0);
+    ASSERT_EQ(OptionZoomResetText(config), "Middle Mouse");
+    ASSERT_EQ(OptionZoomResetCount(config), 5);
+    OptionSetZoomReset(config, 2);
+    ASSERT_EQ(OptionZoomResetChoice(config), 2);
+    ASSERT_EQ(OptionZoomResetText(config), "Mouse5");
+    ASSERT_EQ(config.key_bindings.front(), (ConfigKeyBinding{
+                                               "cross", {"Space", "Z"}
+    }));
+    Config restored = ConfigParse(ConfigSerialize(config));
+    ASSERT_EQ(OptionZoomResetText(restored), "Mouse5");
+    OptionSetZoomReset(config, 4);
+    ASSERT_EQ(OptionZoomResetText(config), "Disabled");
+    OptionRestoreZoomReset(config, Config{});
+    ASSERT_EQ(OptionZoomResetText(config), "Middle Mouse");
+    ASSERT_EQ(config.key_bindings.size(), 1u);
+    ASSERT_EQ(config.key_bindings.front().action, "cross");
+}
+
+TEST(MenuOption, CustomZoomResetBindingIsShownAndKeptUntilChanged) {
+    Config config;
+    config.key_bindings = {
+        {"zoom_reset", {"F12", "Mouse4"}},
+        {"r3",         {"B"}            }
+    };
+    ASSERT_EQ(OptionZoomResetChoice(config), 5);
+    ASSERT_EQ(OptionZoomResetCount(config), 6);
+    ASSERT_EQ(OptionZoomResetText(config), "F12, Mouse4");
+    Config before = config;
+    OptionSetZoomReset(config, 5);
+    ASSERT_EQ(config, before);
+    OptionSetZoomReset(config, 3);
+    ASSERT_EQ(OptionZoomResetText(config), "Home");
+    ASSERT_EQ(config.key_bindings[1], before.key_bindings[1]);
+    OptionRestoreZoomReset(config, before);
+    ASSERT_EQ(OptionZoomResetText(config), "F12, Mouse4");
+    ASSERT_EQ(config.key_bindings.front(), before.key_bindings[1]);
 }

@@ -1311,7 +1311,9 @@ While the name-entry screen is open (from the read of its textures until
 the game closes it) the mouse is a pointer there as well, taken with
 `InputSetMenuMouse` as the Options screen takes it: its motion and buttons stop
 pressing pad 1's buttons and reach `InputTakeMenuMouse`. The game's own hand
-and orange brackets are the only cursor. The pointer is a point in the
+follows the pointer freely across the screen, as the Options screen's does
+(`NameMouseHand`, through `DrawMenu2DSprite`), while the orange brackets stay on
+the control it is over. The pointer is a point in the
 640x480 space that the mouse's relative motion moves, through the mapping the 2D is
 drawn with (`gfx::GetUiMapping`, so `video.aspect` and `ui_scale` both hold, and a
 window whose size differs from its target's, as on a high-DPI display); a

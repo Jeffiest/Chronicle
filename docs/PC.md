@@ -45,10 +45,17 @@ port/build/pc/darkcloud --data data --save save
 ```
 
 The extractor accepts a PAL or NTSC disc image. For NTSC data it supplies the
-localized filenames and pack members expected by the shared game code. Original
-disc files remain in the extracted tree for verification against `DATA.HD2`;
+localized filenames and pack members expected by the shared game code, including
+the dungeon event text that NTSC keeps inside each `event.stb`. Original disc
+files remain in the extracted tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.
+
+The language select's English is the disc's own: American (`LanguageCode` 1) on
+NTSC data and British (2) on PAL. The NTSC disc's British-named files are an
+early draft of the British text (Nolun Village) with no town dialogue, so they
+are left unused. The port tells the discs apart the way the extractor does: NTSC
+has `gedit/system/esys.pak` and no `esys_cmn.pak`.
 
 `darkcloud` takes:
 
@@ -475,7 +482,7 @@ left and right change its number, circle or triangle enters it:
 | opening | the opening (`GAME_MODE_OPENING`, scenes op_a to op_d) |
 | `eventN` | one of three story events (map 23 event 310, map 41 event 150, map 19 event 305) |
 | `memory card N` | the save screen in mode N |
-| `Language N` | sets `LanguageCode` (PAL default 2, British English) |
+| `Language N` | sets `LanguageCode` (default: the disc's English, 1 American on NTSC data, 2 British on PAL) |
 
 ```
 0 down

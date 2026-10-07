@@ -11,6 +11,7 @@
 #include "battle_globals.hpp"
 #include "btsysscript.hpp"
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 #include "dataset.hpp"
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
@@ -686,6 +687,7 @@ int RunGame(int argc, char **argv) {
     main_select_menu_no = 0;
     std::strcpy(main_select_param, "e01");
     InitCDFile();
+    LanguageCode = DataEnglishLanguage();
     MGInit();
     InitMemoryFile();
     BufferAllClear();

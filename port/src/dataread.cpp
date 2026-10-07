@@ -1,4 +1,5 @@
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <unordered_map>
 
 #include "../../tools/dcdata/dcdata.hpp"
+#include "language.h"
 #include "platform/paths.hpp"
 
 namespace fs = std::filesystem;
@@ -146,6 +148,15 @@ PC_OVERRIDE int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
         *out_size = size;
     }
     return 1;
+}
+
+bool DataIsNtsc() {
+    return dcdata::IsNtscLayout(Lookup(dcdata::kSystemPack) != nullptr,
+                                Lookup(dcdata::kPalCommonSystemPack) != nullptr);
+}
+
+s32 DataEnglishLanguage() {
+    return DataIsNtsc() ? LANG_ENGLISH_US : LANG_ENGLISH_UK;
 }
 
 PC_OVERRIDE void InitReadBG() {

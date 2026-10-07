@@ -169,6 +169,7 @@ TEST(DataExtract, NormalizesNtscAssets) {
     ASSERT_EQ(members.size(), 5);
     EXPECT_EQ(members[1].name, "start_f.img");
     EXPECT_EQ(members[1].data, start);
+    EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_1.mes"), (Bytes{1, 2, 3, 4}));
     EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_2.mes"), (Bytes{1, 2, 3, 4}));
     auto battle = dcdata::ReadPack(ReadBytes(out / "normalized/commenu/a_eng/dungeon/dunmenu5.pak"));
     ASSERT_EQ(battle.size(), 2);

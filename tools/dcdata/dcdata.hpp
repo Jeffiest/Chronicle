@@ -506,12 +506,22 @@ inline bool AddPackAlias(std::vector<PackMember> &members, std::string_view name
     return false;
 }
 
+// The town system pack: one on NTSC, which PAL split into a common part and one per language.
+inline constexpr std::string_view kSystemPack = "gedit/system/esys.pak";
+inline constexpr std::string_view kPalCommonSystemPack = "gedit/system/esys_cmn.pak";
+
+// Whether a disc's files are NTSC's, by the presence of each system pack.
+inline bool IsNtscLayout(bool has_system_pack, bool has_pal_common_system_pack) {
+    return has_system_pack && !has_pal_common_system_pack;
+}
+
 inline void Normalize(const fs::path &out, const std::vector<Record> &records) {
     std::unordered_set<std::string> paths;
     for (const Record &record : records) {
         paths.insert(record.path);
     }
-    if (!paths.contains("gedit/system/esys.pak") || paths.contains("gedit/system/esys_cmn.pak")) {
+    if (!IsNtscLayout(paths.contains(std::string(kSystemPack)),
+                      paths.contains(std::string(kPalCommonSystemPack)))) {
         return;
     }
     auto alias = [&](std::string_view name, std::string_view source) {
@@ -551,7 +561,7 @@ inline void Normalize(const fs::path &out, const std::vector<Record> &records) {
         if (data.size() < 24 || Le32(data.data() + 20) >= data.size()) {
             Fail("invalid event script in {}", event.string());
         }
-        for (int language = 2; language <= 6; language++) {
+        for (int language = 1; language <= 6; language++) {
             fs::path target = out / std::format("dun/script/d{:02}/d{:02}_{}.mes", map, map, language);
             if (!paths.contains(FoldPath(target.lexically_relative(out).generic_string()))) {
                 WriteFile(target, std::span(data).subspan(Le32(data.data() + 20)));

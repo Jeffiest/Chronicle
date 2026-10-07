@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <span>
+#include <string_view>
 #include <vector>
 
 #include "memorycardaccess.hpp"
 #include "menu_option.hpp"
+#include "options/rows.hpp"
 #include "savedata.hpp"
 #include "userstatus.hpp"
 
@@ -171,4 +174,56 @@ TEST(MenuOption, CustomZoomResetBindingIsShownAndKeptUntilChanged) {
     OptionRestoreZoomReset(config, before);
     ASSERT_EQ(OptionZoomResetText(config), "F12, Mouse4");
     ASSERT_EQ(config.key_bindings.front(), before.key_bindings[1]);
+}
+
+TEST(MenuOption, PagesInOrder) {
+    std::span<const options::Page> pages = options::Pages();
+    std::vector<std::string_view>  names;
+    for (const options::Page &page : pages) {
+        names.push_back(page.name);
+    }
+    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility", "About"}));
+    ASSERT_TRUE(std::string_view(pages[4].rows[0].key) == "game.qte_always_win");
+}
+
+TEST(MenuOption, AboutLinksAndCredits) {
+    const options::Page &about = options::Pages()[5];
+    int                  links = 0;
+    std::string_view     section;
+    bool                 credited_carbon = false;
+    int                  developers = 0;
+    for (const options::Row &row : about.rows) {
+        ASSERT_TRUE(!options::IsSetting(row));
+        if (row.kind == options::RowKind::Link) {
+            ++links;
+            ASSERT_TRUE(std::string_view(row.url) == "https://github.com/TheMoonPeople/Chronicle");
+        } else if (row.kind == options::RowKind::Heading) {
+            section = row.label;
+        } else if (section == "Developers") {
+            ++developers;
+        } else if (section == "Artists" && std::string_view(row.label) == "Carbon") {
+            credited_carbon = true;
+        }
+    }
+    ASSERT_TRUE(links == 1);
+    ASSERT_TRUE(developers > 0);
+    ASSERT_TRUE(credited_carbon);
+}
+
+TEST(MenuOption, StepAndResetRows) {
+    std::span<const options::Row> controls = options::Pages()[3].rows;
+    auto found = std::ranges::find_if(controls, [](const options::Row &row) { return std::string_view(row.key) == "input.gyro"; });
+    ASSERT_TRUE(found != controls.end());
+    const options::Row &gyro = *found;
+    Config config;
+    config.gyro = ConfigGyro::Held;
+    ASSERT_TRUE(!options::StepRow(gyro, config, 1, false));
+    ASSERT_TRUE(options::StepRow(gyro, config, 1, true));
+    ASSERT_TRUE(config.gyro == ConfigGyro::Off);
+    ASSERT_TRUE(options::RowValue(gyro, config) == "Off");
+
+    config.master_volume = 0.25f;
+    options::ResetPage(options::Pages()[2], config);
+    ASSERT_TRUE(config.master_volume == Config{}.master_volume);
+    ASSERT_TRUE(config.gyro == ConfigGyro::Off);
 }

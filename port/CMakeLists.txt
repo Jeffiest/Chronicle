@@ -176,6 +176,26 @@ string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_hex}")
 file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/icon/chronicle.hpp
     CONTENT "#pragma once\n#include <cstdint>\ninline constexpr int kIconSize = 128;\ninline constexpr std::uint8_t kIconRgba[] = {${icon_bytes}};\n")
 
+# CREDITS, one contributor a line and # for comments, as the About page's list of names.
+set(CREDITS_FILE ${CMAKE_SOURCE_DIR}/CREDITS)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CREDITS_FILE})
+file(STRINGS ${CREDITS_FILE} credit_lines ENCODING UTF-8)
+set(credit_names "")
+foreach(line IN LISTS credit_lines)
+    string(STRIP "${line}" line)
+    if(line STREQUAL "" OR line MATCHES "^#")
+        continue()
+    endif()
+    string(REPLACE "\\" "\\\\" line "${line}")
+    string(REPLACE "\"" "\\\"" line "${line}")
+    string(APPEND credit_names "\"${line}\", ")
+endforeach()
+if(credit_names STREQUAL "")
+    set(credit_names "\"\"")
+endif()
+file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/options/credits.hpp
+    CONTENT "#pragma once\ninline constexpr const char *kCredits[] = {${credit_names}};\n")
+
 add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
 target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
 target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
@@ -184,7 +204,7 @@ target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections
 add_library(dc_port OBJECT ${PORT_LIB_SOURCES})
 target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
 # Replacement units reach the host side as "gfx/gfx.hpp", "platform/window.hpp".
-target_include_directories(dc_port PRIVATE ${PORT_DIR})
+target_include_directories(dc_port PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
 # The game's headers trip a few warnings that only describe how MWCC's source
 # was written, not a problem in the port.
 target_compile_options(dc_port PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label

@@ -168,6 +168,14 @@ bool WindowSize(int &width, int &height) {
     return g_window != nullptr && SDL_GetWindowSize(g_window, &width, &height) && width > 0 && height > 0;
 }
 
+bool WindowOpenUrl(const char *url) {
+    if (SDL_OpenURL(url)) {
+        return true;
+    }
+    std::fprintf(stderr, "window: cannot open %s: %s\n", url, SDL_GetError());
+    return false;
+}
+
 bool WindowDisplaySize(int &width, int &height, bool windowed) {
     if (g_window == nullptr || g_headless) {
         return false;

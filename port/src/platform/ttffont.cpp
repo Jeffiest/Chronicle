@@ -351,7 +351,7 @@ bool GetGlyph(char32_t ch, int em_px, Glyph &out) {
             g_atlas = {};
             g_atlas.texture = keep;
             std::vector<unsigned char> blank(static_cast<size_t>(kAtlasSize) * kAtlasSize * 4, 0);
-            gfx::UpdateTexture(keep, 0, 0, 0, kAtlasSize, kAtlasSize, blank.data());
+            gfx::UpdateTextureNow(keep, 0, 0, 0, kAtlasSize, kAtlasSize, blank.data());
         }
     }
 
@@ -373,7 +373,7 @@ bool GetGlyph(char32_t ch, int em_px, Glyph &out) {
                 texel[3] = bitmap.alpha[static_cast<size_t>(row) * width + col];
             }
         }
-        gfx::UpdateTexture(g_atlas.texture, 0, static_cast<uint32_t>(g_atlas.x), static_cast<uint32_t>(g_atlas.y),
+        gfx::UpdateTextureNow(g_atlas.texture, 0, static_cast<uint32_t>(g_atlas.x), static_cast<uint32_t>(g_atlas.y),
                            static_cast<uint32_t>(w), static_cast<uint32_t>(h), pixels.data());
         glyph.u0 = static_cast<float>(g_atlas.x + kPad);
         glyph.v0 = static_cast<float>(g_atlas.y + kPad);

@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <span>
 #include <iterator>
 #include <vector>
 
@@ -209,10 +210,39 @@ bool QueueTtfGlyph(ClsMes &mes, int index, int dark, int offset_x, int offset_y,
                      FuchiTbl_E[i].g, FuchiTbl_E[i].b, FuchiTbl_E[i].alpha);
             }
             break;
-        case MES_EDGE_DOUBLE:
-            edge(1, 1, 0x40, 0x40, 0x40, 0x80);
-            edge(2, 2, 0, 0, 0, 0x80);
+        case MES_EDGE_DOUBLE: {
+            // Retail's shadow is cast down and to the right and falls off softly, because its bitmaps are soft.
+            // A crisp glyph stacked at two offsets reads as a hard outline instead, so the shadow is laid in
+            // as taps at half-pixel steps along the light's direction, which the texture filter blends.
+            static const int mode = [] {
+                const char *text = std::getenv("DC_TTF_SHADOW");
+                return text != nullptr ? std::atoi(text) : 1;
+            }();
+            struct Tap {
+                float dx, dy;
+                int   grey, alpha;
+            };
+            static const Tap soft[] = {
+                {0.8f, 0.8f, 0x40, 0x70}, {1.4f, 1.4f, 0x10, 0x78}, {2.0f, 2.0f, 0, 0x78}, {2.6f, 2.6f, 0, 0x60},
+                {3.2f, 3.2f, 0, 0x40},    {1.6f, 0.8f, 0, 0x40},    {0.8f, 1.6f, 0, 0x40}, {2.4f, 1.6f, 0, 0x30},
+                {1.6f, 2.4f, 0, 0x30},
+            };
+            static const Tap deep[] = {
+                {0.8f, 0.8f, 0x40, 0x78}, {1.4f, 1.4f, 0x10, 0x78}, {2.0f, 2.0f, 0, 0x78}, {2.6f, 2.6f, 0, 0x78},
+                {3.2f, 3.2f, 0, 0x60},    {3.8f, 3.8f, 0, 0x40},    {1.6f, 0.8f, 0, 0x50}, {0.8f, 1.6f, 0, 0x50},
+                {2.4f, 1.6f, 0, 0x48},    {1.6f, 2.4f, 0, 0x48},    {3.2f, 2.4f, 0, 0x30}, {2.4f, 3.2f, 0, 0x30},
+            };
+            if (mode == 0) {
+                edge(1, 1, 0x40, 0x40, 0x40, 0x80);
+                edge(2, 2, 0, 0, 0, 0x80);
+            } else {
+                for (const Tap &tap : mode == 1 ? std::span<const Tap>(soft) : std::span<const Tap>(deep)) {
+                    TtfQuad(edges, glyph, x + tap.dx, y + tap.dy * rows, width, height, tap.grey, tap.grey, tap.grey,
+                            std::min(cap, tap.alpha));
+                }
+            }
             break;
+        }
     }
     TtfQuad(fills, glyph, x, y, width, height, r, g, b, std::min(cap, alpha));
     return true;

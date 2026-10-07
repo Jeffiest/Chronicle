@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "gfx/gfx.hpp"
+#include "platform/config.hpp"
 
 class CSaveData;
 
@@ -84,7 +85,8 @@ struct GamePresentSettings {
     // The FPS counter over every presented frame, at first; input.bindings.fps_toggle flips it. It is drawn
     // after the list into the presented image only, never into a canonical image, so it is not in
     // kPreviousFrame, frame copies or GameScreenshot.
-    bool show_fps = false;
+    bool            show_fps = false;
+    ConfigFpsDetail fps_detail = ConfigFpsDetail::All;
 };
 
 void GameSetPresentSettings(const GamePresentSettings &settings);
@@ -119,4 +121,9 @@ std::string GameFpsText();
 // The newest canonical image (or the loading screen's frame, if it presented since), RGBA8 rows top
 // to bottom: what --screenshot writes. A display frame, and so the FPS counter, never is. Outside a
 // frame only.
+// The newest tick's image with the FPS counter over it, as a window shows it: a display render of
+// the counter on the canonical image, read back. False where the counter is off or no display
+// render can be made. Test hook for --screenshot-fps.
+bool GameScreenshotWithFps(std::vector<std::uint8_t> &rgba, std::uint32_t &width, std::uint32_t &height);
+
 bool GameScreenshot(std::vector<std::uint8_t> &rgba, std::uint32_t &width, std::uint32_t &height);

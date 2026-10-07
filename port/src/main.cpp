@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "audio/mixer.hpp"
+#include "audio/soundtrack.hpp"
 #include "battle_globals.hpp"
 #include "dataread.hpp"
 #include "dun/gameloop.hpp"
@@ -55,6 +56,7 @@ struct Options {
     const char  *jump = nullptr;
     bool         fast_load = false;
     bool         show_fps = false;
+    bool         screenshot_fps = false;
 };
 
 Options g_options;
@@ -76,6 +78,8 @@ Options g_options;
                  "  --screenshot PATH  write the last tick's image (no FPS counter) to PATH on exit\n"
                  "  --input FILE       drive pad 1 from a script (default: DC_INPUT); see docs/PC.md\n"
                  "  --width, --height  window size in pixels (default: config.json, then the monitor's)\n"
+                 "  --screenshot-fps   with --screenshot and --show-fps: the image as a window shows it, the\n"
+                 "                     FPS counter over it\n"
                  "  --display-per-tick N  headless: also render N interpolated display frames per tick\n"
                  "  --show-fps         draw the FPS counter on presented frames when headless too\n"
                  "test hooks:\n"
@@ -125,6 +129,8 @@ Options ParseOptions(int argc, const char **argv) {
             options.fast_load = true;
         } else if (arg == "--show-fps") {
             options.show_fps = true;
+        } else if (arg == "--screenshot-fps") {
+            options.screenshot_fps = true;
         } else if (arg == "--display-per-tick") {
             options.display_per_tick = static_cast<int>(number());
         } else {
@@ -171,7 +177,31 @@ gfx::FrameLayout Layout(const Config &config) {
             MenuOptionOpen() ? 1.0f : config.ui_scale};
 }
 
+// DC_BGM_TEST=<set>:<track>: a test aid. From frame 150 of the run (the title has started) the music
+// stops and sound set <set> plays its sequence number <track> on the music port, so DC_AUDIO_WAV
+// records what that sequence sounds like. Run it with --jump menu, which is silent.
+void BgmTestPump() {
+    static const char *spec = std::getenv("DC_BGM_TEST");
+    static bool        done = false;
+    if (spec == nullptr || done || GameFrameCount() < 150) {
+        return;
+    }
+    done = true;
+    int set = 0;
+    int track = 0;
+    if (std::sscanf(spec, "%d:%d", &set, &track) < 1) {
+        return;
+    }
+    for (int port = 0; port < audio::kPorts; ++port) {
+        audio::DefaultMixer().Stop(port);
+    }
+    SndBgmInit();
+    SndBgmLoad(set);
+    SndBgmPlay(track);
+}
+
 void PumpHost() {
+    BgmTestPump();
     if (!WindowPollEvents()) {
         GameRequestStop();
     }
@@ -247,7 +277,8 @@ GamePresentSettings PresentSettings(const Config &config) {
     return {.interpolation = config.interpolation,
             .max_fps = config.max_fps,
             .display_per_tick = g_options.display_per_tick,
-            .show_fps = g_options.show_fps || (config.show_fps && !g_options.headless)};
+            .show_fps = g_options.show_fps || (config.show_fps && !g_options.headless),
+            .fps_detail = config.fps_detail};
 }
 
 void ApplyDiscord(const Config &config) {
@@ -261,12 +292,13 @@ void ApplyDiscord(const Config &config) {
 // waits for PumpHost.
 void ApplyConfigChange(const Config &before, const Config &after) {
     audio::DefaultMixer().SetMasterGain(after.master_volume);
+    AudioSetSurround(after.surround);
     InputApplyConfig(after);
     if (after.tick_rate != before.tick_rate) {
         ClockSetTickRate(after.tick_rate);
     }
     if (after.interpolation != before.interpolation || after.max_fps != before.max_fps ||
-        after.show_fps != before.show_fps) {
+        after.show_fps != before.show_fps || after.fps_detail != before.fps_detail) {
         GameSetPresentSettings(PresentSettings(after));
     }
     gfx::SetPresentMode(PresentMode(after.present_mode));
@@ -304,7 +336,9 @@ int Screenshot(const char *path) {
     std::vector<uint8_t> pixels;
     uint32_t             width = 0;
     uint32_t             height = 0;
-    if (!GameScreenshot(pixels, width, height) || !gfx::WritePng(PathsFromUtf8(path), pixels.data(), width, height)) {
+    bool                 grabbed = g_options.screenshot_fps ? GameScreenshotWithFps(pixels, width, height)
+                                                            : GameScreenshot(pixels, width, height);
+    if (!grabbed || !gfx::WritePng(PathsFromUtf8(path), pixels.data(), width, height)) {
         std::fprintf(stderr, "cannot write the screenshot to %s\n", path);
         return kExitFailure;
     }
@@ -329,6 +363,7 @@ int Run(int argc, const char **argv) {
     LoadInputScript(options.input);
 
     ConfigLoad();
+    audio::SoundtrackEnsure();
     const Config &config = ConfigGet();
 
     DisplaySetOverrides(options.width, options.height, options.headless);
@@ -347,6 +382,7 @@ int Run(int argc, const char **argv) {
     gfx::RendererInit(WindowHandle(), renderer);
 
     audio::DefaultMixer().SetMasterGain(config.master_volume);
+    AudioSetSurround(config.surround);
     AudioOutputStart(audio::DefaultMixer().Rate(), RenderAudio, nullptr);
 
     ClockSetTickRate(config.tick_rate);

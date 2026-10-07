@@ -39,6 +39,8 @@ void Mixer::Reset() {
     for (Port &port : ports_) {
         port.bank.reset();
         port.sequencer.SetSequence(nullptr);
+        port.stream.reset();
+        port.stream_playing = false;
         port.channels = {};
         port.volume = 0;
         port.attribute = 0;
@@ -74,8 +76,20 @@ void Mixer::SetSequence(int port, std::shared_ptr<const SqFile> file) {
         return;
     }
     std::lock_guard lock(mutex_);
+    ports_[port].stream.reset();
+    ports_[port].stream_playing = false;
     ports_[port].sequencer.SetSequence(std::move(file));
     ForVoices([&](const Voice &v) { return v.port == port && !v.effect; }, [&](Voice &v) { ReleaseVoice(v); });
+}
+
+void Mixer::SetStream(int port, std::shared_ptr<const PcmTrack> track) {
+    if (!ValidPort(port)) {
+        return;
+    }
+    std::lock_guard lock(mutex_);
+    ports_[port].stream = std::move(track);
+    ports_[port].stream_position = ports_[port].stream != nullptr ? static_cast<double>(ports_[port].stream->start) : 0.0;
+    ports_[port].stream_playing = false;
 }
 
 void Mixer::Rewind(int port, int song) {
@@ -83,6 +97,7 @@ void Mixer::Rewind(int port, int song) {
         return;
     }
     std::lock_guard lock(mutex_);
+    ports_[port].stream_position = ports_[port].stream != nullptr ? static_cast<double>(ports_[port].stream->start) : 0.0;
     ports_[port].sequencer.Rewind(song);
     ports_[port].channels = {};
 }
@@ -92,6 +107,10 @@ void Mixer::Play(int port) {
         return;
     }
     std::lock_guard lock(mutex_);
+    if (ports_[port].stream != nullptr) {
+        ports_[port].stream_playing = true;
+        return;
+    }
     ports_[port].sequencer.Play();
 }
 
@@ -100,6 +119,7 @@ void Mixer::Stop(int port) {
         return;
     }
     std::lock_guard lock(mutex_);
+    ports_[port].stream_playing = false;
     ports_[port].sequencer.Stop();
     ForVoices([&](const Voice &v) { return v.port == port; }, [&](Voice &v) { ReleaseVoice(v); });
 }
@@ -109,6 +129,9 @@ bool Mixer::IsPlaying(int port) const {
         return false;
     }
     std::lock_guard lock(mutex_);
+    if (ports_[port].stream != nullptr) {
+        return ports_[port].stream_playing;
+    }
     return ports_[port].sequencer.Playing();
 }
 
@@ -476,6 +499,37 @@ void Mixer::UpdateVoices() {
     }
 }
 
+void Mixer::RenderStreams(float *out, int frames) {
+    for (Port &port : ports_) {
+        if (!port.stream_playing || port.stream == nullptr) {
+            continue;
+        }
+        const PcmTrack    &track = *port.stream;
+        const std::int64_t length = track.Frames();
+        const std::int64_t loop_end = track.loop_end > 0 ? std::min(track.loop_end, length) : length;
+        const std::int64_t loop_start = std::clamp<std::int64_t>(track.loop_start, 0, std::max<std::int64_t>(0, loop_end - 1));
+        const double       step = static_cast<double>(track.rate) / rate_;
+        const float        gain = std::clamp(port.volume, 0, kFullPortVolume) / float(kFullPortVolume) * master_ * track.gain / 32768.0f;
+        for (int i = 0; i < frames; ++i) {
+            if (port.stream_position >= loop_end) {
+                if (!track.loop) {
+                    port.stream_playing = false;
+                    break;
+                }
+                port.stream_position -= static_cast<double>(loop_end - loop_start);
+            }
+            const std::int64_t  at = static_cast<std::int64_t>(port.stream_position);
+            const float         fraction = static_cast<float>(port.stream_position - at);
+            const std::int64_t  next = std::min(at + 1, length - 1);
+            const std::int16_t *a = &track.samples[static_cast<std::size_t>(at) * 2];
+            const std::int16_t *b = &track.samples[static_cast<std::size_t>(next) * 2];
+            out[i * 2] += (a[0] + (b[0] - a[0]) * fraction) * gain;
+            out[i * 2 + 1] += (a[1] + (b[1] - a[1]) * fraction) * gain;
+            port.stream_position += step;
+        }
+    }
+}
+
 void Mixer::Render(float *out, int frames) {
     std::lock_guard lock(mutex_);
     std::fill(out, out + frames * 2, 0.0f);
@@ -499,6 +553,7 @@ void Mixer::Render(float *out, int frames) {
                 reverbs_[core].Process(sends[core], out, block);
             }
         }
+        RenderStreams(out, block);
         if (!stereo_) {
             for (int i = 0; i < block; i++) {
                 out[i * 2] = out[i * 2 + 1] = (out[i * 2] + out[i * 2 + 1]) * 0.5f;

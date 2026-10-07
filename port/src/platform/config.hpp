@@ -11,6 +11,13 @@ enum class ConfigPresentMode {
     Immediate,
 };
 
+// What the FPS counter shows: the frame rate alone, with the logic ticks, or all of it with the draws.
+enum class ConfigFpsDetail {
+    Fps,
+    Ticks,
+    All,
+};
+
 enum class ConfigAspect {
     Auto,
     FourThree,
@@ -54,6 +61,7 @@ struct ConfigGameOptions {
 struct Config {
     double            tick_rate = 60.0;
     bool              debug_mode = false;
+    bool              qte_always_win = false;
     ConfigPresentMode present_mode = ConfigPresentMode::Fifo;
     bool              interpolation = true;
     double            max_fps = 0.0;
@@ -64,9 +72,13 @@ struct Config {
     ConfigAspect                  aspect = ConfigAspect::Auto;
     float                         ui_scale = 1.0f;
     bool                          show_fps = true;
+    ConfigFpsDetail               fps_detail = ConfigFpsDetail::All;
     float                         detail_distance = 0.0f;
     float                         shadow_distance = 0.0f;
     float                         master_volume = 1.0f;
+    bool                          surround = false;
+    // audio.soundtrack "custom": play recordings from soundtrack/ beside save/ and data/.
+    bool                          soundtrack = false;
     std::vector<ConfigKeyBinding> key_bindings;
     float                         mouse_sensitivity = 0.1f;
     float                         stick_sensitivity = 1.33f;
@@ -78,9 +90,12 @@ struct Config {
     bool                          gyro_invert_y = false;
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
-    std::vector<std::string>      mouse_release_keys = {"Escape"};
-    ConfigGameOptions             options;
-    bool                          discord_rich_presence = true;
+    bool                          mouse_zoom = false;
+    // Third-person vertical return after mouse input: 0 holds height, 1 is retail's rate.
+    float                    mouse_camera_return = 0.2f;
+    std::vector<std::string> mouse_release_keys;
+    ConfigGameOptions        options;
+    bool                     discord_rich_presence = true;
 
     bool operator==(const Config &) const = default;
 };

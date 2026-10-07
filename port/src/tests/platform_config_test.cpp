@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,6 +40,38 @@ TEST(PlatformConfig, ShadowDistance) {
     Config config;
     config.shadow_distance = 320.0f;
     ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).shadow_distance == 320.0f);
+}
+
+TEST(PlatformConfig, OptionalMouseZoomRoundTripsAndKeepsResetBindings) {
+    ASSERT_FALSE(ConfigParse("").mouse_zoom);
+    ASSERT_FALSE(ConfigParse(R"({"input":{"mouse_zoom":"on"}})").mouse_zoom);
+    Config config = ConfigParse(R"({"input":{"mouse_zoom":true,"bindings":{
+        "zoom_reset":["Mouse5","Home"],"cross":["Space","Z"]}}})");
+    ASSERT_TRUE(config.mouse_zoom);
+    Config restored = ConfigParse(ConfigSerialize(config));
+    ASSERT_EQ(restored, config);
+    ASSERT_EQ(restored.key_bindings.size(), 2u);
+    ASSERT_FALSE(ConfigAppliesOnRestart("input.mouse_zoom"));
+    ASSERT_FALSE(ConfigAppliesOnRestart("input.bindings.zoom_reset"));
+}
+
+TEST(PlatformConfig, CameraReturnValidatesBoundsAndRoundTripsCustomRates) {
+    ASSERT_FLOAT_EQ(ConfigParse("").mouse_camera_return, 0.2f);
+    for (float rate : {0.0f, 0.05f, 0.2f, 0.5f, 1.0f, 0.37f}) {
+        Config config;
+        config.mouse_camera_return = rate;
+        ASSERT_FLOAT_EQ(ConfigParse(ConfigSerialize(config)).mouse_camera_return, rate);
+    }
+    for (const char *value : {"-0.01", "1.01", "1e100", "true", "\"slow\"", "null", "[]"}) {
+        std::string json = std::string("{\"input\":{\"mouse_camera_return\":") + value + "}}";
+        ASSERT_FLOAT_EQ(ConfigParse(json).mouse_camera_return, 0.2f) << value;
+    }
+    Config config;
+    config.mouse_camera_return = std::numeric_limits<float>::infinity();
+    ASSERT_FLOAT_EQ(ConfigParse(ConfigSerialize(config)).mouse_camera_return, 0.2f);
+    config.mouse_camera_return = std::numeric_limits<float>::quiet_NaN();
+    ASSERT_FLOAT_EQ(ConfigParse(ConfigSerialize(config)).mouse_camera_return, 0.2f);
+    ASSERT_FALSE(ConfigAppliesOnRestart("input.mouse_camera_return"));
 }
 
 TEST(PlatformConfig, ParsesJson) {
@@ -105,7 +138,7 @@ TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     ASSERT_TRUE(ConfigParse(R"({"input": {"gyro_sensitivity": -1}})").gyro_sensitivity == 0.5f);
     ASSERT_TRUE(ConfigParse(ConfigSerialize(ConfigParse(R"({"input": {"gyro_sensitivity": 1.25}})"))).gyro_sensitivity ==
                 1.25f);
-    ASSERT_TRUE(defaults.mouse_release_keys.size() == 1 && defaults.mouse_release_keys[0] == "Escape");
+    ASSERT_TRUE(defaults.mouse_release_keys.empty());
 
     Config config = ConfigParse(R"({"input": {
         "mouse_sensitivity": 0.25,
@@ -135,6 +168,18 @@ TEST(PlatformConfig, DebugModeDefaultsOff) {
     ASSERT_TRUE(!ConfigParse(R"({"game": {"debug_mode": "off"}})").debug_mode);
 }
 
+TEST(PlatformConfig, FpsDetail) {
+    ASSERT_TRUE(ConfigParse("").fps_detail == ConfigFpsDetail::All);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": "fps"}})").fps_detail == ConfigFpsDetail::Fps);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": "Ticks"}})").fps_detail == ConfigFpsDetail::Ticks);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": "everything"}})").fps_detail == ConfigFpsDetail::All);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"fps_detail": 3}})").fps_detail == ConfigFpsDetail::All);
+
+    Config config;
+    config.fps_detail = ConfigFpsDetail::Ticks;
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).fps_detail == ConfigFpsDetail::Ticks);
+}
+
 TEST(PlatformConfig, ShowFpsAndTheHostKeys) {
     ASSERT_TRUE(ConfigParse("").show_fps);
     ASSERT_TRUE(!ConfigParse(R"({"video": {"show_fps": false}})").show_fps);
@@ -146,6 +191,23 @@ TEST(PlatformConfig, ShowFpsAndTheHostKeys) {
     ASSERT_TRUE(config.key_bindings[0].action == "fps_toggle");
     ASSERT_TRUE((config.key_bindings[0].keys == std::vector<std::string>{"F4", "Gamepad:guide"}));
     ASSERT_TRUE(config.key_bindings[1].action == "start" && config.key_bindings[1].keys.size() == 1);
+}
+
+TEST(PlatformConfig, SurroundIsOffUntilAsked) {
+    ASSERT_TRUE(!ConfigParse("").surround);
+    ASSERT_TRUE(ConfigParse(R"({"audio": {"surround": true}})").surround);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"surround": "yes"}})").surround);
+}
+
+TEST(PlatformConfig, SoundtrackIsPs2UntilAsked) {
+    ASSERT_TRUE(!ConfigParse("").soundtrack);
+    ASSERT_TRUE(ConfigParse(R"({"audio": {"soundtrack": "custom"}})").soundtrack);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"soundtrack": "ost"}})").soundtrack);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"soundtrack": "ps2"}})").soundtrack);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"soundtrack": "other"}})").soundtrack);
+    Config custom;
+    custom.soundtrack = true;
+    ASSERT_NE(ConfigSerialize(custom).find("\"soundtrack\": \"custom\""), std::string::npos);
 }
 
 TEST(PlatformConfig, GameOptionsLiveInTheirPagesSections) {
@@ -214,6 +276,36 @@ void ChangeAgain(const Config &before, const Config &after) {
 }
 
 } // namespace
+
+TEST(PlatformConfig, CameraReturnChangesLiveAndPersists) {
+    std::filesystem::path root = std::filesystem::temp_directory_path() / ("dc_camera_return_" + std::to_string(dc::test::ProcessId()));
+
+    struct Cleanup {
+        std::filesystem::path root;
+
+        ~Cleanup() {
+            ConfigRemoveChangeHook(RecordChange);
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+        }
+    } cleanup{root};
+
+    PathsSetSaveRoot(root);
+    g_changes.clear();
+    ConfigAddChangeHook(RecordChange);
+    Config config = ConfigGet();
+    config.mouse_camera_return = 0.37f;
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_FLOAT_EQ(ConfigGet().mouse_camera_return, 0.37f);
+    ASSERT_EQ(g_changes.size(), 1u);
+    ASSERT_FLOAT_EQ(g_changes.back().second.mouse_camera_return, 0.37f);
+    ASSERT_TRUE(ConfigLoad());
+    ASSERT_FLOAT_EQ(ConfigGet().mouse_camera_return, 0.37f);
+    config.mouse_camera_return = 2.0f;
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_FLOAT_EQ(ConfigGet().mouse_camera_return, 0.2f);
+    ASSERT_EQ(g_changes.size(), 2u);
+}
 
 TEST(PlatformConfig, ChangeAppliesAndSaves) {
     std::filesystem::path root = std::filesystem::temp_directory_path() / ("dc_config_change_" + std::to_string(dc::test::ProcessId()));
@@ -536,4 +628,12 @@ TEST(PlatformConfig, DisplayFieldsFollowTheWindow) {
     DisplayUseWindow({});
     std::error_code error;
     std::filesystem::remove_all(root, error);
+}
+
+TEST(PlatformConfig, QteAlwaysWin) {
+    ASSERT_TRUE(!ConfigParse("").qte_always_win);
+    Config config = ConfigParse(R"({"game": {"qte_always_win": true}})");
+    ASSERT_TRUE(config.qte_always_win);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).qte_always_win);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"qte_always_win": "yes"}})").qte_always_win);
 }

@@ -335,8 +335,6 @@ PC_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
     return num;
 }
 
-// Draw every populated dungeon cell and let each frame's bounds reject geometry outside the view.
-// A cell-origin distance or facing test can clip terrain that still reaches the camera.
 PC_OVERRIDE void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) {
     float           cam_pos[4];
     float           cam_ref[4];
@@ -415,7 +413,34 @@ PC_OVERRIDE void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) 
                 sound_no = 75;
             }
 
-            this->cells[cell_no].visible = true;
+            bool draw = true;
+            if (selectMapNo != DUNGEON_MOON_SEA) {
+                if (!(dist < 160.0f * this->draw_dist_scale)) {
+                    draw = false;
+                } else {
+                    cam_ref[0] = delta_x - view_delta[0];
+                    cam_ref[1] = 0.0f;
+                    cam_ref[2] = delta_z - view_delta[2];
+                    cam_ref[3] = 1.0f;
+                    sceVu0Normalize(cam_ref, cam_ref);
+                    float facing = sceVu0InnerProduct(view, cam_ref);
+                    int georama = UserStatus->cur_georama;
+                    if (georama == 5 && this->cells[cell_no].parts_no == MAP_PARTS_URA_ROAD) {
+                        facing = 1.0f;
+                    }
+                    if (facing <= 0.0f && !(dist < 160.0f)) {
+                        draw = false;
+                    }
+                    if (this->cells[cell_no].parts_no >= MAP_PARTS_URA_ENTRANCE_NORTH &&
+                        this->cells[cell_no].parts_no <= MAP_PARTS_URA_ENTRANCE_WEST && georama == 5) {
+                        draw = true;
+                    }
+                }
+            }
+            this->cells[cell_no].visible = draw;
+            if (!draw) {
+                continue;
+            }
 
             int            direction = this->cells[cell_no].direction;
             CDungeonParts *direction_part = &this->parts[this->cells[cell_no].parts_no];

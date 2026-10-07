@@ -2,8 +2,14 @@
 #include <gtest/gtest.h>
 #include <libpad.h>
 
+#include <array>
+#include <string_view>
+
 #include "../gameloop.hpp"
+#include "../platform/clock.hpp"
+#include "../platform/config.hpp"
 #include "../platform/input.hpp"
+#include "../platform/input_script.hpp"
 #include "gamepad.hpp"
 #include "mainselect.hpp"
 
@@ -62,6 +68,23 @@ TEST(PlatformPad, ButtonOrderMatchesGame) {
     for (const auto &pair : pairs) {
         ASSERT_TRUE(pair[0] == pair[1]);
     }
+}
+
+TEST(PlatformPad, DefaultMouseAndKeyboardCombatBindings) {
+    InputResetBindings();
+    InputKeyboardMouse held;
+    held.keys = {InputScancodeFromName("F")};
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputR1);
+    held.keys = {InputScancodeFromName("Escape")};
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputTriangle);
+    GamePad.MenuModeOn(120);
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputCircle);
+    GamePad.MenuModeOff();
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputTriangle);
+    ASSERT_FALSE(InputBindKeys("r1", std::array<std::string_view, 1>{"Escape"}));
+    held.keys.clear();
+    held.mouse_buttons = 1u << 1;
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputCircle);
 }
 
 TEST(PlatformPad, ReadFillsDualshockLayout) {
@@ -147,6 +170,30 @@ TEST(PlatformPad, GamepadUpdatesThroughLibpad) {
 
     ASSERT_TRUE(GamePad.On2(PAD_CROSS) == 0);
     ASSERT_TRUE(GamePad.GetLX2() == 0);
+}
+
+TEST(PlatformPad, DeveloperMenuUsesCrossForConfirmAndCircleForBack) {
+    OpenPads();
+    InputSetDeveloperMenu(true);
+    SetPad(0, 0);
+    GamePad.KeyLock(0);
+    for (int i = 0; i < 4; ++i) {
+        GamePad.UpDate();
+    }
+
+    SetPad(0, PAD_CROSS);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_CIRCLE));
+    ASSERT_FALSE(GamePad.Down(PAD_TRIANGLE));
+
+    SetPad(0, 0);
+    GamePad.UpDate();
+    SetPad(0, PAD_CIRCLE);
+    GamePad.UpDate();
+    ASSERT_FALSE(GamePad.Down(PAD_CIRCLE));
+    ASSERT_TRUE(GamePad.GetPadDown() & PAD_CIRCLE);
+
+    InputSetDeveloperMenu(false);
 }
 
 TEST(PlatformPad, DebugButtonsUseMainController) {
@@ -367,5 +414,162 @@ TEST(PlatformPad, OptionsMouseOwnsMotionButtonsAndWheel) {
 
     InputSetMenuMouse(false);
     ASSERT_NE(InputApplyKeyboardMouse(base, held).buttons, kInputStart);
+    InputShutdown();
+}
+
+namespace {
+void ZoomSettings(bool enabled = true) {
+    InputShutdown();
+    Config config;
+    config.mouse_zoom = enabled;
+    config.mouse_capture = false;
+    InputApplyConfig(config);
+    ClockSetUnbounded(true);
+    ClockReset();
+    InputLatchPad(0);
+}
+
+void Wheel(float notches) {
+    SDL_Event event{};
+    event.type = SDL_EVENT_MOUSE_WHEEL;
+    event.wheel.y = notches;
+    InputHandleEvent(event);
+}
+
+void MiddleClick(bool down) {
+    SDL_Event event{};
+    event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    event.button.button = SDL_BUTTON_MIDDLE;
+    InputHandleEvent(event);
+}
+} // namespace
+
+TEST(PlatformPad, MouseZoomWheelAndQuickResetAreTakenOnce) {
+    ZoomSettings();
+    Wheel(2.5f);
+    MiddleClick(true);
+    MiddleClick(false); // Neither poll nor pad read has happened during the click.
+    InputPoll();
+    InputLatchPad(1);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 2.5f);
+    ASSERT_TRUE(InputGetMouseLook().zoom_reset);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    // Polling a held click does not repeat its reset.
+    MiddleClick(true);
+    InputPoll();
+    InputLatchPad(0);
+    ASSERT_TRUE(InputGetMouseLook().zoom_reset);
+    InputPoll();
+    InputLatchPad(0);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    InputShutdown();
+}
+
+TEST(PlatformPad, MouseZoomResetReservesOnlyItsBoundSources) {
+    ZoomSettings();
+    InputKeyboardMouse held;
+    held.mouse_buttons = 1u << 2; // Logical Mouse3; SDL's middle mask has a different bit.
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons & kInputR3, 0);
+    held.keys = {SDL_SCANCODE_B};
+    ASSERT_NE(InputApplyKeyboardMouse({}, held).buttons & kInputR3, 0);
+    // A configured keyboard reset also owns its binding without disturbing other shortcuts.
+    std::string_view reset[] = {"Home"};
+    std::string_view cross[] = {"Home", "Space"};
+    ASSERT_TRUE(InputBindKeys("zoom_reset", reset));
+    ASSERT_TRUE(InputBindKeys("cross", cross));
+    held = {.keys = {SDL_SCANCODE_HOME}};
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, 0);
+    InputSetScriptedDevices(held);
+    InputLatchPad(0);
+    ASSERT_TRUE(InputGetMouseLook().zoom_reset);
+    InputLatchPad(0);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    held.keys = {SDL_SCANCODE_SPACE};
+    ASSERT_NE(InputApplyKeyboardMouse({}, held).buttons & kInputCross, 0);
+    ZoomSettings(false);
+    held = {.mouse_buttons = 1u << 2};
+    ASSERT_NE(InputApplyKeyboardMouse({}, held).buttons & kInputR3, 0);
+    Wheel(3.0f);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    InputShutdown();
+}
+
+TEST(PlatformPad, MouseZoomDropsLoadsFocusAndMenuTransitions) {
+    ZoomSettings();
+    Wheel(1.0f);
+    MiddleClick(true);
+    MiddleClick(false);
+    for (int tick = 0; tick < 60; ++tick) {
+        ClockPump();
+    }
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    Wheel(1.0f);
+    MiddleClick(true);
+    SDL_Event event{};
+    event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    InputHandleEvent(event);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    InputSetMenuMouse(true);
+    Wheel(2.0f);
+    MiddleClick(true);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    ASSERT_FLOAT_EQ(InputTakeMenuMouse().wheel, 2.0f);
+    ASSERT_FLOAT_EQ(InputTakeMenuMouse().wheel, 0.0f);
+    Wheel(4.0f);
+    InputSetMenuMouse(false);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    InputShutdown();
+}
+
+TEST(PlatformPad, InputScriptParsesZoomWheelAndRejectsInvalidNotches) {
+    InputScript script;
+    std::string error;
+    ASSERT_TRUE(InputScriptParse("0\n10 wheel:1.5 mouse3\n11\n20 wheel:-2\n21\n", script, error)) << error;
+    ASSERT_FLOAT_EQ(InputScriptDevicesAt(script, 10).mouse_wheel, 1.5f);
+    ASSERT_EQ(InputScriptDevicesAt(script, 10).mouse_buttons, 1u << 2);
+    ASSERT_FLOAT_EQ(InputScriptDevicesAt(script, 11).mouse_wheel, 0.0f);
+    ASSERT_FLOAT_EQ(InputScriptDevicesAt(script, 20).mouse_wheel, -2.0f);
+    ASSERT_FALSE(InputScriptParse("0 wheel:nan\n", script, error));
+    ASSERT_FALSE(InputScriptParse("0 wheel:inf\n", script, error));
+    ASSERT_FALSE(InputScriptParse("0 wheel:1x\n", script, error));
+    ASSERT_FALSE(InputScriptParse("0 pad2 wheel:1\n", script, error));
+}
+
+TEST(PlatformPad, ScriptedZoomWheelIsTakenOnceAndMenusOwnIt) {
+    ZoomSettings();
+    InputKeyboardMouse scripted;
+    scripted.mouse_wheel = -1.5f;
+    scripted.mouse_buttons = 1u << 2;
+    InputSetScriptedDevices(scripted);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, -1.5f);
+    ASSERT_TRUE(InputGetMouseLook().zoom_reset);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    InputSetMenuMouse(true);
+    InputSetScriptedDevices(scripted);
+    InputLatchPad(0);
+    ASSERT_FLOAT_EQ(InputGetMouseLook().zoom, 0.0f);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
+    ASSERT_FLOAT_EQ(InputTakeMenuMouse().wheel, -1.5f);
+    ASSERT_FLOAT_EQ(InputTakeMenuMouse().wheel, 0.0f);
+    InputSetMenuMouse(false);
+    InputLatchPad(0);
+    ASSERT_FALSE(InputGetMouseLook().zoom_reset);
     InputShutdown();
 }

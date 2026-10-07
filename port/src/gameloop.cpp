@@ -12,11 +12,13 @@
 #include "btsysscript.hpp"
 #include "dataread.hpp"
 #include "dataset.hpp"
+#include "draw2d_port.hpp"
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
 #include "exitcodes.hpp"
 #include "gamemode.hpp"
 #include "gamepad.hpp"
+#include "gametext.hpp"
 #include "langset.hpp"
 #include "main.hpp"
 #include "mainselect.hpp"
@@ -32,6 +34,7 @@
 #include "presence.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
+#include "texture.hpp"
 #include "title/opening.hpp"
 #include "title/rushmovi.hpp"
 #include "title/title.hpp"
@@ -86,6 +89,8 @@ struct FpsOverlay {
     std::string         text;
     gfx::LogicalMapping mapping = {};
     gfx::DisplayListRef list;
+    // The message font's texture the list was recorded with, 0 for the port's own font.
+    u_long font = 0;
 };
 
 FpsOverlay g_fps;
@@ -101,17 +106,66 @@ bool SameMapping(const gfx::LogicalMapping &a, const gfx::LogicalMapping &b) {
            a.offset_y == b.offset_y && a.pixel_width == b.pixel_width && a.pixel_height == b.pixel_height;
 }
 
-// Recorded again only when the text or the window's mapping changed.
+// The message font's gaiji texture while a mode has all of the message font's textures loaded,
+// else nullptr.
+CTexture *MessageFont() {
+    CTexture *gaiji = TexManager.GetTexture(const_cast<char *>("gaiji"), -1);
+    if (gaiji == nullptr || TexManager.GetTexture(const_cast<char *>("fontbase"), -1) == nullptr ||
+        TexManager.GetTexture(const_cast<char *>("syst04"), -1) == nullptr) {
+        return nullptr;
+    }
+    return gaiji;
+}
+
+// The counter's line in the game's message font, drawn as the menus draw their text but into a
+// display list of its own, at the top-left corner of what the window shows. Null where the font
+// cannot lay it out.
+gfx::DisplayListRef RecordFpsInGameFont(const std::string &line) {
+    static GameText *text = [] {
+        auto *made = new GameText;
+        made->KeepGameRandom(true);
+        return made;
+    }();
+    if (text->Set(line) < 0) {
+        return nullptr;
+    }
+    gfx::BeginRecording();
+    if (!gfx::Recording()) {
+        return nullptr;
+    }
+    // Drawing the text sets the sprite filter and the texture block as the menus' text does. The
+    // game's next tick takes both as it left them, so they are put back as they were.
+    const int bilinear = PortBilinear();
+    const int block = TexManager.last_block;
+    {
+        gfx::UiAnchorScope anchor(gfx::UiAnchor::Side(-1, -1));
+        text->Draw(6, 2);
+    }
+    setbilinear(bilinear);
+    TexManager.last_block = block;
+    return gfx::EndRecording();
+}
+
+// Recorded again only when the text, the window's mapping or the message font changed. The game's
+// message font while a mode has it loaded, the overlay's own 5x7 font otherwise (loading screens,
+// the moments between modes): the font draws the same words either way.
 const gfx::DisplayList *FpsOverlayList() {
     if (!g_fps.on) {
         return nullptr;
     }
     std::string         text = GameFpsText();
     gfx::LogicalMapping mapping = gfx::GetLogicalMapping(gfx::kMainTarget);
-    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping)) {
-        g_fps.list = OverlayRecord(text);
+    CTexture           *font = MessageFont();
+    u_long              font_key = font != nullptr ? font->tex0 : 0;
+    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping) || font_key != g_fps.font) {
+        g_fps.list = font != nullptr ? RecordFpsInGameFont(text) : nullptr;
+        if (!g_fps.list) {
+            font_key = 0;
+            g_fps.list = OverlayRecord(text);
+        }
         g_fps.text = std::move(text);
         g_fps.mapping = mapping;
+        g_fps.font = font_key;
     }
     return g_fps.list.get();
 }
@@ -155,6 +209,11 @@ struct Jump {
 
 Jump g_jump;
 bool g_fast_load;
+int g_developer_return_mode = GAME_MODE_TITLE;
+int g_developer_return_map = 800;
+int g_developer_return_local_map = 0;
+int g_developer_return_menu_no = 0;
+bool g_developer_return_pending = false;
 
 std::int64_t g_frame_budget = -1;
 std::int64_t g_frames;
@@ -169,6 +228,14 @@ s32 *ConfigWords() {
 }
 
 void ModeInit(int &title_ran, int &exist_data, bool &skip_title) {
+    if (mode == GAME_MODE_MENU && !g_developer_return_pending) {
+        g_developer_return_mode = GAME_MODE_TITLE;
+    }
+    if (mode != GAME_MODE_MENU && mode != GAME_MODE_LOADER) {
+        g_developer_return_pending = false;
+    }
+    InputSetMenuNavigation(mode == GAME_MODE_MENU || mode == GAME_MODE_LOADER);
+    InputSetDeveloperMenu(mode == GAME_MODE_MENU);
     switch (mode) {
         case GAME_MODE_LOADER:
             LoaderInit();
@@ -255,6 +322,9 @@ int ModeLoop(bool &skip_title) {
         case GAME_MODE_EDIT:
             return EditLoop();
         case GAME_MODE_MENU:
+            if (GamePad.GetPadDown() & PAD_CIRCLE) {
+                return -1;
+            }
             return MenuLoop();
         case GAME_MODE_SAVE:
             return LoopSave();
@@ -461,10 +531,21 @@ void GameApplyLoopResult(int loop_mode, int result) {
             break;
         case GAME_MODE_LOADER:
             if (result != 0) {
-                mode = GAME_MODE_DUNGEON;
+                mode = result == 2 ? GAME_MODE_MENU : GAME_MODE_DUNGEON;
             }
             break;
         case GAME_MODE_MENU:
+            if (result == -1) {
+                mode = g_developer_return_mode;
+                if (g_developer_return_pending) {
+                    MapNo = g_developer_return_map;
+                    LocalMapNo = g_developer_return_local_map;
+                    main_select_menu_no = g_developer_return_menu_no;
+                } else {
+                    MapJump(800, -1);
+                }
+            }
+            break;
         case GAME_MODE_UNUSED_6:
         case GAME_MODE_UNUSED_8:
             break;
@@ -540,6 +621,11 @@ bool GameDeveloperMenuRequested() {
 // A mode's own exit stops its sound, unlocks the pad and clears its scissor; this does it for a mode
 // cut off mid-frame, and drops the map jump or event it had pending.
 void GameEnterDeveloperMenu() {
+    g_developer_return_mode = mode;
+    g_developer_return_map = MapNo;
+    g_developer_return_local_map = LocalMapNo;
+    g_developer_return_menu_no = main_select_menu_no;
+    g_developer_return_pending = true;
     while (ReadBGSync() != 0) {
         ClockSyncV();
     }
@@ -550,6 +636,8 @@ void GameEnterDeveloperMenu() {
     NextMapNo = -1;
     StartEventNo = -1;
     mode = GAME_MODE_MENU;
+    InputSetMenuNavigation(true);
+    InputSetDeveloperMenu(true);
     std::fprintf(stderr, "debug mode: start + select, the developer menu\n");
 }
 
@@ -667,8 +755,14 @@ bool GameShowingFps() {
 }
 
 std::string GameFpsText() {
-    return std::format("FPS {:.1f}  TICK {:.1f}/{:g}  DRAWS {}", g_fps.frames.PerSecond(),
-                       g_fps.ticks.PerSecond(), ClockTickRate(), g_stats.last_draws);
+    std::string text = std::format("FPS {:.1f}", g_fps.frames.PerSecond());
+    if (g_present.fps_detail != ConfigFpsDetail::Fps) {
+        text += std::format("  TICK {:.1f}/{:g}", g_fps.ticks.PerSecond(), ClockTickRate());
+    }
+    if (g_present.fps_detail == ConfigFpsDetail::All) {
+        text += std::format("  DRAWS {}", g_stats.last_draws);
+    }
+    return text;
 }
 
 // kPreviousFrame outside a frame is the newest main image: the canonical render, or the loading
@@ -677,11 +771,19 @@ bool GameScreenshot(std::vector<std::uint8_t> &rgba, std::uint32_t &width, std::
     return gfx::ReadbackTexture(gfx::kPreviousFrame, rgba, width, height);
 }
 
+bool GameScreenshotWithFps(std::vector<std::uint8_t> &rgba, std::uint32_t &width, std::uint32_t &height) {
+    const gfx::DisplayList *overlay = FpsOverlayList();
+    return overlay != nullptr && gfx::RenderList(*overlay, 1.0f, {.present = false, .host = true}) &&
+           gfx::ReadbackFrame(rgba, width, height);
+}
+
 int RunGame(int argc, char **argv) {
     // mwInit is not called: the host has run every static constructor. init_all's IOP boot, CD
     // and file-system resets, DevInit's DMA reset and the DMA channel handles have no host
     // counterpart and are not called.
     DebugMode = ConfigGet().debug_mode ? 1 : 0;
+    g_developer_return_pending = false;
+    g_developer_return_mode = GAME_MODE_TITLE;
     mode = GAME_MODE_MENU;
     main_select_menu_no = 0;
     std::strcpy(main_select_param, "e01");

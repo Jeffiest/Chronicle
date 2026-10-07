@@ -737,25 +737,39 @@ inline void Normalize(const fs::path &out, const std::vector<Record> &records) {
                     16 + std::uint64_t(Le32(data.data() + 4)) * 48 > data.size()) {
                     Fail("invalid battle menu image in {}", record.path);
                 }
-                for (std::uint32_t i = 0; i < Le32(data.data() + 4); i++) {
-                    const unsigned char *entry = data.data() + 16 + i * 48;
-                    if (std::memcmp(entry, "wepstatus", 9) != 0) {
-                        continue;
+                // PAL moved the weapon status sheet out of btlmenu.img into btlmenu2.img, and its
+                // battle menu loads both, so the sheet has to leave btlmenu.img as well: entered
+                // twice, it runs the menu's block past the fixed textures in VRAM.
+                std::uint32_t count = Le32(data.data() + 4);
+                auto          build = [&](bool status) {
+                    std::vector<std::uint32_t> picked;
+                    for (std::uint32_t i = 0; i < count; i++) {
+                        if ((std::memcmp(data.data() + 16 + i * 48, "wepstatus", 10) == 0) == status) {
+                            picked.push_back(i);
+                        }
                     }
-                    std::size_t offset = Le32(entry + 32);
-                    std::size_t end = i + 1 < Le32(data.data() + 4) ? Le32(data.data() + 16 + (i + 1) * 48 + 32) : data.size();
-                    if (offset < 64 || end > data.size() || end <= offset) {
-                        Fail("invalid wepstatus image in {}", record.path);
+                    std::vector<unsigned char> built(16 + picked.size() * 48);
+                    std::memcpy(built.data(), data.data(), 16);
+                    Put32(built.data() + 4, static_cast<std::uint32_t>(picked.size()));
+                    for (std::size_t n = 0; n < picked.size(); n++) {
+                        const unsigned char *entry = data.data() + 16 + picked[n] * 48;
+                        std::size_t          offset = Le32(entry + 32);
+                        std::size_t          end =
+                            picked[n] + 1 < count ? Le32(entry + 48 + 32) : data.size();
+                        if (offset < 16 + count * 48 || end > data.size() || end <= offset) {
+                            Fail("invalid battle menu image in {}", record.path);
+                        }
+                        std::memcpy(built.data() + 16 + n * 48, entry, 48);
+                        Put32(built.data() + 16 + n * 48 + 32, static_cast<std::uint32_t>(built.size()));
+                        built.insert(built.end(), data.begin() + offset, data.begin() + end);
                     }
-                    std::vector<unsigned char> single(64);
-                    std::memcpy(single.data(), data.data(), 16);
-                    std::memcpy(single.data() + 16, entry, 48);
-                    Put32(single.data() + 4, 1);
-                    Put32(single.data() + 48, 64);
-                    single.insert(single.end(), data.begin() + offset, data.begin() + end);
+                    return std::pair(picked.size(), built);
+                };
+                auto [statuses, single] = build(true);
+                if (statuses == 1) {
+                    image->data = build(false).second;
                     members.push_back({"btlmenu2.img", std::move(single)});
                     changed = true;
-                    break;
                 }
             }
         }

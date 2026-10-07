@@ -38,3 +38,18 @@ struct OptionResolution {
 std::vector<OptionResolution> OptionResolutionList(std::span<const DisplayModeSize> modes, int configured_width,
                                                    int configured_height, bool display_known, int display_width,
                                                    int display_height);
+
+// The Controls row's reset presets: Middle Mouse, Mouse4, Mouse5, Home and Disabled, followed by
+// the configured custom binding when present. Selecting a preset changes only zoom_reset.
+int         OptionZoomResetChoice(const Config &config);
+int         OptionZoomResetCount(const Config &config);
+std::string OptionZoomResetText(const Config &config);
+void        OptionSetZoomReset(Config &config, int choice);
+void        OptionRestoreZoomReset(Config &config, const Config &defaults);
+
+// Presets for the camera's vertical return rate.
+int         OptionCameraReturnChoice(const Config &config);
+int         OptionCameraReturnCount(const Config &config);
+std::string OptionCameraReturnText(const Config &config);
+void        OptionSetCameraReturn(Config &config, int choice);
+void        OptionRestoreCameraReturn(Config &config, const Config &defaults);

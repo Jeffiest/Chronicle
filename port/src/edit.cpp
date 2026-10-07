@@ -649,7 +649,7 @@ PC_OVERRIDE void DM_Main() {
                 run_event += 10;
             }
 
-            if (GamePad.On(PAD_CIRCLE)) {
+            if (GamePad.On(PAD_CROSS)) {
                 EdDebugRunEventNo = run_event;
             }
 
@@ -671,7 +671,7 @@ PC_OVERRIDE void DM_Main() {
                 talk_chara += 10;
             }
 
-            if (GamePad.On(PAD_CIRCLE)) {
+            if (GamePad.On(PAD_CROSS)) {
                 EdTalkModeInit(EdVillager, talk_chara);
                 EdDebugRunEventNo = 256;
             }
@@ -735,7 +735,7 @@ PC_OVERRIDE void DM_Sound() {
     char      *cursor[2] = {"  ", "->"};
 
     AddStr(DebugFont, "L2<-SOUND   ->\n");
-    sprintf(work, "%sBGM PLAY %d SEQ = %d o:PLAY x:STOP\n", cursor[select == 0], bgm_no, bgm_seq);
+    sprintf(work, "%sBGM PLAY %d SEQ = %d x:PLAY start:STOP\n", cursor[select == 0], bgm_no, bgm_seq);
     AddStr(DebugFont, work);
     sprintf(work, "%sBGM OFF = %s\n", cursor[select == 1], on_off[SndGetBgmDisableFlag()]);
     AddStr(DebugFont, work);
@@ -778,14 +778,14 @@ PC_OVERRIDE void DM_Sound() {
                 bgm_seq = 3;
             }
 
-            if (GamePad.Down(PAD_CIRCLE)) {
+            if (GamePad.Down(PAD_CROSS)) {
                 SndBgmStop();
                 SndBgmInit();
                 SndBgmLoad(bgm_no);
                 SndBgmPlay(bgm_seq);
             }
 
-            if (GamePad.Down(PAD_CROSS)) {
+            if (GamePad.Down(PAD_START)) {
                 SndBgmStop();
                 SndBgmInit();
             }
@@ -818,11 +818,11 @@ PC_OVERRIDE void DM_Sound() {
                 se_no += 10;
             }
 
-            if (GamePad.Down(PAD_CIRCLE)) {
+            if (GamePad.Down(PAD_CROSS)) {
                 SndSePlay(se_no, -1, 0);
             }
 
-            if (GamePad.Down(PAD_CROSS)) {
+            if (GamePad.Down(PAD_START)) {
                 SndSeStop(se_no, 0);
             }
 
@@ -844,7 +844,7 @@ PC_OVERRIDE void DM_Sound() {
                 set_no += 10;
             }
 
-            if (GamePad.Down(PAD_CIRCLE)) {
+            if (GamePad.Down(PAD_CROSS)) {
                 SndSoundLoad(set_no);
             }
 
@@ -965,11 +965,11 @@ PC_OVERRIDE void DM_Flag() {
         case 0:
             value = &game_no;
 
-            if (GamePad.Down(PAD_CIRCLE)) {
+            if (GamePad.Down(PAD_CROSS)) {
                 SaveData->SetGameFlag(game_no, 1);
             }
 
-            if (GamePad.Down(PAD_CROSS)) {
+            if (GamePad.Down(PAD_START)) {
                 SaveData->SetGameFlag(game_no, 0);
             }
 
@@ -977,11 +977,11 @@ PC_OVERRIDE void DM_Flag() {
         case 1:
             value = &map_no;
 
-            if (GamePad.Down(PAD_CIRCLE)) {
+            if (GamePad.Down(PAD_CROSS)) {
                 SaveData->SetMapFlag(MapNo, map_no, 0);
             }
 
-            if (GamePad.Down(PAD_CROSS)) {
+            if (GamePad.Down(PAD_START)) {
                 SaveData->SetMapFlag(MapNo, map_no, 1);
             }
 
@@ -989,11 +989,11 @@ PC_OVERRIDE void DM_Flag() {
         case 2:
             value = &comp_no;
 
-            if (GamePad.Down(PAD_CIRCLE)) {
+            if (GamePad.Down(PAD_CROSS)) {
                 EditPartsInfo.SetCompEvent(comp_no, 1);
             }
 
-            if (GamePad.Down(PAD_CROSS)) {
+            if (GamePad.Down(PAD_START)) {
                 EditPartsInfo.SetCompEvent(comp_no, 0);
             }
 
@@ -1113,11 +1113,11 @@ PC_OVERRIDE void DM_Flag() {
         case 7:
             value = &chara;
 
-            if (GamePad.Down(PAD_CIRCLE) && npc) {
+            if (GamePad.Down(PAD_CROSS) && npc) {
                 npc->talk_message++;
             }
 
-            if (GamePad.Down(PAD_CROSS) && npc) {
+            if (GamePad.Down(PAD_START) && npc) {
                 npc->talk_message--;
             }
 

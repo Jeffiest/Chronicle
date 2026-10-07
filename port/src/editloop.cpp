@@ -12,6 +12,8 @@
 
 #include "boxvu0.hpp"
 #include "camera.hpp"
+#include "camera_port.hpp"
+#include "camera_zoom.hpp"
 #include "camerafollow.hpp"
 #include "character.hpp"
 #include "clsmes.hpp"
@@ -46,6 +48,7 @@
 #include "mglib.hpp"
 #include "npcharacter.hpp"
 #include "objanime.hpp"
+#include "platform/input.hpp"
 #include "objectframe.hpp"
 #include "rect.hpp"
 #include "runeffect.hpp"
@@ -392,6 +395,7 @@ PC_OVERRIDE int EditLoop() {
     switch (mode) {
         case ED_MODE_FISHING:
             draw_clock = 0;
+            TownMouseBegin(&MainCamera, pEditGround, MapNo, GameMode);
             MainMode();
             MainEditMode();
 
@@ -408,6 +412,8 @@ PC_OVERRIDE int EditLoop() {
             break;
         case ED_MODE_WALK:
             if (loop_counter > 0) {
+                TownMouseBegin(&MainCamera, pEditGround, MapNo, GameMode);
+                if (EdCheckViewMode() == 0) TownZoomBegin(&MainCamera, pEditGround, MapNo);
                 MainMode();
             }
 
@@ -674,6 +680,9 @@ PC_OVERRIDE int EditLoop() {
             break;
     }
 
+    TownZoomEnd();
+    TownMouseApply(NowCamera, pEditGround, MapNo, GameMode);
+
     sceVu0FMATRIX view;
     sceVu0FVECTOR eye;
 
@@ -868,8 +877,9 @@ PC_OVERRIDE int EditLoop() {
             GamePad.KeyLock(0);
             EdDebugMenu();
 
-            if (GamePad.Down(PAD_R3) != 0 || EdDebugRunEventNo > 0) {
+            if (GamePad.Down(PAD_R3 | PAD_CIRCLE) != 0 || EdDebugRunEventNo > 0) {
                 debug_menu_mode = 0;
+                InputSetMenuNavigation(false);
                 GamePad.AutoRepeatOff();
                 RunEvent(EdDebugRunEventNo, NowCamera);
             } else {
@@ -880,6 +890,7 @@ PC_OVERRIDE int EditLoop() {
                 GamePad.SetAutoRepeat(PAD_DPAD, 0x19, 3);
                 GamePad.SetAutoRepeat(PAD_L1 | PAD_R1, 0x19, 3);
                 debug_menu_mode = 1;
+                InputSetMenuNavigation(true);
                 debug_flag = 0;
             }
 
@@ -1533,6 +1544,28 @@ static void EditMainDraw() {
     }
 }
 
+
+// Retail's MoveCamera, the georama view's, with the mouse turning it beside the right stick.
+PC_OVERRIDE void MoveCamera(CCameraFollow *camera) {
+    float horizontal = MouseLookTurn(camera, 0.03f, GamePad.GetRXf());
+    camera->AddHeight(-GamePad.GetRYf());
+
+    if (EdDebugCameraFlag == 0 && !(camera->GetHeight() <= 30.0f)) {
+        camera->SetHeight(30.0f);
+    }
+
+    camera->AddAngle(0.03f * -horizontal);
+
+    if (horizontal == 0.0f) {
+        if (GamePad.On(PAD_R1) != 0) {
+            camera->AddAngle(-DEG_TO_RAD);
+        }
+
+        if (GamePad.On(PAD_L1) != 0) {
+            camera->AddAngle(DEG_TO_RAD);
+        }
+    }
+}
 
 // Retail's EdDrawClock, kept in the window's top right corner.
 PC_OVERRIDE void EdDrawClock(int x, int y) {

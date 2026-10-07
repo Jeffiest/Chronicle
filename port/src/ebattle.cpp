@@ -1,13 +1,15 @@
 #include "ebattle.hpp"
 
+#include <cmath>
+
 #include "character.hpp"
 #include "dataread.hpp"
 #include "editloop.hpp"
 #include "gamepad.hpp"
 #include "menu_save.hpp"
-#include "snd.hpp"
-
 #include "platform/config.hpp"
+#include "platform/input.hpp"
+#include "snd.hpp"
 
 struct EB_KEY {
     int frame;
@@ -186,4 +188,180 @@ PC_OVERRIDE int EBLoop() {
     draw_ok_loop();
     eb_count++;
     return 0;
+}
+
+#include <libvu0.h>
+
+#include "camera.hpp"
+#include "camera_port.hpp"
+#include "camerafollow.hpp"
+#include "character.hpp"
+#include "edit.hpp"
+#include "fishing.hpp"
+#include "gameutil.hpp"
+#include "npcharacter.hpp"
+
+// Defined by ps2/src/ebattle.cpp without a header declaration.
+extern int   viewMode;
+extern int   chara_mode;
+extern float viewAngleH;
+extern float viewAngleV;
+
+int PortEdCheckKeyMode(int mode);
+
+// The right stick of the town's walk: EdMoveChara turns its camera by RX (0.03 a tick, unless a
+// wall is on that side) and raises it by RY while it is under 30. RX stays the stick's: the mouse's
+// turn goes to EditLoop's request (camera_port.hpp), which checks it against the walls itself; so
+// the drift behind a walking character and R1 and L1, which wait for RX to rest, see only the stick.
+// RY takes the mouse as camera_port.hpp describes. In an interior's first-person view EdMoveChara
+// turns the character by RX only while the left stick rests, so the mouse turns it in EyeCamera.
+
+PC_OVERRIDE float EdGetRXf(int mode) {
+    if (PortEdCheckKeyMode(mode)) {
+        CCameraFollow *camera = EdMoveCharaInfo.camera;
+        if (viewMode == 0 && !EdMoveCharaInfo.interior && camera != NULL) {
+            TownMouseRecord(camera, EdMoveCharaInfo.fishing != 0);
+        }
+        return GamePad.GetRXf();
+    }
+
+    return 0.0f;
+}
+
+// EdMoveChara reads it for the town's camera only; EyeCamera below reads the stick itself.
+PC_OVERRIDE float EdGetRYf(int mode) {
+    if (PortEdCheckKeyMode(mode)) {
+        CCameraFollow *camera = EdMoveCharaInfo.camera;
+        float          stick = GamePad.GetRYf();
+        if (camera == NULL) {
+            return stick;
+        }
+        float reading = MouseLookRise(camera, stick, EdDebugCameraFlag == 0 ? 30.0f : INFINITY, 5.0f);
+        // Retail ignores RY at the ceiling, including a request to lower the camera. Let a
+        // native mouse reversal leave that ceiling; the subsequent floor checks still apply.
+        if (EdDebugCameraFlag == 0 && camera->GetHeight() >= 30.0f && InputGetMouseLook().pitch > 0.0f) {
+            camera->AddHeight(-reading);
+            return 0.0f;
+        }
+        return reading;
+    }
+
+    return 0.0f;
+}
+
+// Retail's, with the mouse turning the view while it is the one shown. In an interior the view
+// takes its heading from the character's (EdMoveChara), so the mouse turns the character too.
+PC_OVERRIDE void EyeCamera(CCamera *camera, CCharacter *character, int right_stick) {
+    float stick_x;
+    float stick_y;
+    bool  unlocked = (chara_mode & 3) == 0;
+    auto  keyboard = InputGetKeyboardMovement();
+    bool  walking = viewMode != 0 && (keyboard.x || keyboard.y);
+
+    if (right_stick != 0) {
+        stick_x = 0.0f;
+        stick_y = unlocked && PortEdCheckKeyMode(1) ? -GamePad.GetRYf() : 0.0f;
+    } else {
+        stick_x = unlocked && !walking ? EdGetLXf(1) : 0.0f;
+        stick_y = unlocked && !walking ? -EdGetLYf(1) : 0.0f;
+    }
+
+    if (stick_x > 0.0f) {
+        float rate = 0.02f;
+        viewAngleH -= stick_x * rate;
+
+        if (viewAngleH < -PI) {
+            viewAngleH += TWO_PI;
+        }
+    }
+
+    if (stick_x < -0.0f) {
+        float rate = 0.02f;
+        viewAngleH -= stick_x * rate;
+
+        if (viewAngleH > PI) {
+            viewAngleH -= TWO_PI;
+        }
+    }
+
+    if (stick_y > 0.0f && viewAngleV < 0.65f) {
+        float rate = 0.02f;
+        viewAngleV += stick_y * rate;
+    }
+
+    if (stick_y < -0.0f && viewAngleV > -1.0f) {
+        float rate = 0.02f;
+        viewAngleV += stick_y * rate;
+    }
+
+    if (viewMode != 0 && unlocked && PortEdCheckKeyMode(1)) {
+        float heading = MouseLookEyeAngleH(viewAngleH);
+
+        if (right_stick != 0 && heading != viewAngleH) {
+            sceVu0FVECTOR rotation;
+            character->GetRotation(rotation);
+            rotation[1] = heading;
+            character->SetRotation(rotation);
+        }
+
+        viewAngleH = heading;
+        viewAngleV = MouseLookEyeAngleV(viewAngleV);
+    }
+
+    EdEyeCamera(camera, character);
+}
+
+extern int chara_fishing;
+
+// Suppress the interior's keyboard steering; the collision seam supplies camera-relative WASD.
+PC_OVERRIDE float EdGetLXf(int mode) {
+    auto move = InputGetKeyboardMovement();
+    if (!PortEdCheckKeyMode(mode) || (viewMode && (move.x || move.y))) {
+        return 0.0f;
+    }
+    return GamePad.GetLXf();
+}
+
+PC_OVERRIDE float EdGetLYf(int mode) {
+    auto move = InputGetKeyboardMovement();
+    if (!PortEdCheckKeyMode(mode) || (viewMode && (move.x || move.y))) {
+        return 0.0f;
+    }
+    return GamePad.GetLYf();
+}
+
+int PortEdMoveCheck(float *pos, float *velocity, float *out_pos, MoveCheckInfo *out_info, CCPoly *polys, int poly_num, int mode) {
+    auto move = InputGetKeyboardMovement();
+    bool walking = viewMode && (move.x || move.y) && !(chara_mode & 3) &&
+                   !EdMoveCharaInfo.key_lock && PortEdCheckKeyMode(1) && chara_fishing <= ED_FISHING_STAND;
+    if (walking) {
+        float heading = MouseLookEyeAngleH(viewAngleH);
+        velocity[0] = 0.6f * (move.x * cosf(heading) - move.y * sinf(heading));
+        velocity[2] = 0.6f * (-move.y * cosf(heading) - move.x * sinf(heading));
+        auto *chara = static_cast<CMainChara *>(EdMoveCharaInfo.chara);
+        if (chara->move_info.landed) {
+            sceVu0FVECTOR normal;
+            sceVu0Normalize(normal, chara->move_info.ground_poly.normal);
+            velocity[0] *= fabsf(normal[1]);
+            velocity[2] *= fabsf(normal[1]);
+        }
+        sceVu0FVECTOR rotation;
+        chara->GetRotation(rotation);
+        rotation[1] = heading;
+        chara->SetRotation(rotation);
+    }
+    int result = MoveCheck(pos, velocity, out_pos, out_info, polys, poly_num, mode);
+    static float walked = 0.0f;
+    if (walking && !EdMoveCharaInfo.interior && out_info->landed) {
+        walked += hypotf(out_pos[0] - pos[0], out_pos[2] - pos[2]);
+        if (walked >= 10.0f) {
+            static int foot = 0;
+            SndPlayFootSound(out_info->poly.attr.foot_sound, foot, out_pos);
+            foot ^= 1;
+            walked = fmodf(walked, 10.0f);
+        }
+    } else {
+        walked = 0.0f;
+    }
+    return result;
 }

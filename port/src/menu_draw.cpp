@@ -2,7 +2,11 @@
 
 #include <cstdint>
 
+#include "gameutil.hpp"
 #include "menu_inventory.hpp"
+#include "mglib.hpp"
+#include "snd.hpp"
+#include "name_mouse.hpp"
 #include "rect.hpp"
 
 // Retail rounds up to 64 bytes through int, which only holds an address below 2 GiB.
@@ -21,4 +25,11 @@ PC_OVERRIDE void PersonalBoardDrawWaku(int x, int y, CTexture *texture, int alph
     DrawMenu2DSprite(texture, CRect_i_(x + 0x14, y + 1, 0xC8, 0x14), CRect_i_(0x14, 0, 0xC8, 0x14), alpha);
     DrawMenu2DSprite(texture, CRect_i_(x + 0xDC, y + 1, 0x24, 0xBF), CRect_i_(0xDC, 0, 0x24, 0xC0), alpha);
     DrawMenu2DSprite(texture, CRect_i_(x + 0x14, y + 0xA1, 0xC8, 0x1F), CRect_i_(0x14, 0xA0, 0xC8, 0x20), alpha);
+}
+
+// The Register Name screen's hand follows the mouse while the pointer is in use.
+PC_OVERRIDE void DrawMenu2DSprite(CTexture *texture, CRect_i_ screen, CRect_i_ texel, unsigned char r, unsigned char g,
+                                  unsigned char b, int alpha) {
+    NameMouseHand(texture, screen, texel, r == 0 && g == 0 && b == 0);
+    set2DSprite(GetVif1Packet(), texture, screen, texel, r, g, b, alpha);
 }

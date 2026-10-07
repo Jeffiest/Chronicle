@@ -10,6 +10,7 @@
 #include "name_mouse_layout.hpp"
 #include "platform/input.hpp"
 #include "platform/window.hpp"
+#include "rect.hpp"
 
 // NAME_SELECT of ps2/src/battle_globals.cpp, which keeps the struct and its enums to itself.
 struct NameSelectView {
@@ -35,6 +36,7 @@ static_assert(offsetof(NameSelectView, cursor) == 12 && offsetof(NameSelectView,
 static_assert(offsetof(NameSelectView, cursor_x) == 24 && offsetof(NameSelectView, language) == 36);
 
 extern NameSelectView NameSelect;
+extern CTexture       *NameTemp;
 extern short          menu_euro_codetbl[5][2][13];
 extern signed char    menu_kigoutbl[40];
 extern signed char    euro_code_linelimmit[5];
@@ -253,3 +255,14 @@ void NameMouseUpdate() {
     }
 }
 
+
+bool NameMouseHand(CTexture *texture, CRect_i_ &screen, const CRect_i_ &texel, bool shadow) {
+    // DrawNameTemplete's hand: 32 by 32 at (0x1C0, 0x128) of nametemp.
+    if (!g_state.active || !g_state.pointing || texture != NameTemp || NameTemp == nullptr || texel.x != 0x1C0 ||
+        texel.y != 0x128 || texel.width != 32 || texel.height != 32) {
+        return false;
+    }
+    screen.x = static_cast<int>(g_state.x - kFingerX) + (shadow ? 2 : 0);
+    screen.y = static_cast<int>(g_state.y - kFingerY) + (shadow ? 2 : 0);
+    return true;
+}

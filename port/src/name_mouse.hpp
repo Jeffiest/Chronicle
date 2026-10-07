@@ -11,3 +11,11 @@ void NameMouseUpdate();
 
 // The pad buttons the mouse presses this tick, as CGamePad::Down sees them.
 int NameMouseSyntheticDown();
+
+class CTexture;
+class CRect_i_;
+
+// The game draws its hand twice (a shadow, then the hand) where the cursor is. While the pointer is
+// in use this moves both to the pointer, as the Options screen's hand is. Returns false when the
+// draw is not the hand's, true when screen was changed or left as it was.
+bool NameMouseHand(CTexture *texture, CRect_i_ &screen, const CRect_i_ &texel, bool shadow);

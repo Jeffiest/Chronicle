@@ -537,3 +537,11 @@ TEST(PlatformConfig, DisplayFieldsFollowTheWindow) {
     std::error_code error;
     std::filesystem::remove_all(root, error);
 }
+
+TEST(PlatformConfig, QteAlwaysWin) {
+    ASSERT_TRUE(!ConfigParse("").qte_always_win);
+    Config config = ConfigParse(R"({"game": {"qte_always_win": true}})");
+    ASSERT_TRUE(config.qte_always_win);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).qte_always_win);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"qte_always_win": "yes"}})").qte_always_win);
+}

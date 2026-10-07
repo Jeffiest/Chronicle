@@ -142,6 +142,23 @@ TEST(PlatformConfig, ShowFpsAndTheHostKeys) {
     ASSERT_TRUE(config.key_bindings[1].action == "start" && config.key_bindings[1].keys.size() == 1);
 }
 
+TEST(PlatformConfig, SurroundIsOffUntilAsked) {
+    ASSERT_TRUE(!ConfigParse("").surround);
+    ASSERT_TRUE(ConfigParse(R"({"audio": {"surround": true}})").surround);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"surround": "yes"}})").surround);
+}
+
+TEST(PlatformConfig, SoundtrackIsPs2UntilAsked) {
+    ASSERT_TRUE(!ConfigParse("").soundtrack);
+    ASSERT_TRUE(ConfigParse(R"({"audio": {"soundtrack": "custom"}})").soundtrack);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"soundtrack": "ost"}})").soundtrack);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"soundtrack": "ps2"}})").soundtrack);
+    ASSERT_TRUE(!ConfigParse(R"({"audio": {"soundtrack": "other"}})").soundtrack);
+    Config custom;
+    custom.soundtrack = true;
+    ASSERT_NE(ConfigSerialize(custom).find("\"soundtrack\": \"custom\""), std::string::npos);
+}
+
 TEST(PlatformConfig, GameOptionsLiveInTheirPagesSections) {
     ConfigGameOptions defaults = ConfigParse("").options;
     ASSERT_TRUE(defaults == ConfigGameOptions{});

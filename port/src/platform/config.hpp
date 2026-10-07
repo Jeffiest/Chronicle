@@ -60,6 +60,9 @@ struct Config {
     float                         detail_distance = 0.0f;
     float                         shadow_distance = 0.0f;
     float                         master_volume = 1.0f;
+    bool                          surround = false;
+    // audio.soundtrack "custom": play recordings from soundtrack/ beside save/ and data/.
+    bool                          soundtrack = false;
     std::vector<ConfigKeyBinding> key_bindings;
     float                         mouse_sensitivity = 0.1f;
     float                         stick_sensitivity = 1.33f;

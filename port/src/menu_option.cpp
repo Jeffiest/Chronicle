@@ -132,6 +132,13 @@ void SetOnOff(Config &config, int choice) {
 }
 
 template <bool Config::*Field>
+Row NamedRow(const char *key, const char *label, const char *help, const char *names) {
+    // The first name is the setting off.
+    return {key, label, help, -1, Two, [](const Config &config) { return config.*Field ? 1 : 0; },
+            [](Config &config, int choice) { config.*Field = choice == 1; }, nullptr, names};
+}
+
+template <bool Config::*Field>
 Row OnOffRow(const char *key, const char *label, const char *help) {
     return {key, label, help, -1, Two, GetOnOff<Field>, SetOnOff<Field>, nullptr, "On|Off"};
 }
@@ -453,6 +460,11 @@ const Row kAudioRows[] = {
     Row{"audio.master_volume", "Volume", "\"Volume\"\nHow loud the game is.", -1, VolumeCount, VolumeChoice, SetVolume,
         VolumeText},
     GameRow<&ConfigGameOptions::stereo, true>("audio.sound", "Sound", "Stereo|Mono", 0x161),
+    NamedRow<&Config::soundtrack>("audio.soundtrack", "Soundtrack",
+                                  "\"Soundtrack\"\nPS2: the game's music.\nCustom: your own\nrecordings, from the\nnext song.",
+                                  "PS2|Custom"),
+    OnOffRow<&Config::surround>("audio.surround", "Surround",
+                                "\"Surround\"\nSpreads the sound to\n5.1 speakers."),
 };
 
 const Row kControlRows[] = {

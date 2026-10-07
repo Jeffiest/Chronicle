@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "hdbank.hpp"
+#include "pcm.hpp"
 #include "reverb.hpp"
 #include "sequencer.hpp"
 #include "synth.hpp"
@@ -32,6 +33,10 @@ public:
     void BindBank(int port, std::shared_ptr<const Bank> bank);
 
     void SetSequence(int port, std::shared_ptr<const SqFile> file);
+
+    // A recording the port plays instead of its sequence (the soundtrack option): Rewind, Play, Stop,
+    // IsPlaying and SetVolume treat it as the sequence. SetSequence takes it away; null does too.
+    void SetStream(int port, std::shared_ptr<const PcmTrack> track);
 
     void Rewind(int port, int song);
 
@@ -88,15 +93,18 @@ private:
     };
 
     struct Port final : MidiSink {
-        Mixer                         *mixer = nullptr;
-        int                            index = 0;
-        std::shared_ptr<const Bank>    bank;
-        Sequencer                      sequencer;
-        std::array<Channel, kChannels> channels;
-        int                            volume = 0;
-        int                            attribute = 0;
-        int                            effect_volume = 127;
-        int                            effect_pan = 64;
+        Mixer                          *mixer = nullptr;
+        int                             index = 0;
+        std::shared_ptr<const Bank>     bank;
+        Sequencer                       sequencer;
+        std::array<Channel, kChannels>  channels;
+        int                             volume = 0;
+        int                             attribute = 0;
+        int                             effect_volume = 127;
+        int                             effect_pan = 64;
+        std::shared_ptr<const PcmTrack> stream;
+        double                          stream_position = 0.0;
+        bool                            stream_playing = false;
 
         void ChannelMessage(std::uint8_t status, std::uint8_t data1, std::uint8_t data2) override;
     };
@@ -118,6 +126,9 @@ private:
     void ForVoices(Match match, Action action);
 
     void ReleaseVoice(Voice &voice);
+
+    // Adds the playing recordings' next frames to out.
+    void RenderStreams(float *out, int frames);
 
     void UpdateVoices();
 

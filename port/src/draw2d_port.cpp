@@ -1,5 +1,8 @@
 #include "draw2d_port.hpp"
 
+#include <algorithm>
+#include <span>
+
 #include "mglib.hpp"
 #include "mglib_port.hpp"
 #include "texture.hpp"
@@ -107,6 +110,42 @@ gfx::Vertex2D Vertex(float x, float y, float z, float u, float v, u_char r, u_ch
     return vertex;
 }
 
+constexpr float kEdgeSettle = 1.0f / 256.0f;
+
+bool ScaledOnMainTarget() {
+    if (gfx::CurrentRenderTarget() != gfx::kMainTarget) {
+        return false;
+    }
+    gfx::LogicalMapping mapping = gfx::GetUiMapping(gfx::kMainTarget);
+    return mapping.scale_x != 1.0f || mapping.scale_y != 1.0f;
+}
+
+void SettleEdgeSamples(gfx::Primitive primitive, std::span<gfx::Vertex2D> vertices) {
+    // A strip of four vertices is one sprite; a longer one is not a sprite to settle.
+    bool sprites = primitive == gfx::Primitive::Quads ||
+                   (primitive == gfx::Primitive::TriangleStrip && vertices.size() == 4);
+    if (!sprites) {
+        return;
+    }
+    for (size_t first = 0; first + 4 <= vertices.size(); first += 4) {
+        std::span<gfx::Vertex2D> sprite = vertices.subspan(first, 4);
+        float                    u_min = sprite[0].u;
+        float                    v_min = sprite[0].v;
+        for (const gfx::Vertex2D &vertex : sprite) {
+            u_min = std::min(u_min, vertex.u);
+            v_min = std::min(v_min, vertex.v);
+        }
+        for (gfx::Vertex2D &vertex : sprite) {
+            if (vertex.u == u_min) {
+                vertex.u += kEdgeSettle;
+            }
+            if (vertex.v == v_min) {
+                vertex.v += kEdgeSettle;
+            }
+        }
+    }
+}
+
 void DrawTextured(gfx::Primitive primitive, std::span<gfx::Vertex2D> vertices, u_long tex0, u_long tex1,
                   gfx::DrawState state) {
     Texture texture;
@@ -114,6 +153,9 @@ void DrawTextured(gfx::Primitive primitive, std::span<gfx::Vertex2D> vertices, u
         return;
     }
 
+    if (texture.binding.filter == gfx::Filter::Nearest && ScaledOnMainTarget()) {
+        SettleEdgeSamples(primitive, vertices);
+    }
     const float rows = RowScale();
     for (gfx::Vertex2D &vertex : vertices) {
         vertex.y *= rows;

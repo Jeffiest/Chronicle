@@ -1305,6 +1305,50 @@ change. `CMemoryCardAccess::SetBuff` zeroes them in the copy it writes, so
 `save.dat` carries no options; its layout is retail's, so their bytes remain,
 as zeros.
 
+## The Register Name screen
+
+While the name-entry screen is open (from the read of its textures until
+the game closes it) the mouse is a pointer there as well, taken with
+`InputSetMenuMouse` as the Options screen takes it: its motion and buttons stop
+pressing pad 1's buttons and reach `InputTakeMenuMouse`. The game's own hand
+and orange brackets are the only cursor. The pointer is a point in the
+640x480 space that the mouse's relative motion moves, through the mapping the 2D is
+drawn with (`gfx::GetUiMapping`, so `video.aspect` and `ui_scale` both hold, and a
+window whose size differs from its target's, as on a high-DPI display); a
+script's `mouse:DX,DY` counts main-target pixels. It starts at the hand's
+fingertip, appears on the first motion, click or wheel notch and goes back to
+the pad when a pad button or the left stick is used.
+
+- **Hover.** A key, a tab (ALPHABET, SYMBOL/NUMBERS, DEFAULT, DECIDE, the two
+  arrows, DEL., INS., PROFILE) puts the cursor on it, with the cursor
+  sound, by setting `NameSelect.area`, `cursor` and `side_row` as the pad would.
+  Nothing else moves; the name's slots are not hover targets, since they lie on the way
+  to the tabs.
+- **Left click** is Cross. On a key or tab it presses `PAD_CROSS` for the
+  tick, which `CGamePad::Down` reports from `NameMouseSyntheticDown`, so the game
+  types the character, switches the tab, deletes, inserts, moves the text cursor,
+  opens the PROFILE message or asks to confirm (DECIDE) with its own code and
+  sounds. On a slot of the name it moves the text cursor there. In the "Accept?"
+  dialog the Yes line is Cross and the No line Circle; a click on the message
+  of PROFILE or of the default-name notice closes it. A click on nothing does
+  nothing.
+- **Right click** is Circle, as on the pad: it blanks a character on the keyboard
+  and tabs, answers No in "Accept?" and closes a message.
+- **Wheel.** Away from the user goes left or back, toward the user right or
+  forward. Over the name it moves the text cursor, as L1 and R1 do; anywhere
+  else it cycles the keyboard tabs (ALPHABET and SYMBOL/NUMBERS), as L2 and R2 do.
+- Clicks are ignored while the screen fades in and out, and a button still held
+  when it closes (or as it opens, from the book before it) acts only once
+  released, so no click reaches the next screen.
+
+The hit areas (`port/src/name_mouse_layout.cpp`) are the places
+`DrawNameTemplete`, `DrawCharaName` and `NameEnterDraw` draw at, for PAL's
+languages: the alphabet keyboard with the accented rows of French, German,
+Italian and Spanish, the symbol keyboard without its blank keys, and each
+language's tabs. The kana keyboards are Japanese-only and not offered.
+`name_mouse.cpp` is called from `pad_button_read`, ahead of the game's read of
+the pad, so no function of `ps2/src` is replaced for it.
+
 ## Arenas
 
 `CDataAlloc2<1>::Alloc/Alloc64/Align64` and the carving in

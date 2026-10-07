@@ -1,5 +1,6 @@
 #include "menu_dungeon.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -54,10 +55,13 @@ const int kSphereCell = 129;
 const int kSheetWidth = 256;
 const int kSheetHeight = 640;
 const int kTurnFrames = 20;
+// The character menu's exit after a change: its LOADING and LOADED steps count to 0x11 each frame.
+const int kCloseFrames = 0x11;
 
 enum PickerStep {
     PICKER_SELECT,
     PICKER_TURNING,
+    PICKER_CLOSING,
 };
 
 struct ElementPicker {
@@ -70,6 +74,7 @@ struct ElementPicker {
     int       step;
     float     turn_frame;
     float     turn_direction;
+    int       close_frame;
     int       ring_slot[6];
     float     ring_pos[6][2];
     CTexture *icons;
@@ -198,7 +203,9 @@ void PlaceRing() {
     float step = TWO_PI / g_picker.count;
     float turn = 0.0f;
 
-    if (g_picker.step == PICKER_TURNING) {
+    if (g_picker.step == PICKER_CLOSING) {
+        turn = step / kTurnFrames * g_picker.close_frame;
+    } else if (g_picker.step == PICKER_TURNING) {
         turn = step / kTurnFrames * g_picker.turn_frame;
 
         if (g_picker.turn_direction < 0.0f) {
@@ -249,6 +256,7 @@ void SetUpRing() {
     g_picker.step = PICKER_SELECT;
     g_picker.turn_frame = 0.0f;
     g_picker.turn_direction = 0.0f;
+    g_picker.close_frame = 0;
     g_picker.changed = false;
     PlaceRing();
 }
@@ -300,6 +308,11 @@ void Turn(int direction) {
 
 // 1 when the picker closes.
 int PickerKey() {
+    if (g_picker.step == PICKER_CLOSING) {
+        g_picker.close_frame++;
+        return g_picker.close_frame > kCloseFrames;
+    }
+
     if (g_picker.step == PICKER_TURNING) {
         g_picker.turn_frame += 1.0f;
 
@@ -334,8 +347,12 @@ int PickerKey() {
             g_picker.changed = true;
         }
 
+        // The ring leaves as the character menu's does after a change: spreading, turning and
+        // fading out.
         ComMenuSePlay(MENU_SOUND_CONFIRM);
-        return 1;
+        g_picker.step = PICKER_CLOSING;
+        g_picker.close_frame = 0;
+        return 0;
     }
 
     if (GamePad.Down(PAD_CIRCLE)) {
@@ -359,6 +376,14 @@ void PickerDraw() {
     FrameImageDraw(100, 0x80);
 
     if (CharaChangeReadFlag != 0 && g_picker.icons != NULL) {
+        bool closing = g_picker.step == PICKER_CLOSING;
+        int  alpha = closing ? std::max(0x80 - g_picker.close_frame * 4, 0) : 0x80;
+
+        if (closing) {
+            changeMenu_long += g_picker.close_frame;
+            PlaceRing();
+        }
+
         MenuTextureReload(CharaChangeTexBlock);
 
         for (int i = 0; i < g_picker.count; i++) {
@@ -368,7 +393,12 @@ void PickerDraw() {
             int x = QuickCharaPos[0] + g_picker.ring_pos[i][0] + inset;
             int y = QuickCharaPos[1] + g_picker.ring_pos[i][1] + inset;
 
-            DrawMenu2DSprite(g_picker.icons, CRect_i_(x, y, kIconSize, kIconSize), CRect_i_(cell % 8 * kIconSize, cell / 8 * kIconSize, kIconSize, kIconSize), 0x80, 0x80, 0x80, 0x80);
+            DrawMenu2DSprite(g_picker.icons, CRect_i_(x, y, kIconSize, kIconSize), CRect_i_(cell % 8 * kIconSize, cell / 8 * kIconSize, kIconSize, kIconSize), 0x80, 0x80, 0x80, alpha);
+        }
+
+        if (closing) {
+            setbilinear(1);
+            return;
         }
 
         DrawMenuWaku(QuickCharaPos[0] - changeMenu_long - 11.0f, QuickCharaPos[1] - 12, 0x34, 0x34, 0, StayTex, 0x80);

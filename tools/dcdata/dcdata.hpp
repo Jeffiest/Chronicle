@@ -515,6 +515,33 @@ inline bool IsNtscLayout(bool has_system_pack, bool has_pal_common_system_pack) 
     return has_system_pack && !has_pal_common_system_pack;
 }
 
+// The languages an extraction can run, as LanguageCode numbers, written to the data's root for the
+// port. NTSC shipped American English (1) alone: the disc's other languages are early drafts whose
+// images were never translated (its French and German title cards still read "Nolun Village" and
+// "Sun/Moon Temple"), and its Spanish is missing files. PAL runs the five its language select
+// offers, English being British (2).
+inline constexpr std::string_view kLanguagesFile = "languages.json";
+
+inline std::vector<int> SupportedLanguages(bool ntsc) {
+    return ntsc ? std::vector<int>{1} : std::vector<int>{2, 3, 4, 5, 6};
+}
+
+inline void WriteLanguages(const fs::path &out, const std::vector<Record> &records) {
+    bool system_pack = false;
+    bool pal_common = false;
+    for (const Record &record : records) {
+        system_pack |= record.path == kSystemPack;
+        pal_common |= record.path == kPalCommonSystemPack;
+    }
+    std::string text = "{\"languages\": [";
+    std::vector<int> languages = SupportedLanguages(IsNtscLayout(system_pack, pal_common));
+    for (std::size_t i = 0; i < languages.size(); i++) {
+        text += std::format("{}{}", i == 0 ? "" : ", ", languages[i]);
+    }
+    text += "]}\n";
+    WriteFile(out / kLanguagesFile, std::span(reinterpret_cast<const unsigned char *>(text.data()), text.size()));
+}
+
 inline void Normalize(const fs::path &out, const std::vector<Record> &records) {
     std::unordered_set<std::string> paths;
     for (const Record &record : records) {
@@ -703,6 +730,7 @@ inline Summary Extract(const Archive &archive, const fs::path &out, std::FILE *l
         Fail("write error on {}", index_copy.string());
     }
     Normalize(out, records);
+    WriteLanguages(out, records);
     return summary;
 }
 

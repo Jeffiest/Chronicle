@@ -51,13 +51,18 @@ files remain in the extracted tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.
 
-On NTSC data the port skips the language select and plays in American English
-(`LanguageCode` 1), as retail NTSC does. The NTSC disc's other languages are
-unfinished drafts: its British-named files are an early British text (Nolun
-Village) with no town dialogue, its French, German and Italian differ from what
-PAL shipped, and its Spanish is missing files. On PAL data the language select
-works as retail's, English being British (2). The port tells the discs apart the
-way the extractor does: NTSC has `gedit/system/esys.pak` and no `esys_cmn.pak`.
+The extractor also writes `languages.json`, the languages the data can run as
+`LanguageCode` numbers. With one, the port starts in it past the language
+select; with several, the select offers them. NTSC data has American English
+(1) alone, as retail NTSC: the disc's other languages are early drafts whose
+images were never translated (its French and German title cards read "Nolun
+Village" and "Sun/Moon Temple"), its British-named files have no town dialogue,
+and its Spanish is missing files. PAL data has the five its select offers,
+English being British (2). Data extracted before this file existed starts at the
+select, with a note to extract again.
+
+The select is retail's one image of all five buttons, so it cannot yet leave out
+a language the data lacks, and its English button reads as the disc's art does.
 
 `darkcloud` takes:
 
@@ -467,7 +472,7 @@ before the window opens. `GamePad.Down` fires on a press edge, so a press
 needs a later line that releases it:
 
 ```
-# language select (English; not on NTSC data), attract movie, title logo, menu
+# language select (English; skipped when the data has one language), attract movie, title logo, menu
 0
 70 cross
 75
@@ -508,7 +513,7 @@ the warm-up; the game then starts in `GAME_MODE_MENU`, the developer menu
 (`MenuLoop`, `ps2/src/main.cpp`), instead of the language select, and leaves
 pad 2 unlocked. The port takes `DebugMode` from `game.debug_mode` in
 `config.json`, which is off by default. The port starts at the language select
-(the attract movie on NTSC data) whether this flag is true or false. Setting it to true enables debug controls
+(the attract movie when the data has one language) whether this flag is true or false. Setting it to true enables debug controls
 from startup; the debug toggle chord can also enable them during play.
 `darkcloud` prints `debug mode on` when the flag starts enabled. An explicit
 `--jump menu` opens the developer menu at startup.
@@ -614,7 +619,7 @@ Cross enters the selected dungeon and Circle returns to the developer menu:
 | opening | the opening (`GAME_MODE_OPENING`, scenes op_a to op_d) |
 | `eventN` | one of three story events (map 23 event 310, map 41 event 150, map 19 event 305) |
 | `memory card N` | the save screen in mode N |
-| `Language N` | sets `LanguageCode` (default: the disc's English, 1 American on NTSC data, 2 British on PAL) |
+| `Language N` | sets `LanguageCode` (default: the data's one language when it has one, otherwise 2, British English) |
 
 ```
 0 down
@@ -669,7 +674,7 @@ with the hardware taken out, line for line otherwise:
 - The transitions are `GameApplyLoopResult` (what each mode's loop result
   does) and `GameFollowMapJump` (`NextMapNo` into the next mode), exported for
   the tests.
-- NTSC data starts at the attract movie, as if English had been chosen.
+- Data with one language starts at the attract movie, in that language.
 - The language select goes straight on to the attract movie: retail's memory
   card check (`GAME_MODE_MEMORY_CHECK`, `MemCheckLoop`) is never entered, as
   there is no card (see "Saves and host files").

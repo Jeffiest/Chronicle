@@ -118,6 +118,9 @@ TEST(DataExtract, FromIso) {
     ASSERT_TRUE(summary.warnings == 0);
     CheckExtracted(out, disc);
     ASSERT_TRUE(dcdata::Mismatched(dcdata::ParseIndex(disc.hd2), out).empty());
+    // Not NTSC's layout: PAL's five languages.
+    std::string languages = "{\"languages\": [2, 3, 4, 5, 6]}\n";
+    EXPECT_EQ(ReadBytes(out / "languages.json"), Bytes(languages.begin(), languages.end()));
     fs::remove_all(dir);
 }
 
@@ -172,6 +175,8 @@ TEST(DataExtract, NormalizesNtscAssets) {
     EXPECT_EQ(members[1].name, "start_f.img");
     EXPECT_EQ(members[1].data, start);
     EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_1.mes"), (Bytes{1, 2, 3, 4}));
+    std::string languages = "{\"languages\": [1]}\n";
+    EXPECT_EQ(ReadBytes(out / "languages.json"), Bytes(languages.begin(), languages.end()));
     EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_2.mes"), (Bytes{1, 2, 3, 4}));
     auto battle = dcdata::ReadPack(ReadBytes(out / "normalized/commenu/a_eng/dungeon/dunmenu5.pak"));
     ASSERT_EQ(battle.size(), 2);

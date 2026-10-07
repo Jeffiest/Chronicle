@@ -1,9 +1,9 @@
 #pragma once
 
+#include <vector>
+
 #include "common.h"
 
-// Whether the extracted data is the NTSC disc's (dcdata::IsNtscLayout over the data index).
-bool DataIsNtsc();
-
-// The English the data's disc shipped with: American on NTSC, British on PAL.
-s32 DataEnglishLanguage();
+// The languages the extracted data can run, as LanguageCode numbers, from the languages.json
+// dcdata writes (dcdata::SupportedLanguages); none when the data has no such file.
+std::vector<s32> DataLanguages();

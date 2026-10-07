@@ -547,9 +547,9 @@ TEST(PlatformConfig, QteAlwaysWin) {
 }
 
 TEST(PlatformConfig, ElementPicker) {
-    ASSERT_TRUE(!ConfigParse("").element_picker);
-    Config config = ConfigParse(R"({"game": {"element_picker": true}})");
-    ASSERT_TRUE(config.element_picker);
-    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).element_picker);
-    ASSERT_TRUE(!ConfigParse(R"({"game": {"element_picker": "yes"}})").element_picker);
+    ASSERT_TRUE(!ConfigParse("").element_quick_select);
+    Config config = ConfigParse(R"({"game": {"element_quick_select": true}})");
+    ASSERT_TRUE(config.element_quick_select);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).element_quick_select);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"element_quick_select": "yes"}})").element_quick_select);
 }

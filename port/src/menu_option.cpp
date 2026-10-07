@@ -438,8 +438,8 @@ const Row kGameRows[] = {
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
     OnOffRow<&Config::qte_always_win>("game.qte_always_win", "Always Win QTEs",
                                       "\"Always Win QTEs\"\nButton prompts always\nend in a perfect."),
-    OnOffRow<&Config::element_picker>("game.element_picker", "Element Picker",
-                                      "\"Element Picker\"\nD-pad Up in a dungeon\npicks the element."),
+    OnOffRow<&Config::element_quick_select>("game.element_quick_select", "Element Quick Select",
+                                            "\"Element Quick Select\"\nD-pad Up in a dungeon\npicks the element."),
 };
 
 const Row kDisplayRows[] = {

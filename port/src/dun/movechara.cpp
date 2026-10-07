@@ -421,11 +421,11 @@ PC_OVERRIDE void DunMoveChara() {
                         BtActStatus.invincible_frames--;
                     }
 
-                    // SELECT opens the party, as retail does; with game.element_picker on, D-pad Up
-                    // the same menu as the element picker (port/src/menu_dungeon.cpp), for a party of
-                    // any size and a weapon with more than one element to pick between.
+                    // SELECT opens the party, as retail does; with game.element_quick_select on,
+                    // D-pad Up the same menu as the element picker (port/src/menu_dungeon.cpp), for a
+                    // party of any size and a weapon with more than one element to pick between.
                     bool party = GamePad.Down(PAD_SELECT) != 0 && UserStatus->party_size >= 2;
-                    bool elements = !party && ConfigGet().element_picker && GamePad.Down(PAD_UP) != 0 &&
+                    bool elements = !party && ConfigGet().element_quick_select && GamePad.Down(PAD_UP) != 0 &&
                                     ElementPickerHasChoice();
 
                     if ((party || elements) && BtActStatus.action_on == 0) {

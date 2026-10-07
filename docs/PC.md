@@ -237,7 +237,7 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | R | R2 | first-person look (`dun/gameloop.cpp:4354`) |
 | C, Backspace | select | switch character (`dun/gameloop.cpp:3185`) |
 | Return | start | pause (`dun/gameloop.cpp:3045`); the title's prompts |
-| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); menus |
+| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker (`port/src/menu_dungeon.cpp`); menus |
 | V; middle click, B | L3; R3 | debug and editor functions only |
 | IJKL | right stick | the camera from the keyboard |
 | F3 | none | the FPS counter on and off (see "The FPS counter") |
@@ -1456,6 +1456,10 @@ renames what the unit takes from MWCC or from the PS2 link alone:
 - `mathutil` gets the Metrowerks runtime's own `std::exception` and
   `std::bad_exception` renamed apart from the host library's, and
   `__exception_magic`, which MWCC provides inside an exception handler.
+- `menu_dungeon` renames its `CharaChangeLoop` to `CharaChangeLoopRetail`. The
+  port's `CharaChangeLoop` (`port/src/menu_dungeon.cpp`) runs the dungeon's
+  quick-change menu as an element picker when D-pad Up opened it, and this
+  unit's loop when SELECT did.
 - `menu_save` and `memcard` export statics the other calls: memcard's
   `SaveMenuFunc` table names menu_save's eighteen `SaveMenuKey*` steps and
   menu_save calls memcard's `ExitSaveSelect`. The port's `SaveMenuFunc`

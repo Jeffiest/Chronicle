@@ -49,6 +49,7 @@
 #include "mds.hpp"
 #include "menu_draw.hpp"
 #include "menu_dungeon.hpp"
+#include "menu_dungeon_port.hpp"
 #include "menu_misc.hpp"
 #include "menu_save.hpp"
 #include "menuitemstep.hpp"
@@ -419,7 +420,13 @@ PC_OVERRIDE void DunMoveChara() {
                         BtActStatus.invincible_frames--;
                     }
 
-                    if (GamePad.Down(PAD_SELECT) != 0 && UserStatus->party_size >= 2 && BtActStatus.action_on == 0) {
+                    // SELECT opens the party, as retail does; D-pad Up the same menu as the element
+                    // picker (port/src/menu_dungeon.cpp), for a party of any size.
+                    bool party = GamePad.Down(PAD_SELECT) != 0 && UserStatus->party_size >= 2;
+                    bool elements = !party && GamePad.Down(PAD_UP) != 0;
+
+                    if ((party || elements) && BtActStatus.action_on == 0) {
+                        QuickChangeOpenElements(elements);
                         DngMessMan.enabled = false;
                         DngMessMan.message = -1;
                         DngMessMan.timer = 0;

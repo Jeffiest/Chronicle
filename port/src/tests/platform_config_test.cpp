@@ -545,3 +545,11 @@ TEST(PlatformConfig, QteAlwaysWin) {
     ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).qte_always_win);
     ASSERT_TRUE(!ConfigParse(R"({"game": {"qte_always_win": "yes"}})").qte_always_win);
 }
+
+TEST(PlatformConfig, ElementPicker) {
+    ASSERT_TRUE(!ConfigParse("").element_picker);
+    Config config = ConfigParse(R"({"game": {"element_picker": true}})");
+    ASSERT_TRUE(config.element_picker);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).element_picker);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"element_picker": "yes"}})").element_picker);
+}

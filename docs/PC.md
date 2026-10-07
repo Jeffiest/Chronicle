@@ -96,6 +96,7 @@ key is optional; these are the defaults:
         "tick_rate": 60,            // logic ticks (the game's VSyncs) per second
         "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
         "qte_always_win": false,    // button-prompt events (event battles) still play, but always end in a perfect
+        "element_picker": false,    // D-pad Up in a dungeon opens the quick-change menu as an element picker
         "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
         "message_speed": "normal",  // normal or fast
         "clock": true,              // the town clock
@@ -238,7 +239,7 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | R | R2 | first-person look (`dun/gameloop.cpp:4354`) |
 | C, Backspace | select | switch character (`dun/gameloop.cpp:3185`) |
 | Return | start | pause (`dun/gameloop.cpp:3045`); the title's prompts |
-| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker (`port/src/menu_dungeon.cpp`); menus |
+| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker when `game.element_picker` is on (`port/src/menu_dungeon.cpp`); menus |
 | V; middle click, B | L3; R3 | debug and editor functions only |
 | IJKL | right stick | the camera from the keyboard |
 | F3 | none | the FPS counter on and off (see "The FPS counter") |

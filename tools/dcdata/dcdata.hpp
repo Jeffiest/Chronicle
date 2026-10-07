@@ -565,11 +565,13 @@ inline int SharedColours(const std::vector<std::uint32_t> &a, const std::vector<
     return shared;
 }
 
-// The dungeon copies weapon icons from a wepicon sheet into the HUD's itempack by palette index, so
-// the two have to share a palette. The PAL disc's English quick-change pack and item list carry the
-// American wepicon, whose palette is not the English itempack's, and the icon a character change
-// copies comes out in the wrong colours. The language's dungeon-entry packs hold the same sheet in
-// itempack's palette, and it takes the other's place.
+// The dungeon copies weapon icons by palette index from whichever wepicon sheet is loaded into the
+// HUD's itempack: a dungeon-entry pack's on a new floor, then a menu's once the main menu or the
+// quick-change ring closes or a script reloads the item list. So every wepicon sheet of a language
+// has to share itempack's palette, as the American ones do. On the PAL disc only English's
+// dungeon-entry sheets do, and the HUD icon comes out in the wrong colours after any of those; the
+// other languages' fishing and shop sheets are off as well, though only the town shows them. A
+// sheet in another palette takes the dungeon-entry sheet's place: the same icons in itempack's.
 inline void NormalizeIconSheets(const fs::path &out, const std::vector<Record> &records) {
     // A sheet in another palette shares a handful of its colours with itempack's.
     constexpr int              kSharedPalette = 250;
@@ -619,24 +621,35 @@ inline void NormalizeIconSheets(const fs::path &out, const std::vector<Record> &
             std::copy(donor.begin(), donor.end(), bank.begin() + icons.offset);
             return true;
         };
-        std::string list = std::format("commenu/{}/itemlst.img", language);
-        if (fs::is_regular_file(out / list)) {
-            std::vector<unsigned char> bank = ReadFile(out / list);
-            if (replace(bank)) {
-                WriteFile(out / "normalized" / list, bank);
+        // Every image bank and pack of the language, but the leftovers the game never names (_x, x.old).
+        std::string folder = std::format("commenu/{}/", language);
+        for (const Record &file : records) {
+            std::string_view path = file.path;
+            std::string_view name = path.substr(path.rfind('/') + 1);
+            bool             bank = path.ends_with(".img");
+            if (!path.starts_with(folder) || name.starts_with('_') ||
+                !(bank || path.ends_with(".pak") || path.ends_with(".pac"))) {
+                continue;
             }
-        }
-        std::string quick = std::format("commenu/{}/quickchr.pac", language);
-        if (fs::is_regular_file(out / quick)) {
-            std::vector<PackMember> members = ReadPack(ReadFile(out / quick));
-            bool                    changed = false;
-            for (PackMember &member : members) {
-                if (EqualsFolded(member.name, "quickchr.img")) {
-                    changed |= replace(member.data);
+            std::vector<unsigned char> data = ReadFile(out / file.path);
+            if (bank) {
+                if (replace(data)) {
+                    WriteFile(out / "normalized" / file.path, data);
                 }
+                continue;
+            }
+            std::vector<PackMember> members;
+            try {
+                members = ReadPack(data);
+            } catch (const Error &) {
+                continue; // a .pac that holds no pack
+            }
+            bool changed = false;
+            for (PackMember &member : members) {
+                changed |= replace(member.data);
             }
             if (changed) {
-                WriteFile(out / "normalized" / quick, WritePack(members));
+                WriteFile(out / "normalized" / file.path, WritePack(members));
             }
         }
     }

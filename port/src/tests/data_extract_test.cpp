@@ -227,6 +227,9 @@ TEST(DataExtract, NormalizesIconSheets) {
         {"commenu/a_eng/quickchr.pac",           MakePack({{"qchr.mes", Pattern(8, 2)}, {"quickchr.img", american}})},
         {"commenu/a_eng/itemlst.img",            MakeIconBank({{"wepicon", 0x200, 4}, {"itemicon", 0x200, 7}})      },
         {"commenu/a_eng/dunenter/dunenter2.pak", MakePack({{"dunenter.img", english}})                              },
+        {"commenu/a_eng/kgetoan2.img",           MakeIconBank({{"wepicon", 0x200, 4}})                              },
+        {"commenu/a_eng/_charatex.img",          MakeIconBank({{"wepicon", 0x200, 4}})                              },
+        {"commenu/a_eng/manual/m10.pac",         Pattern(80, 9)                                                     },
         {"commenu/a_fre/itempack.img",           MakeIconBank({{"itempack", 0x200, 6}})                             },
         {"commenu/a_fre/quickchr.pac",           MakePack({{"quickchr.img", american}})                             },
         {"commenu/a_fre/dunenter/dunenter2.pak", MakePack({{"dunenter.img", english}})                              },
@@ -234,7 +237,7 @@ TEST(DataExtract, NormalizesIconSheets) {
     fs::path out = dir / "data";
     dcdata::Extract(dcdata::OpenArchive(WriteStandardIso(dir, disc)), out, nullptr);
 
-    // English: both American sheets take the English one; the rest of each file is as it was.
+    // English: the American sheets take the English one; the rest of each file is as it was.
     dcdata::Im2Picture donor = dcdata::FindIm2Picture(english, "wepicon");
     auto               holds_donor = [&](const Bytes &bank) {
         dcdata::Im2Picture icons = dcdata::FindIm2Picture(bank, "wepicon");
@@ -250,6 +253,10 @@ TEST(DataExtract, NormalizesIconSheets) {
     EXPECT_TRUE(std::equal(american.begin() + portraits.offset, american.begin() + portraits.offset + portraits.size,
                            quick[1].data.begin() + portraits.offset));
     EXPECT_TRUE(holds_donor(ReadBytes(out / "normalized/commenu/a_eng/itemlst.img")));
+    // The main menu's sheet too, but not a leftover the game never loads, and a .pac without a pack.
+    EXPECT_TRUE(holds_donor(ReadBytes(out / "normalized/commenu/a_eng/kgetoan2.img")));
+    EXPECT_FALSE(fs::exists(out / "normalized/commenu/a_eng/_charatex.img"));
+    EXPECT_FALSE(fs::exists(out / "normalized/commenu/a_eng/manual/m10.pac"));
     // French: its sheet already shares itempack's palette.
     EXPECT_FALSE(fs::exists(out / "normalized/commenu/a_fre/quickchr.pac"));
     fs::remove_all(dir);

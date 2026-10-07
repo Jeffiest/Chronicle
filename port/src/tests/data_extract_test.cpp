@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <tuple>
 
 #include "data_fixture.hpp"
 
@@ -180,6 +181,77 @@ TEST(DataExtract, NormalizesNtscAssets) {
     dcdata::Summary again = dcdata::Extract(archive, out, nullptr);
     EXPECT_EQ(again.written, 0);
     EXPECT_EQ(again.kept, 6);
+    fs::remove_all(dir);
+}
+
+// An IM2 bank of 16 by 16 eight-bit pictures, each with its own palette and pixel fill.
+static Bytes MakeIconBank(const std::vector<std::tuple<std::string, std::uint32_t, unsigned char>> &pictures) {
+    constexpr std::size_t picture = 16 + 48 + 256 + 1024;
+    Bytes                 bank(16 + pictures.size() * 48, 0);
+    std::memcpy(bank.data(), "IM2", 3);
+    Put32(bank, 4, static_cast<std::uint32_t>(pictures.size()));
+    for (std::size_t i = 0; i < pictures.size(); i++) {
+        const auto &[name, colour, pixel] = pictures[i];
+        std::memcpy(bank.data() + 16 + i * 48, name.c_str(), name.size());
+        Put32(bank, 16 + i * 48 + 32, static_cast<std::uint32_t>(bank.size()));
+        Bytes tim(picture, 0);
+        std::memcpy(tim.data(), "TIM2", 4);
+        Put32(tim, 16, 0x30030); // the wrong total the game's images carry
+        Put32(tim, 16 + 4, 1024);
+        Put32(tim, 16 + 8, 256);
+        tim[16 + 12] = 0x30;
+        tim[16 + 15] = 0x01;
+        tim[16 + 19] = 5;
+        tim[16 + 20] = 16;
+        tim[16 + 22] = 16;
+        std::fill(tim.begin() + 64, tim.begin() + 64 + 256, pixel);
+        for (int c = 0; c < 256; c++) {
+            Put32(tim, 64 + 256 + c * 4, colour + c);
+        }
+        bank.insert(bank.end(), tim.begin(), tim.end());
+    }
+    return bank;
+}
+
+TEST(DataExtract, NormalizesIconSheets) {
+    fs::path dir = TempDir("normalize_icons");
+    Bytes    american = MakeIconBank({
+        {"quickchara", 0x300, 3},
+        {"wepicon",    0x200, 4}
+    });
+    Bytes    english = MakeIconBank({
+        {"wepicon", 0x100, 5}
+    });
+    Disc     disc = MakeDisc({
+        {"commenu/a_eng/itempack.img",           MakeIconBank({{"itempack", 0x100, 1}})                             },
+        {"commenu/a_eng/quickchr.pac",           MakePack({{"qchr.mes", Pattern(8, 2)}, {"quickchr.img", american}})},
+        {"commenu/a_eng/itemlst.img",            MakeIconBank({{"wepicon", 0x200, 4}, {"itemicon", 0x200, 7}})      },
+        {"commenu/a_eng/dunenter/dunenter2.pak", MakePack({{"dunenter.img", english}})                              },
+        {"commenu/a_fre/itempack.img",           MakeIconBank({{"itempack", 0x200, 6}})                             },
+        {"commenu/a_fre/quickchr.pac",           MakePack({{"quickchr.img", american}})                             },
+        {"commenu/a_fre/dunenter/dunenter2.pak", MakePack({{"dunenter.img", english}})                              },
+    });
+    fs::path out = dir / "data";
+    dcdata::Extract(dcdata::OpenArchive(WriteStandardIso(dir, disc)), out, nullptr);
+
+    // English: both American sheets take the English one; the rest of each file is as it was.
+    dcdata::Im2Picture donor = dcdata::FindIm2Picture(english, "wepicon");
+    auto               holds_donor = [&](const Bytes &bank) {
+        dcdata::Im2Picture icons = dcdata::FindIm2Picture(bank, "wepicon");
+        return icons.size == donor.size &&
+               std::equal(english.begin() + donor.offset, english.begin() + donor.offset + donor.size, bank.begin() + icons.offset);
+    };
+    auto quick = dcdata::ReadPack(ReadBytes(out / "normalized/commenu/a_eng/quickchr.pac"));
+    ASSERT_EQ(quick.size(), 2);
+    EXPECT_EQ(quick[0].data, Pattern(8, 2));
+    EXPECT_TRUE(holds_donor(quick[1].data));
+    dcdata::Im2Picture portraits = dcdata::FindIm2Picture(quick[1].data, "quickchara");
+    ASSERT_NE(portraits.size, 0);
+    EXPECT_TRUE(std::equal(american.begin() + portraits.offset, american.begin() + portraits.offset + portraits.size,
+                           quick[1].data.begin() + portraits.offset));
+    EXPECT_TRUE(holds_donor(ReadBytes(out / "normalized/commenu/a_eng/itemlst.img")));
+    // French: its sheet already shares itempack's palette.
+    EXPECT_FALSE(fs::exists(out / "normalized/commenu/a_fre/quickchr.pac"));
     fs::remove_all(dir);
 }
 

@@ -126,7 +126,7 @@ TEST(PlatformConfig, LoadsFromSaveRoot) {
 
 TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     Config defaults = ConfigParse("");
-    ASSERT_TRUE(defaults.mouse_sensitivity == 0.2f && !defaults.mouse_invert_y && defaults.mouse_capture);
+    ASSERT_TRUE(defaults.mouse_sensitivity == 0.1f && !defaults.mouse_invert_y && defaults.mouse_capture);
     ASSERT_TRUE(defaults.stick_sensitivity == 1.33f && defaults.gyro_sensitivity == 0.5f);
     ASSERT_TRUE(defaults.gyro == ConfigGyro::Held && !defaults.gyro_invert_x && !defaults.stick_invert_y);
     ASSERT_TRUE(ConfigParse(R"({"input": {"gyro": "first_person"}})").gyro == ConfigGyro::FirstPerson);
@@ -138,7 +138,7 @@ TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     ASSERT_TRUE(ConfigParse(R"({"input": {"gyro_sensitivity": -1}})").gyro_sensitivity == 0.5f);
     ASSERT_TRUE(ConfigParse(ConfigSerialize(ConfigParse(R"({"input": {"gyro_sensitivity": 1.25}})"))).gyro_sensitivity ==
                 1.25f);
-    ASSERT_TRUE(defaults.mouse_release_keys.size() == 1 && defaults.mouse_release_keys[0] == "Escape");
+    ASSERT_TRUE(defaults.mouse_release_keys.empty());
 
     Config config = ConfigParse(R"({"input": {
         "mouse_sensitivity": 0.25,
@@ -157,7 +157,7 @@ TEST(PlatformConfig, ParsesMouseSettingsAndBindings) {
     ASSERT_TRUE(config.key_bindings[2].keys.size() == 2 && config.key_bindings[2].keys[0] == "Mouse2");
 
     Config bad = ConfigParse(R"({"input": {"mouse_sensitivity": -1, "stick_sensitivity": 0, "mouse_capture": "maybe"}})");
-    ASSERT_TRUE(bad.mouse_sensitivity == 0.2f && bad.stick_sensitivity == 1.33f && bad.mouse_capture);
+    ASSERT_TRUE(bad.mouse_sensitivity == 0.1f && bad.stick_sensitivity == 1.33f && bad.mouse_capture);
     ASSERT_TRUE(ConfigParse(R"({"input": {"mouse_release": []}})").mouse_release_keys.empty());
 }
 

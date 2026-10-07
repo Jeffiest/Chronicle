@@ -42,6 +42,7 @@
 #include "mglib.hpp"
 #include "npcharacter.hpp"
 #include "objanime.hpp"
+#include "platform/input.hpp"
 #include "rect.hpp"
 #include "savedata.hpp"
 #include "scriptinterpreter.hpp"
@@ -1033,8 +1034,9 @@ static void MainDraw() {
             GamePad.KeyLock(0);
             EdDebugMenu();
 
-            if (GamePad.Down(PAD_R3) || EdDebugRunEventNo > 0) {
+            if (GamePad.Down(PAD_R3 | PAD_CIRCLE) || EdDebugRunEventNo > 0) {
                 debug_menu_mode = 0;
+                InputSetMenuNavigation(false);
                 GamePad.AutoRepeatOff();
                 RunEvent(EdDebugRunEventNo, EdIn_NowCamera);
             } else {
@@ -1045,6 +1047,7 @@ static void MainDraw() {
                 GamePad.SetAutoRepeat(PAD_DPAD, 25, 3);
                 GamePad.SetAutoRepeat(PAD_L1 | PAD_R1, 25, 3);
                 debug_menu_mode = 1;
+                InputSetMenuNavigation(true);
                 debug_flag = 0;
             }
 

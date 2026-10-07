@@ -94,9 +94,11 @@ TEST(IntegrationGameloop, LoopResults) {
         {GAME_MODE_TRIAL_END,    1, GAME_MODE_TITLE,      800, -1 },
         {GAME_MODE_OPENING,      1, GAME_MODE_TITLE,      7,   0  },
         {GAME_MODE_LOADER,       1, GAME_MODE_DUNGEON,    7,   -1 },
+        {GAME_MODE_LOADER,       2, GAME_MODE_MENU,       7,   -1 },
         {GAME_MODE_DUNGEON,      1, GAME_MODE_MENU,       7,   -1 },
         {GAME_MODE_UNUSED_4,     1, GAME_MODE_MENU,       7,   -1 },
         {GAME_MODE_MENU,         1, GAME_MODE_MENU,       7,   -1 },
+        {GAME_MODE_MENU,        -1, GAME_MODE_TITLE,      7,   800},
         {GAME_MODE_UNUSED_12,    0, GAME_MODE_UNUSED_12,  7,   -1 },
     };
     for (const Case &c : cases) {

@@ -129,12 +129,11 @@ struct Button {
 constexpr Button kButtons[] = {
     {{80.0f, 236.0f, 480.0f, 44.0f}, Action::DiscImage, "DISC IMAGE (.ISO .BIN .IMG)",       "ENTER"},
     {{80.0f, 292.0f, 480.0f, 44.0f}, Action::Folder,    "FOLDER WITH DATA.DAT AND DATA.HD2", "F"    },
-    {{80.0f, 348.0f, 480.0f, 44.0f}, Action::Quit,      "QUIT",                              "ESC"  },
+    {{80.0f, 348.0f, 480.0f, 44.0f}, Action::Quit,      "QUIT",                              ""     },
 };
 
 struct Input {
     Action pressed = Action::None;
-    bool   escape = false;
     int    hover = -1;
 } input;
 
@@ -165,10 +164,6 @@ void OnEvent(const SDL_Event &event) {
                 case SDLK_F:
                 case SDLK_2:
                     input.pressed = Action::Folder;
-                    break;
-                case SDLK_ESCAPE:
-                    input.pressed = Action::Quit;
-                    input.escape = true;
                     break;
                 default:
                     break;
@@ -489,7 +484,7 @@ void FirstRunIfNoData(bool headless) {
     if (source) {
         input.pressed = Action::None;
         outcome = FirstRunExtract(*source, root, [&](const dcdata::Progress &progress) {
-            if (!WindowPollEvents() || std::exchange(input.escape, false)) {
+            if (!WindowPollEvents()) {
                 return false;
             }
             SetTitle(progress);

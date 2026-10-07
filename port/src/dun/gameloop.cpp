@@ -816,7 +816,11 @@ PC_OVERRIDE int LoaderLoop() {
         nowCursor++;
     }
 
-    if (GamePad.Down(PAD_START) != 0 || GamePad.Down(PAD_CIRCLE | PAD_CROSS) != 0) {
+    if (GamePad.Down(PAD_CIRCLE) != 0) {
+        return 2;
+    }
+
+    if (GamePad.Down(PAD_START) != 0 || GamePad.Down(PAD_CROSS) != 0) {
         selectMapNo = nowCursor;
         main_select_menu_no = nowCursor;
         MapJump(selectMapNo + 200, -1);

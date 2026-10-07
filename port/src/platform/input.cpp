@@ -52,7 +52,7 @@ constexpr Action kActions[] = {
     {"left",         ActionKind::Button,   kInputLeft,     kAxisLeftX,  0,  "Left"},
     {"right",        ActionKind::Button,   kInputRight,    kAxisLeftX,  0,  "Right"},
     {"cross",        ActionKind::Button,   kInputCross,    kAxisLeftX,  0,  "Mouse1, Space"},
-    {"circle",       ActionKind::Button,   kInputCircle,   kAxisLeftX,  0,  "Mouse2, Escape"},
+    {"circle",       ActionKind::Button,   kInputCircle,   kAxisLeftX,  0,  "Mouse2"},
     {"square",       ActionKind::Button,   kInputSquare,   kAxisLeftX,  0,  "E"},
     {"triangle",     ActionKind::Button,   kInputTriangle, kAxisLeftX,  0,  "Tab"},
     {"l1",           ActionKind::Button,   kInputL1,       kAxisLeftX,  0,  "Z"},
@@ -180,6 +180,8 @@ bool                                                     g_gamepad_subsystem = f
 InputKeyboardMouse                                       g_scripted;
 // The mouse is a menu's pointer (InputSetMenuMouse); the motion it has gathered for it.
 bool  g_menu_mouse = false;
+bool  g_menu_navigation = false;
+bool  g_developer_menu = false;
 float g_menu_dx = 0.0f;
 float g_menu_dy = 0.0f;
 // Per host action: presses not yet consumed, and whether its non-key sources (mouse and gamepad
@@ -258,6 +260,9 @@ bool ParseSources(std::span<const std::string_view> names, ActionKind kind, std:
         if (!ParseSource(name, kind, source)) {
             return false;
         }
+        if (source.kind == Source::Key && source.code == SDL_SCANCODE_ESCAPE) {
+            return false;
+        }
         sources.push_back(source);
     }
     return true;
@@ -283,7 +288,6 @@ void EnsureBindings() {
     }
     g_mouse = InputMouseSettings{};
     g_mouse_zoom = false;
-    g_mouse.release_scancodes = {SDL_SCANCODE_ESCAPE};
     MouseConfigure(g_mouse.capture, g_mouse.release_scancodes);
     g_bindings_ready = true;
 }
@@ -617,6 +621,8 @@ void InputShutdown() {
     InputSetMovementLocked(false);
     MouseStop();
     g_menu_mouse = false;
+    g_menu_navigation = false;
+    g_developer_menu = false;
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
     g_mouse_look = {0.0f, 0.0f, g_mouse_look.read};
@@ -776,6 +782,18 @@ void InputSetMenuMouse(bool on) {
     Compose(0);
 }
 
+void InputSetMenuNavigation(bool on) {
+    g_menu_navigation = on;
+}
+
+void InputSetDeveloperMenu(bool on) {
+    g_developer_menu = on;
+}
+
+bool InputDeveloperMenu() {
+    return g_developer_menu;
+}
+
 InputMenuMouse InputTakeMenuMouse() {
     float dx = 0.0f;
     float dy = 0.0f;
@@ -877,6 +895,9 @@ InputPadState InputApplyKeyboardMouse(InputPadState base, const InputKeyboardMou
         } else if (kActions[i].kind == ActionKind::HalfAxis) {
             push[kActions[i].axis] += kActions[i].direction;
         }
+    }
+    if (std::ranges::contains(held.keys, SDL_SCANCODE_ESCAPE)) {
+        base.buttons |= g_menu_navigation ? kInputCircle : kInputTriangle;
     }
     std::array<float, 4> deflection{};
     for (int x = kAxisLeftX; x <= kAxisRightX; x += 2) {

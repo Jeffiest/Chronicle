@@ -80,7 +80,7 @@ struct Config {
     // audio.soundtrack "custom": play recordings from soundtrack/ beside save/ and data/.
     bool                          soundtrack = false;
     std::vector<ConfigKeyBinding> key_bindings;
-    float                         mouse_sensitivity = 0.2f;
+    float                         mouse_sensitivity = 0.1f;
     float                         stick_sensitivity = 1.33f;
     bool                          stick_invert_x = false;
     bool                          stick_invert_y = false;
@@ -93,7 +93,7 @@ struct Config {
     bool                          mouse_zoom = false;
     // Third-person vertical return after mouse input: 0 holds height, 1 is retail's rate.
     float                    mouse_camera_return = 0.2f;
-    std::vector<std::string> mouse_release_keys = {"Escape"};
+    std::vector<std::string> mouse_release_keys;
     ConfigGameOptions        options;
     bool                     discord_rich_presence = true;
 

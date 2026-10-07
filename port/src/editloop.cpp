@@ -48,6 +48,7 @@
 #include "mglib.hpp"
 #include "npcharacter.hpp"
 #include "objanime.hpp"
+#include "platform/input.hpp"
 #include "objectframe.hpp"
 #include "rect.hpp"
 #include "runeffect.hpp"
@@ -876,8 +877,9 @@ PC_OVERRIDE int EditLoop() {
             GamePad.KeyLock(0);
             EdDebugMenu();
 
-            if (GamePad.Down(PAD_R3) != 0 || EdDebugRunEventNo > 0) {
+            if (GamePad.Down(PAD_R3 | PAD_CIRCLE) != 0 || EdDebugRunEventNo > 0) {
                 debug_menu_mode = 0;
+                InputSetMenuNavigation(false);
                 GamePad.AutoRepeatOff();
                 RunEvent(EdDebugRunEventNo, NowCamera);
             } else {
@@ -888,6 +890,7 @@ PC_OVERRIDE int EditLoop() {
                 GamePad.SetAutoRepeat(PAD_DPAD, 0x19, 3);
                 GamePad.SetAutoRepeat(PAD_L1 | PAD_R1, 0x19, 3);
                 debug_menu_mode = 1;
+                InputSetMenuNavigation(true);
                 debug_flag = 0;
             }
 

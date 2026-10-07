@@ -78,8 +78,8 @@ TEST_F(MouseCapture, CapturesWhenFullscreenStartupGainsFocusLater) {
 }
 
 TEST_F(MouseCapture, ExplicitWindowedReleaseSurvivesRefocus) {
-    int escape = SDL_SCANCODE_ESCAPE;
-    MouseConfigure(true, std::span(&escape, 1));
+    int release[] = {SDL_SCANCODE_ESCAPE, SDL_SCANCODE_F12};
+    MouseConfigure(true, release);
     if (!Focus()) {
         GTEST_SKIP() << "Desktop did not grant input focus";
     }
@@ -89,6 +89,9 @@ TEST_F(MouseCapture, ExplicitWindowedReleaseSurvivesRefocus) {
     SDL_Event event{};
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.scancode = SDL_SCANCODE_ESCAPE;
+    ASSERT_FALSE(MouseHandleEvent(event));
+    ASSERT_TRUE(MouseCaptured());
+    event.key.scancode = SDL_SCANCODE_F12;
     ASSERT_FALSE(MouseHandleEvent(event));
     ASSERT_FALSE(MouseCaptured());
     event.type = SDL_EVENT_WINDOW_FOCUS_LOST;

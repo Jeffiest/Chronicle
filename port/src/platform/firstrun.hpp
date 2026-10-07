@@ -34,7 +34,7 @@ enum class FirstRunSource {
 };
 
 // Stands in for the file selector: returns the chosen path, or nothing for a cancel, which then
-// ends the first run as Escape would. It also lets a headless run go through the flow.
+// ends the first run. It also lets a headless run go through the flow.
 using FirstRunChooser = std::function<std::optional<std::filesystem::path>(FirstRunSource)>;
 void FirstRunSetChooser(FirstRunChooser chooser);
 

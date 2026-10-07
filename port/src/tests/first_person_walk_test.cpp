@@ -114,7 +114,7 @@ TEST(FirstPersonWalk, TownKeyboardMovesAlongMouseHeadingWithoutSteeringViewAndLo
     sceVu0FVECTOR pos{0, 0, 0, 1}, velocity{0, 0, 0, 0}, next{};
     MoveCheckInfo info{};
     PortEdMoveCheck(pos, velocity, next, &info, nullptr, 0, 0);
-    float heading = -100 * 0.2f * 3.14159265358979323846f / 180;
+    float heading = -100 * 0.1f * 3.14159265358979323846f / 180;
     EXPECT_NEAR(velocity[0], 0.6f * std::sin(heading), 1e-5);
     EXPECT_NEAR(velocity[2], 0.6f * std::cos(heading), 1e-5);
     CCamera eye(1);

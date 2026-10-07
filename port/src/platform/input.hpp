@@ -60,7 +60,7 @@ struct InputKeyboardMouse {
 
 struct InputMouseSettings {
     // Degrees of camera turn per count of mouse motion.
-    float            sensitivity = 0.2f;
+    float            sensitivity = 0.1f;
     bool             invert_y = false;
     bool             capture = true;
     std::vector<int> release_scancodes;
@@ -161,6 +161,11 @@ struct InputMenuMouse {
 // While on, the mouse is a menu's pointer: its motion and buttons reach InputTakeMenuMouse and no
 // longer press pad 0's bound buttons or turn its stick. Capture works as ever.
 void InputSetMenuMouse(bool on);
+
+void InputSetMenuNavigation(bool on);
+
+void InputSetDeveloperMenu(bool on);
+bool InputDeveloperMenu();
 
 // Takes the pointer's motion and wheel since the last call, live and scripted.
 InputMenuMouse InputTakeMenuMouse();

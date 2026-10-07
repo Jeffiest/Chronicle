@@ -2,6 +2,9 @@
 #include <gtest/gtest.h>
 #include <libpad.h>
 
+#include <array>
+#include <string_view>
+
 #include "../gameloop.hpp"
 #include "../platform/clock.hpp"
 #include "../platform/config.hpp"
@@ -73,7 +76,12 @@ TEST(PlatformPad, DefaultMouseAndKeyboardCombatBindings) {
     held.keys = {InputScancodeFromName("F")};
     ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputR1);
     held.keys = {InputScancodeFromName("Escape")};
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputTriangle);
+    GamePad.MenuModeOn(120);
     ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputCircle);
+    GamePad.MenuModeOff();
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputTriangle);
+    ASSERT_FALSE(InputBindKeys("r1", std::array<std::string_view, 1>{"Escape"}));
     held.keys.clear();
     held.mouse_buttons = 1u << 1;
     ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputCircle);
@@ -162,6 +170,30 @@ TEST(PlatformPad, GamepadUpdatesThroughLibpad) {
 
     ASSERT_TRUE(GamePad.On2(PAD_CROSS) == 0);
     ASSERT_TRUE(GamePad.GetLX2() == 0);
+}
+
+TEST(PlatformPad, DeveloperMenuUsesCrossForConfirmAndCircleForBack) {
+    OpenPads();
+    InputSetDeveloperMenu(true);
+    SetPad(0, 0);
+    GamePad.KeyLock(0);
+    for (int i = 0; i < 4; ++i) {
+        GamePad.UpDate();
+    }
+
+    SetPad(0, PAD_CROSS);
+    GamePad.UpDate();
+    ASSERT_TRUE(GamePad.Down(PAD_CIRCLE));
+    ASSERT_FALSE(GamePad.Down(PAD_TRIANGLE));
+
+    SetPad(0, 0);
+    GamePad.UpDate();
+    SetPad(0, PAD_CIRCLE);
+    GamePad.UpDate();
+    ASSERT_FALSE(GamePad.Down(PAD_CIRCLE));
+    ASSERT_TRUE(GamePad.GetPadDown() & PAD_CIRCLE);
+
+    InputSetDeveloperMenu(false);
 }
 
 TEST(PlatformPad, DebugButtonsUseMainController) {

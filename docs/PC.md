@@ -127,7 +127,7 @@ key is optional; these are the defaults:
         "sound": "stereo"           // stereo or mono
     },
     "input": {
-        "mouse_sensitivity": 0.2,   // degrees the camera turns per count of mouse motion
+        "mouse_sensitivity": 0.1,   // degrees the camera turns per count of mouse motion
         "stick_sensitivity": 1.33,  // gamepad stick scale before the game's dead zone (PCSX2's default)
         "stick_invert_x": false,    // the gamepad's camera stick, flipped left to right
         "stick_invert_y": false,    // ...and up and down
@@ -139,7 +139,7 @@ key is optional; these are the defaults:
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_zoom": false,        // optional third-person wheel zoom; middle click resets by default
         "mouse_camera_return": 0.2, // vertical auto-return: 0 off, 1 retail speed after mouse input stops
-        "mouse_release": ["Escape"], // keys that give the cursor back in a window ([]: none)
+        "mouse_release": [],       // keys that give the cursor back in a window; Escape is reserved for menus
         "vibration": true,          // the gamepad's rumble
         "bindings": {
             "cross": ["Mouse1", "Space"], // an action: its keys and mouse buttons; replaces the defaults
@@ -235,9 +235,9 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | mouse motion | none | the camera, directly (see "Mouse look") |
 | left click, Space | cross | attack, open, talk (`dun/gameloop.cpp:3585`, `editloop.cpp:3885`); confirm |
 | F, X | R1 | held while locked on: guard (`dun/gameloop.cpp:3347`, `guard_mode = 5` at :3374); unlocked, turns the camera (:4338) |
-| right click, Escape | circle | lock on to the nearest enemy or let go; with none in range, swing the camera behind the character (`dun/gameloop.cpp:3243`); back in menus, including the triangle menu |
+| right click | circle | lock on to the nearest enemy or let go; with none in range, swing the camera behind the character (`dun/gameloop.cpp:3243`); back in menus |
 | E | square | use the active item (`dun/gameloop.cpp:3775`); held, a feather's speed boost (:3745) |
-| Tab | triangle | the menu (`dun/gameloop.cpp:3134`, `editloop.cpp:1824`) |
+| Tab, Escape | triangle | open the triangle menu (`dun/gameloop.cpp:3134`, `editloop.cpp:1824`); Escape becomes Circle while a menu is open, to go back |
 | Z | L1 | next lock-on target while locked on (`dun/gameloop.cpp:3260`); otherwise turns the camera (:4342) |
 | Q | L2 | held, the camera behind the character (`dun/gameloop.cpp:4347`) |
 | R | R2 | first-person look (`dun/gameloop.cpp:4354`) |
@@ -300,14 +300,14 @@ Each key-down of a toggle's key counts once, however briefly it is held.
 - **Capture.** With `mouse_capture`, SDL relative mode holds the cursor
   while the window has focus. Fullscreen startup captures when focus arrives,
   and focus regain restores capture. Losing focus releases it, and so does
-  `mouse_release` (Escape) when the window is not fullscreen; a click in
+  a configured `mouse_release` key when the window is not fullscreen; a click in
   the window captures again and does nothing else. While released, motion
   and clicks do not reach the game. Without capture they always do, and
   the motion is the cursor's, after the system's pointer acceleration;
   captured, it is the mouse's raw counts (SDL's relative mode with
   `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE` forced off, including when an
-  environment variable requests system acceleration). Escape also sends
-  Circle when it releases the cursor.
+  environment variable requests system acceleration). Escape is reserved for
+  opening menus and going back, even if an older config lists it in `mouse_release`.
 - **WASD on the d-pad.** The developer menu (`MenuLoop`) and the dungeon
   loader read only the d-pad and never call `MenuModeOn`; the dungeon reads
   the d-pad to pick the active item while WASD walks. So the movement keys
@@ -555,6 +555,10 @@ may also perform their ordinary actions. The separate
 L1+R1+L2+R2 then R3 debug toggle and Start+Select developer menu shortcut
 retain their existing behavior.
 
+In the town and interior editor debug overlay, Cross activates the selected
+action, Circle closes the overlay, and Start performs secondary stop or clear
+actions where available. R3 can still toggle the overlay.
+
 | Screen or mode | Buttons after holding Select+L2 | Debug action |
 |---|---|---|
 | Town and interior | L3/R3 | Show the debug overlay or open/close its menu |
@@ -587,7 +591,9 @@ Where a debug button is also an ordinary menu button, actions other than
 Cross and Circle can still run alongside the debug shortcut.
 
 In the developer menu, up and down (pad 1) pick a row,
-left and right change its number, circle or triangle enters it:
+left and right change its number, Cross enters it, and Circle returns to the
+previous mode (or the title when opened at startup). In the dungeon loader,
+Cross enters the selected dungeon and Circle returns to the developer menu:
 
 | Row | Goes to |
 |---|---|
@@ -595,7 +601,7 @@ left and right change its number, circle or triangle enters it:
 | `e0N` | the town `N` (1-5; `main_select_menu_no` N-1, `GAME_MODE_EDIT`) |
 | `sN` | the sub map `N` (map number N+10, `GAME_MODE_EDIT`); R1/L1 step by ten |
 | interior | map 99, `GAME_MODE_EDIT` |
-| dungeon | the dungeon loader (`LoaderLoop`): up and down pick one of the seven dungeons, circle, cross or start enters floor 1 |
+| dungeon | the dungeon loader (`LoaderLoop`): up and down pick one of the seven dungeons, Cross or Start enters floor 1; Circle goes back |
 | opening | the opening (`GAME_MODE_OPENING`, scenes op_a to op_d) |
 | `eventN` | one of three story events (map 23 event 310, map 41 event 150, map 19 event 305) |
 | `memory card N` | the save screen in mode N |
@@ -604,7 +610,7 @@ left and right change its number, circle or triangle enters it:
 ```
 0 down
 2
-10 circle
+10 cross
 12
 ```
 
@@ -1275,7 +1281,7 @@ While the screen is open the mouse is its pointer (`InputSetMenuMouse`): its
 motion and buttons stop pressing pad 1's buttons and turning its stick and
 reach `InputTakeMenuMouse` instead. Capture works as everywhere else, so the
 pointer is the game's own hand, moved by the mouse's relative motion; a
-released cursor (Escape in a window) is taken back by a click as ever. That
+released cursor (when a release key is configured) is taken back by a click. That
 keeps one pointer whether the window is windowed, fullscreen or headless, and
 maps relative motion through the window's logical scale to the
 2D screen. The hand appears when the mouse moves and goes when a key moves the
@@ -1769,7 +1775,7 @@ file-chooser portal under Flatpak, zenity elsewhere), or a folder holding
 thread into `<data>.partial`, drawing the file and byte counts through
 `gfx::Draw2D` while the main thread pumps events, checks every file and
 renames the directory into place, then closes its window and `main` goes
-on. Escape or closing the window stops it (a later start resumes from the
+on. Closing the window stops it (a later start resumes from the
 partial directory); a failed extraction shows the extractor's message in a
 message box and exits with status 1. `FirstRunSetChooser` replaces the
 dialog, which is how the tests drive the flow headless. Declined, or

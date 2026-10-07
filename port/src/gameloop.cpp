@@ -209,6 +209,11 @@ struct Jump {
 
 Jump g_jump;
 bool g_fast_load;
+int g_developer_return_mode = GAME_MODE_TITLE;
+int g_developer_return_map = 800;
+int g_developer_return_local_map = 0;
+int g_developer_return_menu_no = 0;
+bool g_developer_return_pending = false;
 
 std::int64_t g_frame_budget = -1;
 std::int64_t g_frames;
@@ -223,6 +228,14 @@ s32 *ConfigWords() {
 }
 
 void ModeInit(int &title_ran, int &exist_data, bool &skip_title) {
+    if (mode == GAME_MODE_MENU && !g_developer_return_pending) {
+        g_developer_return_mode = GAME_MODE_TITLE;
+    }
+    if (mode != GAME_MODE_MENU && mode != GAME_MODE_LOADER) {
+        g_developer_return_pending = false;
+    }
+    InputSetMenuNavigation(mode == GAME_MODE_MENU || mode == GAME_MODE_LOADER);
+    InputSetDeveloperMenu(mode == GAME_MODE_MENU);
     switch (mode) {
         case GAME_MODE_LOADER:
             LoaderInit();
@@ -309,6 +322,9 @@ int ModeLoop(bool &skip_title) {
         case GAME_MODE_EDIT:
             return EditLoop();
         case GAME_MODE_MENU:
+            if (GamePad.GetPadDown() & PAD_CIRCLE) {
+                return -1;
+            }
             return MenuLoop();
         case GAME_MODE_SAVE:
             return LoopSave();
@@ -515,10 +531,21 @@ void GameApplyLoopResult(int loop_mode, int result) {
             break;
         case GAME_MODE_LOADER:
             if (result != 0) {
-                mode = GAME_MODE_DUNGEON;
+                mode = result == 2 ? GAME_MODE_MENU : GAME_MODE_DUNGEON;
             }
             break;
         case GAME_MODE_MENU:
+            if (result == -1) {
+                mode = g_developer_return_mode;
+                if (g_developer_return_pending) {
+                    MapNo = g_developer_return_map;
+                    LocalMapNo = g_developer_return_local_map;
+                    main_select_menu_no = g_developer_return_menu_no;
+                } else {
+                    MapJump(800, -1);
+                }
+            }
+            break;
         case GAME_MODE_UNUSED_6:
         case GAME_MODE_UNUSED_8:
             break;
@@ -594,6 +621,11 @@ bool GameDeveloperMenuRequested() {
 // A mode's own exit stops its sound, unlocks the pad and clears its scissor; this does it for a mode
 // cut off mid-frame, and drops the map jump or event it had pending.
 void GameEnterDeveloperMenu() {
+    g_developer_return_mode = mode;
+    g_developer_return_map = MapNo;
+    g_developer_return_local_map = LocalMapNo;
+    g_developer_return_menu_no = main_select_menu_no;
+    g_developer_return_pending = true;
     while (ReadBGSync() != 0) {
         ClockSyncV();
     }
@@ -604,6 +636,8 @@ void GameEnterDeveloperMenu() {
     NextMapNo = -1;
     StartEventNo = -1;
     mode = GAME_MODE_MENU;
+    InputSetMenuNavigation(true);
+    InputSetDeveloperMenu(true);
     std::fprintf(stderr, "debug mode: start + select, the developer menu\n");
 }
 
@@ -748,6 +782,8 @@ int RunGame(int argc, char **argv) {
     // and file-system resets, DevInit's DMA reset and the DMA channel handles have no host
     // counterpart and are not called.
     DebugMode = ConfigGet().debug_mode ? 1 : 0;
+    g_developer_return_pending = false;
+    g_developer_return_mode = GAME_MODE_TITLE;
     mode = GAME_MODE_MENU;
     main_select_menu_no = 0;
     std::strcpy(main_select_param, "e01");

@@ -10,7 +10,7 @@
 namespace {
 
 bool             g_capture_enabled = true;
-std::vector<int> g_release_keys = {SDL_SCANCODE_ESCAPE};
+std::vector<int> g_release_keys;
 bool             g_captured = false;
 bool             g_released = false;
 std::uint32_t    g_buttons = 0;
@@ -61,6 +61,7 @@ void MouseConfigure(bool capture, std::span<const int> release_scancodes) {
     bool enabling = capture && !g_capture_enabled;
     g_capture_enabled = capture;
     g_release_keys.assign(release_scancodes.begin(), release_scancodes.end());
+    std::erase(g_release_keys, SDL_SCANCODE_ESCAPE);
     if (!capture && g_captured) {
         SetCaptured(false);
     }

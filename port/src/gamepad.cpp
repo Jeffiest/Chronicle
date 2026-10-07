@@ -62,6 +62,14 @@ PC_OVERRIDE int CGamePad::Down(int mask) {
         return 0;
     }
 
+    if (InputDeveloperMenu()) {
+        if (mask == PAD_CIRCLE) {
+            mask = PAD_CROSS;
+        } else if (mask == PAD_TRIANGLE) {
+            return 0;
+        }
+    }
+
     if (DebugMode && (pad[0].input.status.button & kDebugButtonsModifier) == kDebugButtonsModifier) {
         mask &= ~(PAD_CROSS | PAD_CIRCLE);
     }
@@ -88,4 +96,14 @@ PC_OVERRIDE int CGamePad::Down2(int mask) {
 PC_OVERRIDE void CGamePad::KeyLock(int mask) {
     key_lock = mask;
     InputSetMovementLocked(mask != 0);
+}
+
+PC_OVERRIDE void CGamePad::MenuModeOn(int threshold) {
+    axis_threshold[0] = threshold;
+    InputSetMenuNavigation(true);
+}
+
+PC_OVERRIDE void CGamePad::MenuModeOff() {
+    axis_threshold[0] = 0;
+    InputSetMenuNavigation(false);
 }

@@ -1042,10 +1042,6 @@ void DrawScrollBar(int alpha) {
                      alpha);
 }
 
-// How far the bracket corners close in over one beat. Retail closes in by up to 5.8 pixels, but its
-// corners' arms are 10 pixels apart at rest, so for the last beats of every cycle their end caps
-// meet and overlap, and a short red tick shows across each side's middle. The corners here stop a
-// couple of pixels short of one another and close in by the same share of the beat.
 constexpr int   kBracketBeats = 30;
 constexpr float kBracketClose = 4.0f;
 

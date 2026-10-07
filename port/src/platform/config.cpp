@@ -347,6 +347,17 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
     }
+    if (name == "video.text_shadow") {
+        if (!value.is_string()) {
+            return false;
+        }
+        const std::string shadow = Lower(value.get<std::string>());
+        if (shadow != "soft" && shadow != "deep") {
+            return false;
+        }
+        config.text_shadow = shadow == "deep" ? 1 : 0;
+        return true;
+    }
     if (name == "game.language") {
         return ReadLanguage(value, config.language);
     }
@@ -519,6 +530,7 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["player_damage"] = options.player_damage;
     root["game"]["enemy_hp"] = options.enemy_hp;
     root["game"]["names"] = options.names;
+    root["video"]["text_shadow"] = config.text_shadow == 1 ? "deep" : "soft";
     root["video"]["present_mode"] = PresentModeName(config.present_mode);
     root["video"]["interpolation"] = config.interpolation;
     root["video"]["max_fps"] = config.max_fps;

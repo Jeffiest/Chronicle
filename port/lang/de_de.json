@@ -154,5 +154,9 @@
     "options.audio.surround.choice.0": "An",
     "options.audio.surround.choice.1": "Aus",
     "options.input.mouse_camera_return.label": "Vertikale Rückkehr",
-    "options.input.mouse_camera_return.help": "\"Vertikale Rückkehr\"\nWie schnell die Kamera\nbei ruhender Maus auf\nnormale Höhe zurückkehrt."
+    "options.input.mouse_camera_return.help": "\"Vertikale Rückkehr\"\nWie schnell die Kamera\nbei ruhender Maus auf\nnormale Höhe zurückkehrt.",
+    "options.video.text_shadow.label": "Textschatten",
+    "options.video.text_shadow.help": "\"Textschatten\"\nWie dunkel der Schatten\nunter dem Text ist (bei\nTrueType-Schrift).",
+    "options.video.text_shadow.choice.0": "Weich",
+    "options.video.text_shadow.choice.1": "Tief"
 }

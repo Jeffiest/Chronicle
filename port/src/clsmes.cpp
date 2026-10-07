@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iterator>
+#include <span>
 #include <vector>
 
 #include "draw2d_port.hpp"
@@ -13,6 +14,7 @@
 #include "localize.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
+#include "platform/config.hpp"
 #include "platform/ttffont.hpp"
 #include "rect.hpp"
 #include "snd.hpp"
@@ -260,8 +262,23 @@ bool QueueTtfGlyph(ClsMes &mes, int index, int dark, int offset_x, int offset_y,
         {2.4f, 1.6f, 0,    0x30},
         {1.6f, 2.4f, 0,    0x30},
     };
+    static const Tap deep[] = {
+        {0.8f, 0.8f, 0x40, 0x78},
+        {1.4f, 1.4f, 0x10, 0x78},
+        {2.0f, 2.0f, 0,    0x78},
+        {2.6f, 2.6f, 0,    0x78},
+        {3.2f, 3.2f, 0,    0x60},
+        {3.8f, 3.8f, 0,    0x40},
+        {1.6f, 0.8f, 0,    0x50},
+        {0.8f, 1.6f, 0,    0x50},
+        {2.4f, 1.6f, 0,    0x48},
+        {1.6f, 2.4f, 0,    0x48},
+        {3.2f, 2.4f, 0,    0x30},
+        {2.4f, 3.2f, 0,    0x30},
+    };
     auto cast = [&] {
-        for (const Tap &tap : soft) {
+        const bool deeper = ConfigGet().text_shadow == 1;
+        for (const Tap &tap : deeper ? std::span<const Tap>(deep) : std::span<const Tap>(soft)) {
             TtfQuad(edges, glyph, x + tap.dx, y + tap.dy * rows, width, height, tap.grey, tap.grey, tap.grey,
                     std::min(cap, tap.alpha));
         }

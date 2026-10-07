@@ -523,6 +523,13 @@ const Row kDisplayRows[] = {
     SettingRow("video.fps_detail", "FPS Info", "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.",
                FpsDetailCount, FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"),
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
+    Row{.key = "video.text_shadow",
+        .label = "Text Shadow",
+        .help = "\"Text Shadow\"\nHow dark the shadow\nunder the text is, when\nthe text is a TrueType\nfont.",
+        .count = Two,
+        .get = [](const Config &config) { return config.text_shadow; },
+        .set = [](Config &config, int choice) { config.text_shadow = choice; },
+        .names = "Soft|Deep"},
 };
 
 const Row kAudioRows[] = {

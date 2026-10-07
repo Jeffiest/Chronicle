@@ -154,5 +154,9 @@
     "options.audio.surround.choice.0": "Sì",
     "options.audio.surround.choice.1": "No",
     "options.input.mouse_camera_return.label": "Ritorno verticale",
-    "options.input.mouse_camera_return.help": "\"Ritorno verticale\"\nQuanto in fretta la camera\ntorna all'altezza normale\nquando il mouse si ferma."
+    "options.input.mouse_camera_return.help": "\"Ritorno verticale\"\nQuanto in fretta la camera\ntorna all'altezza normale\nquando il mouse si ferma.",
+    "options.video.text_shadow.label": "Ombra del testo",
+    "options.video.text_shadow.help": "\"Ombra del testo\"\nQuanto è scura l'ombra\nsotto il testo con\ncarattere TrueType.",
+    "options.video.text_shadow.choice.0": "Leggera",
+    "options.video.text_shadow.choice.1": "Intensa"
 }

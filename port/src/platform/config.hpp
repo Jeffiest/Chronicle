@@ -99,6 +99,8 @@ struct Config {
     // game.language: 0 asks at start-up, as retail does; 2 to 6 is the language to start in
     // (LanguageCode: English, Francais, Deutsch, Italiano, Espanol) and skips the language screen.
     int                           language = 0;
+    // video.text_shadow: 0 is the soft shadow the TrueType message font casts, 1 a deeper one.
+    int                           text_shadow = 0;
 
     bool operator==(const Config &) const = default;
 };

@@ -11,4 +11,9 @@ bool AudioOutputStart(int rate, AudioRenderFn render, void *user);
 
 void AudioOutputStop();
 
+// Surround upmix of the stereo mix to 5.1 (front pair kept, centre from the sum, bass from its low
+// end, rear pair from the difference, delayed and softened). SDL folds it down on a device with
+// fewer speakers. Applies at once to a running stream.
+void AudioSetSurround(bool on);
+
 bool AudioOutputRunning();

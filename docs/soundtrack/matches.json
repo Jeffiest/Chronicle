@@ -1,0 +1,295 @@
+{
+ "about": "Which track of the 46-track Dark Cloud Original Soundtrack (Sony Computer Entertainment, 2001; track titles as on the digital release, in Japanese) goes with each of the game's music sequences. matched_by \"ear\" means a person listened to both; \"audio\" means a pitch-content comparison picked it and nobody has checked. Use tools/soundtrack/make_soundtrack_json.py to turn this into the soundtrack.json the port reads.",
+ "tracks": {
+  "b01a_a.sq": {
+   "track": "神獣ドラン",
+   "english": "The Divine Beast Doran",
+   "matched_by": "audio"
+  },
+  "b02a_a.sq": {
+   "track": "森の番人",
+   "english": "The Guardians of the Forest",
+   "matched_by": "ear"
+  },
+  "b03a_a.sq": {
+   "track": "氷の女王",
+   "english": "The Ice Queen",
+   "matched_by": "ear"
+  },
+  "b04a_a.sq": {
+   "track": "The King's Curse",
+   "english": "The King's Curse",
+   "matched_by": "ear"
+  },
+  "b05a_a.sq": {
+   "track": "The Rowdy",
+   "english": "The Rowdy",
+   "matched_by": "ear"
+  },
+  "b06a_a.sq": {
+   "track": "Last Battle",
+   "english": "Last Battle",
+   "matched_by": "ear"
+  },
+  "d01a_a.sq": {
+   "track": "神獣の洞窟",
+   "english": "The Cave of the Divine Beast",
+   "matched_by": "ear"
+  },
+  "d01b_a.sq": {
+   "track": "神獣の洞窟",
+   "english": "The Cave of the Divine Beast",
+   "matched_by": "ear"
+  },
+  "d01c_a.sq": {
+   "track": "神獣の洞窟",
+   "english": "The Cave of the Divine Beast",
+   "matched_by": "ear"
+  },
+  "d02a_a.sq": {
+   "track": "ふくろうの森",
+   "english": "Owl Forest",
+   "matched_by": "ear"
+  },
+  "d02b_a.sq": {
+   "track": "ふくろうの森",
+   "english": "Owl Forest",
+   "matched_by": "ear"
+  },
+  "d02c_a.sq": {
+   "track": "ふくろうの森",
+   "english": "Owl Forest",
+   "matched_by": "ear"
+  },
+  "d03a_a.sq": {
+   "track": "沈没船",
+   "english": "A Sinking Ship",
+   "matched_by": "ear"
+  },
+  "d03b_a.sq": {
+   "track": "沈没船",
+   "english": "A Sinking Ship",
+   "matched_by": "ear"
+  },
+  "d03c_a.sq": {
+   "track": "沈没船",
+   "english": "A Sinking Ship",
+   "matched_by": "ear"
+  },
+  "d04a_a.sq": {
+   "track": "太陽と月の神殿",
+   "english": "The Palace of the Sun and Moon",
+   "matched_by": "ear"
+  },
+  "d04b_a.sq": {
+   "track": "太陽と月の神殿",
+   "english": "The Palace of the Sun and Moon",
+   "matched_by": "ear"
+  },
+  "d04c_a.sq": {
+   "track": "太陽と月の神殿",
+   "english": "The Palace of the Sun and Moon",
+   "matched_by": "ear"
+  },
+  "d05a_a.sq": {
+   "track": "月の海",
+   "english": "Ocean and Moon",
+   "matched_by": "ear"
+  },
+  "d05b_a.sq": {
+   "track": "月の海",
+   "english": "Ocean and Moon",
+   "matched_by": "ear"
+  },
+  "d05c_a.sq": {
+   "track": "月の海",
+   "english": "Ocean and Moon",
+   "matched_by": "ear"
+  },
+  "d06a_a.sq": {
+   "track": "時の回廊",
+   "english": "The Corridor of Time",
+   "matched_by": "ear"
+  },
+  "d06b_a.sq": {
+   "track": "時の回廊",
+   "english": "The Corridor of Time",
+   "matched_by": "ear"
+  },
+  "d06c_a.sq": {
+   "track": "時の回廊",
+   "english": "The Corridor of Time",
+   "matched_by": "ear"
+  },
+  "e01a_a.sq": {
+   "track": "ノルン村",
+   "english": "Norn Village",
+   "matched_by": "ear"
+  },
+  "e02a_a.sq": {
+   "track": "マタタギの里",
+   "english": "Matatagi Village",
+   "matched_by": "ear"
+  },
+  "e03a_a.sq": {
+   "track": "クイーンズ",
+   "english": "Queens",
+   "matched_by": "ear"
+  },
+  "e04a_a.sq": {
+   "track": "ムスカ・ラッカ",
+   "english": "Masca Rakka",
+   "matched_by": "ear"
+  },
+  "e05a_a.sq": {
+   "track": "Factory",
+   "english": "Factory",
+   "matched_by": "ear"
+  },
+  "o01a_a.sq": {
+   "track": "儀式",
+   "english": "The Ceremony",
+   "matched_by": "ear"
+  },
+  "o01b_a.sq": {
+   "track": "魔人復活",
+   "english": "Demon Resurrection",
+   "matched_by": "ear"
+  },
+  "o03a_a.sq": {
+   "track": "村祭り",
+   "english": "The Village Festival",
+   "matched_by": "ear"
+  },
+  "o03b_a.sq": {
+   "track": "ノルン村崩壊",
+   "english": "The Destruction of Norn Village",
+   "matched_by": "ear"
+  },
+  "o04a_a.sq": {
+   "track": "ブラウンプー",
+   "english": "Brownboo",
+   "matched_by": "ear"
+  },
+  "o04b_a.sq": {
+   "track": "精霊王",
+   "english": "The Spirit King",
+   "matched_by": "ear"
+  },
+  "o04c_a.sq": {
+   "track": "旅立ち",
+   "english": "Departure",
+   "matched_by": "ear"
+  },
+  "s04a_a.sq": {
+   "track": "ブラウンプー",
+   "english": "Brownboo",
+   "matched_by": "ear"
+  },
+  "s13a_a.sq": {
+   "track": "イエロードロップ",
+   "english": "Yellow Drop",
+   "matched_by": "ear"
+  },
+  "s30a_a.sq": {
+   "track": "Castle of Dark Heaven",
+   "english": "Castle of Dark Heaven",
+   "matched_by": "ear"
+  },
+  "v01a_a.sq": {
+   "track": "耳を澄まして",
+   "english": "If You Strain Your Ears",
+   "matched_by": "ear"
+  },
+  "v02a_a.sq": {
+   "track": "ダーククラウド・メインテーマ",
+   "english": "Dark Cloud Main Theme",
+   "matched_by": "ear"
+  },
+  "v03a_a.sq": {
+   "track": "希望の地",
+   "english": "The Land of Hope",
+   "matched_by": "ear"
+  },
+  "v04a_a.sq": {
+   "track": "The Daily Life",
+   "english": "The Daily Life",
+   "matched_by": "ear"
+  },
+  "v06a_a.sq": {
+   "track": "Broken Promise",
+   "english": "Broken Promise",
+   "matched_by": "ear"
+  },
+  "v07a_a.sq": {
+   "track": "DUEL",
+   "english": "DUEL",
+   "matched_by": "ear"
+  },
+  "v08a_a.sq": {
+   "track": "Stand Up!!",
+   "english": "Stand Up!!",
+   "matched_by": "ear"
+  },
+  "v09a_a.sq": {
+   "track": "Memories",
+   "english": "Memories",
+   "matched_by": "ear"
+  },
+  "v10a_a.sq": {
+   "track": "Time of Destiny",
+   "english": "Time of Destiny",
+   "matched_by": "ear"
+  },
+  "v11a_a.sq": {
+   "track": "Emergency",
+   "english": "Emergency",
+   "matched_by": "ear"
+  },
+  "v11b_a.sq": {
+   "track": "Emergency",
+   "english": "Emergency",
+   "matched_by": "ear"
+  },
+  "v12a_a.sq": {
+   "track": "Legend of Hunter",
+   "english": "Legend of Hunter",
+   "matched_by": "ear"
+  },
+  "v13a_a.sq": {
+   "track": "Take Off",
+   "english": "Take Off",
+   "matched_by": "ear"
+  },
+  "v14a_a.sq": {
+   "track": "二つの月",
+   "english": "Two Moons",
+   "matched_by": "ear"
+  },
+  "v15a_a.sq": {
+   "track": "メインテーマ (Bossa Nova Version)",
+   "english": "メインテーマ (Bossa Nova Version)",
+   "matched_by": "ear"
+  },
+  "v16a_a.sq": {
+   "track": "Broken Promise (Orgel Version)",
+   "english": "Broken Promise (Orgel Version)",
+   "matched_by": "ear"
+  },
+  "v17a_a.sq": {
+   "track": "Broken Promise",
+   "english": "Broken Promise",
+   "matched_by": "ear"
+  },
+  "v18a_a.sq": {
+   "track": "回想",
+   "english": "Reminiscence",
+   "matched_by": "ear"
+  },
+  "v19a_a.sq": {
+   "track": "黒い影",
+   "english": "Black Shadows",
+   "matched_by": "ear"
+  }
+ }
+}

@@ -354,6 +354,12 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "discord.rich_presence") {
         return ReadBool(value, config.discord_rich_presence);
     }
+    if (name == "audio.soundtrack") {
+        return ReadChoice(value, "ps2", "ost", config.soundtrack);
+    }
+    if (name == "audio.surround") {
+        return ReadBool(value, config.surround);
+    }
     if (name == "audio.master_volume") {
         float volume = 0.0f;
         if (!ReadNumber(value, volume) || !std::isfinite(volume)) {
@@ -460,6 +466,8 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["soft_focus"] = options.soft_focus;
     root["audio"]["master_volume"] = Shortest(config.master_volume);
     root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
+    root["audio"]["surround"] = config.surround;
+    root["audio"]["soundtrack"] = config.soundtrack ? "ost" : "ps2";
     root["input"]["mouse_sensitivity"] = Shortest(config.mouse_sensitivity);
     root["input"]["stick_sensitivity"] = Shortest(config.stick_sensitivity);
     root["input"]["stick_invert_x"] = config.stick_invert_x;

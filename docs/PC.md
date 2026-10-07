@@ -121,7 +121,9 @@ key is optional; these are the defaults:
     },
     "audio": {
         "master_volume": 1.0,       // 0 to 1
-        "sound": "stereo"           // stereo or mono
+        "sound": "stereo",          // stereo or mono
+        "surround": false,          // true: the stereo mix upmixed to 5.1 (a stereo device folds it back down)
+        "soundtrack": "ps2"         // ps2, or ost: your own recordings in place of the sequences (SOUNDTRACK.md)
     },
     "input": {
         "mouse_sensitivity": 0.1,   // right-stick deflection (1 = full) per pixel moved in one tick

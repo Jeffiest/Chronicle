@@ -34,6 +34,15 @@ FetchContent_Declare(nlohmann_json
     FIND_PACKAGE_ARGS CONFIG)
 FetchContent_MakeAvailable(nlohmann_json)
 
+# The soundtrack option's decoders: single-file libraries (public domain or MIT-0), fetched at pinned commits.
+set(AUDIO_DECODER_DIR ${CMAKE_BINARY_DIR}/audio_decoders)
+file(DOWNLOAD https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_wav.h
+    ${AUDIO_DECODER_DIR}/dr_wav.h EXPECTED_HASH SHA256=03e70c1a2d9787cd7ed3e966c075bea7bac6373f759db9cd7ca9ccdfc4ec4493)
+file(DOWNLOAD https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_flac.h
+    ${AUDIO_DECODER_DIR}/dr_flac.h EXPECTED_HASH SHA256=111144e778f55738db6851cb226015c419e00d04b916a09506d4856d9cff945c)
+file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_vorbis.c
+    ${AUDIO_DECODER_DIR}/stb_vorbis.c EXPECTED_HASH SHA256=4c7cb2ff1f7011e9d67950446b7eb9ca044f2e464d76bfbb0b84dd2e23e65636)
+
 set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
 set(PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 file(GLOB_RECURSE PS2_SOURCES CONFIGURE_DEPENDS RELATIVE ${PS2_DIR} ${PS2_DIR}/*.cpp)
@@ -177,7 +186,7 @@ file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/icon/chronicle.hpp
     CONTENT "#pragma once\n#include <cstdint>\ninline constexpr int kIconSize = 128;\ninline constexpr std::uint8_t kIconRgba[] = {${icon_bytes}};\n")
 
 add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
-target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
+target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR} ${AUDIO_DECODER_DIR})
 target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
 target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections)
 

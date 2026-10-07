@@ -171,7 +171,31 @@ gfx::FrameLayout Layout(const Config &config) {
             MenuOptionOpen() ? 1.0f : config.ui_scale};
 }
 
+// DC_BGM_TEST=<set>:<track>: a test aid. From frame 150 of the run (the title has started) the music
+// stops and sound set <set> plays its sequence number <track> on the music port, so DC_AUDIO_WAV
+// records what that sequence sounds like (docs/SOUNDTRACK_TABLE.md). Run it with --jump menu, which is silent.
+void BgmTestPump() {
+    static const char *spec = std::getenv("DC_BGM_TEST");
+    static bool        done = false;
+    if (spec == nullptr || done || GameFrameCount() < 150) {
+        return;
+    }
+    done = true;
+    int set = 0;
+    int track = 0;
+    if (std::sscanf(spec, "%d:%d", &set, &track) < 1) {
+        return;
+    }
+    for (int port = 0; port < audio::kPorts; ++port) {
+        audio::DefaultMixer().Stop(port);
+    }
+    SndBgmInit();
+    SndBgmLoad(set);
+    SndBgmPlay(track);
+}
+
 void PumpHost() {
+    BgmTestPump();
     if (!WindowPollEvents()) {
         GameRequestStop();
     }
@@ -261,6 +285,7 @@ void ApplyDiscord(const Config &config) {
 // waits for PumpHost.
 void ApplyConfigChange(const Config &before, const Config &after) {
     audio::DefaultMixer().SetMasterGain(after.master_volume);
+    AudioSetSurround(after.surround);
     InputApplyConfig(after);
     if (after.tick_rate != before.tick_rate) {
         ClockSetTickRate(after.tick_rate);
@@ -347,6 +372,7 @@ int Run(int argc, const char **argv) {
     gfx::RendererInit(WindowHandle(), renderer);
 
     audio::DefaultMixer().SetMasterGain(config.master_volume);
+    AudioSetSurround(config.surround);
     AudioOutputStart(audio::DefaultMixer().Rate(), RenderAudio, nullptr);
 
     ClockSetTickRate(config.tick_rate);

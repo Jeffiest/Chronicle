@@ -49,10 +49,15 @@ else()
     file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_vorbis.c
         ${AUDIO_DECODER_DIR}/stb_vorbis.c EXPECTED_HASH SHA256=4c7cb2ff1f7011e9d67950446b7eb9ca044f2e464d76bfbb0b84dd2e23e65636)
 endif()
-# The message font's rasterizer (platform/ttffont.cpp): a single-file library, public domain or MIT, fetched at a pinned commit.
-set(TTF_DIR ${CMAKE_BINARY_DIR}/stb_truetype)
-file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_truetype.h
-    ${TTF_DIR}/stb_truetype.h EXPECTED_HASH SHA256=ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab)
+# The message font's rasterizer (platform/ttffont.cpp): a single-file library, public domain or MIT, at a pinned
+# commit. Flatpak has it as a source, since its build sandbox has no network; other builds fetch the same file.
+if(EXISTS ${CMAKE_SOURCE_DIR}/stb_truetype/stb_truetype.h)
+    set(TTF_DIR ${CMAKE_SOURCE_DIR}/stb_truetype)
+else()
+    set(TTF_DIR ${CMAKE_BINARY_DIR}/stb_truetype)
+    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_truetype.h
+        ${TTF_DIR}/stb_truetype.h EXPECTED_HASH SHA256=ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab)
+endif()
 
 set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
 set(PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)

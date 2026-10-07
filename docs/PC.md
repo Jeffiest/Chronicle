@@ -239,7 +239,7 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | R | R2 | first-person look (`dun/gameloop.cpp:4354`) |
 | C, Backspace | select | switch character (`dun/gameloop.cpp:3185`) |
 | Return | start | pause (`dun/gameloop.cpp:3045`); the title's prompts |
-| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker when `game.element_picker` is on (`port/src/menu_dungeon.cpp`); menus |
+| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker when `game.element_picker` is on and the weapon has more than one element to pick between (`port/src/menu_dungeon.cpp`); menus |
 | V; middle click, B | L3; R3 | debug and editor functions only |
 | IJKL | right stick | the camera from the keyboard |
 | F3 | none | the FPS counter on and off (see "The FPS counter") |

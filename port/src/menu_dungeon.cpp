@@ -220,22 +220,30 @@ void PlaceRing() {
     }
 }
 
-// The elements on offer, in the order of the stones, and the weapon's own at the front of the ring.
-void SetUpRing() {
+// The elements on offer, in the order of the stones: those the weapon has, then none where the
+// weapon may go without one or has nothing else. Returns how many.
+int ElementChoices(s8 (&choices)[6]) {
     WEAPON_HAVE *weapon = EquippedWeapon();
-    int          current = NowWeaponHave->best_elem;
-
-    g_picker.count = 0;
+    int          count = 0;
 
     for (int i = 0; i < 5; i++) {
         if (NowWeaponHave->elem[i] > 0) {
-            g_picker.elements[g_picker.count++] = i;
+            choices[count++] = i;
         }
     }
 
-    if (g_picker.count == 0 || (weapon != NULL && MayGoWithoutElement(weapon->item_no))) {
-        g_picker.elements[g_picker.count++] = WEAPON_ELEMENT_NONE;
+    if (count == 0 || (weapon != NULL && MayGoWithoutElement(weapon->item_no))) {
+        choices[count++] = WEAPON_ELEMENT_NONE;
     }
+
+    return count;
+}
+
+// The elements on offer, with the weapon's own at the front of the ring.
+void SetUpRing() {
+    int current = NowWeaponHave->best_elem;
+
+    g_picker.count = ElementChoices(g_picker.elements);
 
     g_picker.selected = 0;
 
@@ -452,6 +460,11 @@ void ClosePicker() {
 }
 
 } // namespace
+
+bool ElementPickerHasChoice() {
+    s8 choices[6];
+    return ElementChoices(choices) >= 2;
+}
 
 void QuickChangeOpenElements(bool elements) {
     g_picker.requested = elements;

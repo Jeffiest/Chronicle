@@ -53,6 +53,7 @@ AGENTS.md
 # The PC port's extracted game data and its saves; see docs/PC_PORT_PLAN.md.
 /data/
 /save/
+/soundtrack/
 
 # Flatpak builds (docs/FLATPAK.md)
 /.flatpak-builder/
@@ -62,4 +63,3 @@ AGENTS.md
 
 # MacOS
 .DS_Store
-

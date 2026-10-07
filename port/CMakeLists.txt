@@ -34,6 +34,22 @@ FetchContent_Declare(nlohmann_json
     FIND_PACKAGE_ARGS CONFIG)
 FetchContent_MakeAvailable(nlohmann_json)
 
+# The soundtrack decoders are Flatpak sources there, since its build sandbox has no network.
+# Other builds fetch the same pinned files at configure time.
+if(EXISTS ${CMAKE_SOURCE_DIR}/audio_decoders/dr_wav.h AND
+   EXISTS ${CMAKE_SOURCE_DIR}/audio_decoders/dr_flac.h AND
+   EXISTS ${CMAKE_SOURCE_DIR}/audio_decoders/stb_vorbis.c)
+    set(AUDIO_DECODER_DIR ${CMAKE_SOURCE_DIR}/audio_decoders)
+else()
+    set(AUDIO_DECODER_DIR ${CMAKE_BINARY_DIR}/audio_decoders)
+    file(DOWNLOAD https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_wav.h
+        ${AUDIO_DECODER_DIR}/dr_wav.h EXPECTED_HASH SHA256=03e70c1a2d9787cd7ed3e966c075bea7bac6373f759db9cd7ca9ccdfc4ec4493)
+    file(DOWNLOAD https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_flac.h
+        ${AUDIO_DECODER_DIR}/dr_flac.h EXPECTED_HASH SHA256=111144e778f55738db6851cb226015c419e00d04b916a09506d4856d9cff945c)
+    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_vorbis.c
+        ${AUDIO_DECODER_DIR}/stb_vorbis.c EXPECTED_HASH SHA256=4c7cb2ff1f7011e9d67950446b7eb9ca044f2e464d76bfbb0b84dd2e23e65636)
+endif()
+
 set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
 set(PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 file(GLOB_RECURSE PS2_SOURCES CONFIGURE_DEPENDS RELATIVE ${PS2_DIR} ${PS2_DIR}/*.cpp)
@@ -176,15 +192,35 @@ string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_hex}")
 file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/icon/chronicle.hpp
     CONTENT "#pragma once\n#include <cstdint>\ninline constexpr int kIconSize = 128;\ninline constexpr std::uint8_t kIconRgba[] = {${icon_bytes}};\n")
 
+# CREDITS, one contributor a line and # for comments, as the About page's list of names.
+set(CREDITS_FILE ${CMAKE_SOURCE_DIR}/CREDITS)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CREDITS_FILE})
+file(STRINGS ${CREDITS_FILE} credit_lines ENCODING UTF-8)
+set(credit_names "")
+foreach(line IN LISTS credit_lines)
+    string(STRIP "${line}" line)
+    if(line STREQUAL "" OR line MATCHES "^#")
+        continue()
+    endif()
+    string(REPLACE "\\" "\\\\" line "${line}")
+    string(REPLACE "\"" "\\\"" line "${line}")
+    string(APPEND credit_names "\"${line}\", ")
+endforeach()
+if(credit_names STREQUAL "")
+    set(credit_names "\"\"")
+endif()
+file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/options/credits.hpp
+    CONTENT "#pragma once\ninline constexpr const char *kCredits[] = {${credit_names}};\n")
+
 add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
-target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
+target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR} ${AUDIO_DECODER_DIR})
 target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
 target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections)
 
 add_library(dc_port OBJECT ${PORT_LIB_SOURCES})
 target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
 # Replacement units reach the host side as "gfx/gfx.hpp", "platform/window.hpp".
-target_include_directories(dc_port PRIVATE ${PORT_DIR})
+target_include_directories(dc_port PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
 # The game's headers trip a few warnings that only describe how MWCC's source
 # was written, not a problem in the port.
 target_compile_options(dc_port PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label

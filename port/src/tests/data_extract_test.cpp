@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <numeric>
 
 #include "data_fixture.hpp"
 
@@ -151,6 +152,7 @@ TEST(DataExtract, NormalizesNtscAssets) {
     Put32(image, 16 + 32, 16 + 2 * 48);
     std::memcpy(image.data() + 64, "wepstatus", 9);
     Put32(image, 64 + 32, 16 + 2 * 48 + 4);
+    std::iota(image.begin() + 16 + 2 * 48, image.end(), 1);
     Disc disc = MakeDisc({
         {"gedit/system/esys.pak", MakePack({{"cursor.img", Pattern(8, 1)}})},
         {"meswin/mes_tex.pak", Pattern(16, 2)},
@@ -176,6 +178,11 @@ TEST(DataExtract, NormalizesNtscAssets) {
     EXPECT_EQ(battle[1].name, "btlmenu2.img");
     EXPECT_EQ(dcdata::Le32(battle[1].data.data() + 4), 1);
     EXPECT_EQ(battle[1].data.size(), 68);
+    EXPECT_EQ(Bytes(battle[1].data.begin() + 64, battle[1].data.end()), Bytes(image.begin() + 116, image.end()));
+    EXPECT_EQ(dcdata::Le32(battle[0].data.data() + 4), 1);
+    EXPECT_EQ(std::memcmp(battle[0].data.data() + 16, "other", 6), 0);
+    EXPECT_EQ(dcdata::Le32(battle[0].data.data() + 16 + 32), 64);
+    EXPECT_EQ(Bytes(battle[0].data.begin() + 64, battle[0].data.end()), Bytes(image.begin() + 112, image.begin() + 116));
     EXPECT_TRUE(dcdata::Mismatched(dcdata::ParseIndex(disc.hd2), out).empty());
 
     dcdata::Summary again = dcdata::Extract(archive, out, nullptr);

@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <span>
+#include <string_view>
 #include <vector>
 
 #include "memorycardaccess.hpp"
 #include "menu_option.hpp"
+#include "options/rows.hpp"
 #include "savedata.hpp"
 #include "userstatus.hpp"
 
@@ -76,6 +79,26 @@ TEST(MenuOption, OptionsLiveInConfigNotInSaves) {
     SaveData = nullptr;
 }
 
+TEST(MenuOption, AudioPageKeepsCustomSoundtrackAndSurround) {
+    const auto pages = options::Pages();
+    const auto page = std::find_if(pages.begin(), pages.end(),
+                                   [](const options::Page &page) { return std::string_view(page.name) == "Audio"; });
+    ASSERT_NE(page, pages.end());
+    const auto soundtrack = std::find_if(page->rows.begin(), page->rows.end(),
+                                         [](const options::Row &row) { return std::string_view(row.key) == "audio.soundtrack"; });
+    const auto surround = std::find_if(page->rows.begin(), page->rows.end(),
+                                       [](const options::Row &row) { return std::string_view(row.key) == "audio.surround"; });
+    ASSERT_NE(soundtrack, page->rows.end());
+    ASSERT_NE(surround, page->rows.end());
+    Config config;
+    EXPECT_EQ(options::RowValue(*soundtrack, config), "PS2");
+    EXPECT_TRUE(options::StepRow(*soundtrack, config, 1, false));
+    EXPECT_TRUE(config.soundtrack);
+    EXPECT_EQ(options::RowValue(*soundtrack, config), "Custom");
+    EXPECT_TRUE(options::StepRow(*surround, config, -1, false));
+    EXPECT_TRUE(config.surround);
+}
+
 namespace {
 
 std::vector<DisplayModeSize> Modes() {
@@ -127,4 +150,118 @@ TEST(MenuOption, ResolutionListKeepsConfiguredSize) {
     list = OptionResolutionList({}, 0, 0, false, 0, 0);
     ASSERT_TRUE(Has(list, 3840, 2160));
     ASSERT_EQ(list.front().width, 0);
+}
+
+TEST(MenuOption, ZoomResetPresetsPreserveOtherBindingsAndRestoreDefault) {
+    Config config;
+    config.key_bindings.push_back({
+        "cross", {"Space", "Z"}
+    });
+    ASSERT_EQ(OptionZoomResetChoice(config), 0);
+    ASSERT_EQ(OptionZoomResetText(config), "Middle Mouse");
+    ASSERT_EQ(OptionZoomResetCount(config), 5);
+    OptionSetZoomReset(config, 2);
+    ASSERT_EQ(OptionZoomResetChoice(config), 2);
+    ASSERT_EQ(OptionZoomResetText(config), "Mouse5");
+    ASSERT_EQ(config.key_bindings.front(), (ConfigKeyBinding{
+                                               "cross", {"Space", "Z"}
+    }));
+    Config restored = ConfigParse(ConfigSerialize(config));
+    ASSERT_EQ(OptionZoomResetText(restored), "Mouse5");
+    OptionSetZoomReset(config, 4);
+    ASSERT_EQ(OptionZoomResetText(config), "Disabled");
+    OptionRestoreZoomReset(config, Config{});
+    ASSERT_EQ(OptionZoomResetText(config), "Middle Mouse");
+    ASSERT_EQ(config.key_bindings.size(), 1u);
+    ASSERT_EQ(config.key_bindings.front().action, "cross");
+}
+
+TEST(MenuOption, CustomZoomResetBindingIsShownAndKeptUntilChanged) {
+    Config config;
+    config.key_bindings = {
+        {"zoom_reset", {"F12", "Mouse4"}},
+        {"r3",         {"B"}            }
+    };
+    ASSERT_EQ(OptionZoomResetChoice(config), 5);
+    ASSERT_EQ(OptionZoomResetCount(config), 6);
+    ASSERT_EQ(OptionZoomResetText(config), "F12, Mouse4");
+    Config before = config;
+    OptionSetZoomReset(config, 5);
+    ASSERT_EQ(config, before);
+    OptionSetZoomReset(config, 3);
+    ASSERT_EQ(OptionZoomResetText(config), "Home");
+    ASSERT_EQ(config.key_bindings[1], before.key_bindings[1]);
+    OptionRestoreZoomReset(config, before);
+    ASSERT_EQ(OptionZoomResetText(config), "F12, Mouse4");
+    ASSERT_EQ(config.key_bindings.front(), before.key_bindings[1]);
+}
+
+TEST(MenuOption, PagesInOrder) {
+    std::span<const options::Page> pages = options::Pages();
+    std::vector<std::string_view>  names;
+    for (const options::Page &page : pages) {
+        names.push_back(page.name);
+    }
+    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility"}));
+    ASSERT_TRUE(std::string_view(pages[4].rows[0].key) == "game.qte_always_win");
+}
+
+TEST(MenuOption, StepAndResetRows) {
+    std::span<const options::Row> controls = options::Pages()[3].rows;
+    auto                          found = std::ranges::find_if(controls, [](const options::Row &row) { return std::string_view(row.key) == "input.gyro"; });
+    ASSERT_TRUE(found != controls.end());
+    const options::Row &gyro = *found;
+    Config              config;
+    config.gyro = ConfigGyro::Held;
+    ASSERT_TRUE(!options::StepRow(gyro, config, 1, false));
+    ASSERT_TRUE(options::StepRow(gyro, config, 1, true));
+    ASSERT_TRUE(config.gyro == ConfigGyro::Off);
+    ASSERT_TRUE(options::RowValue(gyro, config) == "Off");
+
+    config.master_volume = 0.25f;
+    options::ResetPage(options::Pages()[2], config);
+    ASSERT_TRUE(config.master_volume == Config{}.master_volume);
+    ASSERT_TRUE(config.gyro == ConfigGyro::Off);
+}
+
+TEST(MenuOption, CameraReturnPresetsAndDefaultRestoration) {
+    Config config;
+    ASSERT_EQ(OptionCameraReturnChoice(config), 2);
+    ASSERT_EQ(OptionCameraReturnText(config), "Slow");
+    const float rates[] = {0.0f, 0.05f, 0.2f, 0.5f, 1.0f};
+    const char *names[] = {"Off", "Very Slow", "Slow", "Moderate", "Retail"};
+    for (int choice = 0; choice < 5; ++choice) {
+        OptionSetCameraReturn(config, choice);
+        ASSERT_FLOAT_EQ(config.mouse_camera_return, rates[choice]);
+        ASSERT_EQ(OptionCameraReturnChoice(config), choice);
+        ASSERT_EQ(OptionCameraReturnCount(config), 5);
+        ASSERT_EQ(OptionCameraReturnText(config), names[choice]);
+    }
+    OptionRestoreCameraReturn(config, Config{});
+    ASSERT_FLOAT_EQ(config.mouse_camera_return, 0.2f);
+    ASSERT_EQ(OptionCameraReturnText(config), "Slow");
+}
+
+TEST(MenuOption, CustomCameraReturnIsShownAndKeptUntilPresetSelection) {
+    Config config;
+    config.mouse_camera_return = 0.37f;
+    config.mouse_zoom = true;
+    config.key_bindings = {
+        {"cross", {"Space", "Z"}}
+    };
+    const Config before = config;
+    ASSERT_EQ(OptionCameraReturnChoice(config), 5);
+    ASSERT_EQ(OptionCameraReturnCount(config), 6);
+    ASSERT_EQ(OptionCameraReturnText(config), "37%");
+    OptionSetCameraReturn(config, 5);
+    ASSERT_EQ(config, before);
+    OptionSetCameraReturn(config, 0);
+    ASSERT_FLOAT_EQ(config.mouse_camera_return, 0.0f);
+    ASSERT_EQ(config.key_bindings, before.key_bindings);
+    ASSERT_TRUE(config.mouse_zoom);
+    OptionRestoreCameraReturn(config, before);
+    ASSERT_EQ(config, before);
+    Config restored = ConfigParse(ConfigSerialize(config));
+    ASSERT_FLOAT_EQ(restored.mouse_camera_return, 0.37f);
+    ASSERT_EQ(OptionCameraReturnText(restored), "37%");
 }

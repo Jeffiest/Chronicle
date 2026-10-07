@@ -72,6 +72,12 @@ public:
     // once the message textures are loaded, as for CommonMenuMes2.
     void Draw(int x, int y, int alpha = 0x80);
 
+    // With this on, laying the text out leaves the game's random numbers and the message windows'
+    // shake tables as they were. MakeMesWin fills the tables with 64 rand() calls, so a text laid
+    // out where the game does not (the FPS counter, between two ticks) would otherwise change what
+    // the game does next, and by when it landed.
+    void KeepGameRandom(bool keep) { keep_random_ = keep; }
+
     // How wide the widest line draws, in screen pixels; for right-aligning or centring a value.
     int Width() const { return mes_.text_width; }
 
@@ -87,4 +93,5 @@ private:
     u32          colour_;
     int          missing_ = 0;
     bool         set_ = false;
+    bool         keep_random_ = false;
 };

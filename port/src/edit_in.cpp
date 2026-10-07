@@ -11,6 +11,7 @@
 #include "battlemenu.hpp"
 #include "boxvu0.hpp"
 #include "camera.hpp"
+#include "camera_port.hpp"
 #include "camerafollow.hpp"
 #include "character.hpp"
 #include "clsmes.hpp"
@@ -41,6 +42,7 @@
 #include "mglib.hpp"
 #include "npcharacter.hpp"
 #include "objanime.hpp"
+#include "platform/input.hpp"
 #include "rect.hpp"
 #include "savedata.hpp"
 #include "scriptinterpreter.hpp"
@@ -1032,8 +1034,9 @@ static void MainDraw() {
             GamePad.KeyLock(0);
             EdDebugMenu();
 
-            if (GamePad.Down(PAD_R3) || EdDebugRunEventNo > 0) {
+            if (GamePad.Down(PAD_R3 | PAD_CIRCLE) || EdDebugRunEventNo > 0) {
                 debug_menu_mode = 0;
+                InputSetMenuNavigation(false);
                 GamePad.AutoRepeatOff();
                 RunEvent(EdDebugRunEventNo, EdIn_NowCamera);
             } else {
@@ -1044,6 +1047,7 @@ static void MainDraw() {
                 GamePad.SetAutoRepeat(PAD_DPAD, 25, 3);
                 GamePad.SetAutoRepeat(PAD_L1 | PAD_R1, 25, 3);
                 debug_menu_mode = 1;
+                InputSetMenuNavigation(true);
                 debug_flag = 0;
             }
 
@@ -1259,7 +1263,7 @@ static void MoveCharacter() {
 }
 
 /**
- * Applies the right stick to the interior camera, holding its height and distance in
+ * Applies the right stick and the mouse to the interior camera, holding its height and distance in
  * range.
  *
  * @mangled MoveCamera__FP13CCameraFollow__2
@@ -1270,8 +1274,8 @@ static void MoveCharacter() {
 static void MoveCamera(CCameraFollow *camera) {
     static float camera_distance[3] = {20.0f, 60.0f, 100.0f};
 
-    float horizontal = GamePad.GetRXf();
-    camera->AddHeight(-GamePad.GetRYf());
+    float horizontal = MouseLookTurn(camera, 0.04f, GamePad.GetRXf());
+    camera->AddHeight(-MouseLookRise(camera, GamePad.GetRYf(), 30.0f));
 
     if (!(camera->GetHeight() <= 30.0f)) {
         camera->SetHeight(30.0f);

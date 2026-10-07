@@ -4,8 +4,8 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
-#include <span>
 #include <iterator>
+#include <span>
 #include <vector>
 
 #include "draw2d_port.hpp"
@@ -19,8 +19,8 @@
 #include "snd.hpp"
 #include "texture.hpp"
 
-extern float RandTbl[64];
-extern float RandTbl2[64];
+extern float     RandTbl[64];
+extern float     RandTbl2[64];
 extern MES_FUCHI FuchiTbl_E[];
 
 namespace {
@@ -47,22 +47,62 @@ bool TtfReady() {
 void GlyphTint(int clut, int dark, int wide, int &r, int &g, int &b, int &alpha) {
     alpha = 0x80;
     switch (FontColorTbl[clut]) {
-        case FONT_COLOR_WHITE: r = g = b = 0x5F; break;
-        case FONT_COLOR_BROWN: r = 0x22; g = 0x20; b = 0x18; break;
-        case FONT_COLOR_YELLOW: r = 0x5E; g = 0x5E; b = 0x20; break;
-        case FONT_COLOR_CYAN: r = 0x20; g = 0x5E; b = 0x5E; break;
-        case FONT_COLOR_GREEN: r = 0x20; g = 0x5E; b = 0x20; break;
-        case FONT_COLOR_BROWN_OPAQUE: r = 0x22; g = 0x20; b = 0x18; break;
-        case FONT_COLOR_GOLD: r = 0x73; g = 0x67; b = 0x33; break;
-        case FONT_COLOR_GREY: r = g = b = 0x47; break;
-        case FONT_COLOR_MAGENTA: r = 0x5F; g = 0x1F; b = 0x5F; break;
-        default: r = 0x28; g = 0x28; b = 0x20; break;
+        case FONT_COLOR_WHITE:
+            r = g = b = 0x5F;
+            break;
+        case FONT_COLOR_BROWN:
+            r = 0x22;
+            g = 0x20;
+            b = 0x18;
+            break;
+        case FONT_COLOR_YELLOW:
+            r = 0x5E;
+            g = 0x5E;
+            b = 0x20;
+            break;
+        case FONT_COLOR_CYAN:
+            r = 0x20;
+            g = 0x5E;
+            b = 0x5E;
+            break;
+        case FONT_COLOR_GREEN:
+            r = 0x20;
+            g = 0x5E;
+            b = 0x20;
+            break;
+        case FONT_COLOR_BROWN_OPAQUE:
+            r = 0x22;
+            g = 0x20;
+            b = 0x18;
+            break;
+        case FONT_COLOR_GOLD:
+            r = 0x73;
+            g = 0x67;
+            b = 0x33;
+            break;
+        case FONT_COLOR_GREY:
+            r = g = b = 0x47;
+            break;
+        case FONT_COLOR_MAGENTA:
+            r = 0x5F;
+            g = 0x1F;
+            b = 0x5F;
+            break;
+        default:
+            r = 0x28;
+            g = 0x28;
+            b = 0x20;
+            break;
     }
     if (clut == 0xFF) {
         if (dark != 0) {
-            r = 0x7F; g = 0x22; b = 0x22;
+            r = 0x7F;
+            g = 0x22;
+            b = 0x22;
         } else {
-            r = 0x40; g = 0x11; b = 0x11;
+            r = 0x40;
+            g = 0x11;
+            b = 0x11;
         }
     }
     if (wide == 1) {
@@ -74,7 +114,8 @@ void GlyphTint(int clut, int dark, int wide, int &r, int &g, int &b, int &alpha)
 
 void TtfQuad(std::vector<gfx::Vertex2D> &out, const ttffont::Glyph &glyph, float x, float y, float width,
              float height, int r, int g, int b, int alpha) {
-    auto clamp = [](int v) { return static_cast<u_char>(v < 0 ? 0 : v > 255 ? 255 : v); };
+    auto         clamp = [](int v) { return static_cast<u_char>(v < 0 ? 0 : v > 255 ? 255
+                                                                                    : v); };
     const u_char red = clamp(r), green = clamp(g), blue = clamp(b), a = clamp(alpha);
     out.push_back(draw2d::Vertex(x, y, 0.0f, glyph.u0, glyph.v0, red, green, blue, a));
     out.push_back(draw2d::Vertex(x + width, y, 0.0f, glyph.u1, glyph.v0, red, green, blue, a));
@@ -109,7 +150,7 @@ void TtfLayoutRows(ClsMes &mes, std::vector<float> &xs) {
     const float               gap = em * 0.1f;
 
     auto glyph_of = [&](int i, ttffont::Glyph &glyph) {
-        const int code = mes.win_line[i].code;
+        const int      code = mes.win_line[i].code;
         const char32_t ch = code >= -0x2DF && code < -0x251 ? GameTextChar(static_cast<s16>(code)) : 0;
         return ch != 0 && ttffont::GetGlyph(ch, em_px, glyph);
     };
@@ -196,53 +237,76 @@ bool QueueTtfGlyph(ClsMes &mes, int index, int dark, int offset_x, int offset_y,
     const int cap = mes.edge_alpha;
     // A thin stroke's outline covers little of a pixel, so it is laid down nine times to read as dark as the bitmaps'.
     constexpr int passes = 9;
-    auto edge = [&](float dx, float dy, int er, int eg, int eb, int ea) {
+    auto          edge = [&](float dx, float dy, int er, int eg, int eb, int ea) {
         for (int pass = 0; pass < passes; ++pass) {
             TtfQuad(edges, glyph, x + dx, y + dy * rows, width, height, er, eg, eb, std::min(cap, ea));
         }
     };
+    // Retail's shadow is cast down and to the right and falls off softly, because its bitmaps are soft.
+    // A crisp glyph stacked at two offsets reads as a hard outline instead, so the shadow is laid in
+    // as taps at half-pixel steps along the light's direction, which the texture filter blends.
+    static const int mode = [] {
+        const char *text = std::getenv("DC_TTF_SHADOW");
+        return text != nullptr ? std::atoi(text) : 1;
+    }();
+
+    struct Tap {
+        float dx, dy;
+        int   grey, alpha;
+    };
+
+    static const Tap soft[] = {
+        {0.8f, 0.8f, 0x40, 0x70},
+        {1.4f, 1.4f, 0x10, 0x78},
+        {2.0f, 2.0f, 0,    0x78},
+        {2.6f, 2.6f, 0,    0x60},
+        {3.2f, 3.2f, 0,    0x40},
+        {1.6f, 0.8f, 0,    0x40},
+        {0.8f, 1.6f, 0,    0x40},
+        {2.4f, 1.6f, 0,    0x30},
+        {1.6f, 2.4f, 0,    0x30},
+    };
+    static const Tap deep[] = {
+        {0.8f, 0.8f, 0x40, 0x78},
+        {1.4f, 1.4f, 0x10, 0x78},
+        {2.0f, 2.0f, 0,    0x78},
+        {2.6f, 2.6f, 0,    0x78},
+        {3.2f, 3.2f, 0,    0x60},
+        {3.8f, 3.8f, 0,    0x40},
+        {1.6f, 0.8f, 0,    0x50},
+        {0.8f, 1.6f, 0,    0x50},
+        {2.4f, 1.6f, 0,    0x48},
+        {1.6f, 2.4f, 0,    0x48},
+        {3.2f, 2.4f, 0,    0x30},
+        {2.4f, 3.2f, 0,    0x30},
+    };
+    auto cast = [&] {
+        if (mode == 0) {
+            edge(1, 1, 0x40, 0x40, 0x40, 0x80);
+            edge(2, 2, 0, 0, 0, 0x80);
+        } else {
+            for (const Tap &tap : mode == 1 ? std::span<const Tap>(soft) : std::span<const Tap>(deep)) {
+                TtfQuad(edges, glyph, x + tap.dx, y + tap.dy * rows, width, height, tap.grey, tap.grey, tap.grey,
+                        std::min(cap, tap.alpha));
+            }
+        }
+    };
     switch (mes.style) {
-        case MES_EDGE_WHITE: edge(1, 1, 0xFF, 0xFF, 0xFF, 0x40); break;
-        case MES_EDGE_BLACK: edge(1, 1, 0, 0, 0, 0x40); break;
+        case MES_EDGE_WHITE:
+            edge(1, 1, 0xFF, 0xFF, 0xFF, 0x40);
+            break;
+        case MES_EDGE_BLACK:
+            cast();
+            break;
         case MES_EDGE_TABLE:
             for (int i = 0; FuchiTbl_E[i].alpha > 0; i++) {
                 edge(static_cast<float>(FuchiTbl_E[i].x), static_cast<float>(FuchiTbl_E[i].y), FuchiTbl_E[i].r,
                      FuchiTbl_E[i].g, FuchiTbl_E[i].b, FuchiTbl_E[i].alpha);
             }
             break;
-        case MES_EDGE_DOUBLE: {
-            // Retail's shadow is cast down and to the right and falls off softly, because its bitmaps are soft.
-            // A crisp glyph stacked at two offsets reads as a hard outline instead, so the shadow is laid in
-            // as taps at half-pixel steps along the light's direction, which the texture filter blends.
-            static const int mode = [] {
-                const char *text = std::getenv("DC_TTF_SHADOW");
-                return text != nullptr ? std::atoi(text) : 1;
-            }();
-            struct Tap {
-                float dx, dy;
-                int   grey, alpha;
-            };
-            static const Tap soft[] = {
-                {0.8f, 0.8f, 0x40, 0x70}, {1.4f, 1.4f, 0x10, 0x78}, {2.0f, 2.0f, 0, 0x78}, {2.6f, 2.6f, 0, 0x60},
-                {3.2f, 3.2f, 0, 0x40},    {1.6f, 0.8f, 0, 0x40},    {0.8f, 1.6f, 0, 0x40}, {2.4f, 1.6f, 0, 0x30},
-                {1.6f, 2.4f, 0, 0x30},
-            };
-            static const Tap deep[] = {
-                {0.8f, 0.8f, 0x40, 0x78}, {1.4f, 1.4f, 0x10, 0x78}, {2.0f, 2.0f, 0, 0x78}, {2.6f, 2.6f, 0, 0x78},
-                {3.2f, 3.2f, 0, 0x60},    {3.8f, 3.8f, 0, 0x40},    {1.6f, 0.8f, 0, 0x50}, {0.8f, 1.6f, 0, 0x50},
-                {2.4f, 1.6f, 0, 0x48},    {1.6f, 2.4f, 0, 0x48},    {3.2f, 2.4f, 0, 0x30}, {2.4f, 3.2f, 0, 0x30},
-            };
-            if (mode == 0) {
-                edge(1, 1, 0x40, 0x40, 0x40, 0x80);
-                edge(2, 2, 0, 0, 0, 0x80);
-            } else {
-                for (const Tap &tap : mode == 1 ? std::span<const Tap>(soft) : std::span<const Tap>(deep)) {
-                    TtfQuad(edges, glyph, x + tap.dx, y + tap.dy * rows, width, height, tap.grey, tap.grey, tap.grey,
-                            std::min(cap, tap.alpha));
-                }
-            }
+        case MES_EDGE_DOUBLE:
+            cast();
             break;
-        }
     }
     TtfQuad(fills, glyph, x, y, width, height, r, g, b, std::min(cap, alpha));
     return true;

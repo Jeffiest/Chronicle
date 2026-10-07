@@ -321,6 +321,15 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   turns a full WASD deflection (128) into the d-pad; a diagonal (91 per
   axis) stays under their threshold, as a gamepad's does.
 
+### First-person walking
+
+In towns, interiors and dungeons, the keyboard movement bindings (WASD by default)
+walk relative to the first-person view while the mouse looks around. A/D strafe;
+W/S move forward/backward, at the interior walking speed. Diagonals keep the same
+speed. Body collision, gravity, slopes, chests and Atla balls still constrain
+movement. Input locks, menus, freezing, actions and scripted fades block walking.
+Controller-only first-person look retains its retail controls.
+
 ### Mouse look
 
 The mouse turns each camera the right stick turns, by the angle it moved:
@@ -378,7 +387,7 @@ than a quarter of a second (a load) drops what came during it. A script's
 Third-person mouse pitch changes the follow camera's height while it keeps
 looking at the player. It does not rotate the view independently of the player.
 Height requests stay inside the gameplay limits. The return toward the baseline
-pauses while either mouse axis moves. **Vertical Auto-Return**, under Options >
+pauses while either mouse axis moves. **Vertical Return**, under Options >
 Controls, sets the idle return speed: Off, Very Slow, Slow (the default, one fifth
 of retail), Moderate or Retail. A custom `input.mouse_camera_return` from 0 to 1
 can be set in the configuration file and takes effect without a restart. Floor and

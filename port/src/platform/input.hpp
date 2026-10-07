@@ -189,3 +189,15 @@ bool InputHostPressed(InputHostAction action);
 // The keyboard and mouse the input script holds now; host actions read them beside the live devices,
 // and a key that becomes held counts as a press.
 void InputSetScriptedDevices(const InputKeyboardMouse &held);
+
+// Movement bound to keyboard keys, independent of controller look and mouse axes.
+// First-person gameplay uses it to walk while the controller retains retail look controls.
+struct InputKeyboardMovement {
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+InputKeyboardMovement InputGetKeyboardMovement();
+
+// Mirrors pad 0 gameplay key lock for the independent keyboard movement channel.
+void InputSetMovementLocked(bool locked);

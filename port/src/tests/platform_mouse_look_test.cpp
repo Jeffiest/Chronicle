@@ -480,7 +480,18 @@ TEST(PlatformMouseLook, ZoomDistanceCannotCrossAWallOrLeaveAnUnsafePendingTarget
     ASSERT_FLOAT_EQ(MouseCameraClampDistance(camera, 40.0f, &wall, 1), 40.0f);
     ASSERT_FLOAT_EQ(MouseCameraClampDistance(camera, 100.0f, nullptr, -1), camera.distance);
     camera.next_pos[2] = 100.0f;
-    ASSERT_FLOAT_EQ(MouseCameraClampDistance(camera, 40.0f, &wall, 1), camera.distance);
+    float eye_before = camera.pos[2];
+    float inward = MouseCameraClampDistance(camera, 40.0f, &wall, 1);
+    ASSERT_FLOAT_EQ(inward, 40.0f);
+    ASSERT_FLOAT_EQ(camera.pos[2], eye_before);
+    camera.SetDistance(inward);
+    for (int step = 0; step < 100; ++step) {
+        camera.Step(1);
+        ASSERT_LT(camera.pos[2], 80.0f);
+        ASSERT_LT(camera.next_pos[2], 80.0f);
+        ASSERT_FLOAT_EQ(camera.ref[2], 0.0f);
+    }
+    ASSERT_NEAR(camera.pos[2], 40.0f, 1e-3f);
 }
 
 TEST(PlatformMouseLook, DungeonZoomCollectorRejectsInvalidCellsAndOversizedMeshes) {

@@ -16,6 +16,8 @@
 #include "camera.hpp"
 #include "camera_port.hpp"
 #include "camera_zoom.hpp"
+#include "first_person_walk.hpp"
+#include "platform/input.hpp"
 #include "camerafollow.hpp"
 #include "character.hpp"
 #include "clothread.hpp"
@@ -2220,103 +2222,44 @@ PC_OVERRIDE void DunMoveChara() {
                 next_task = GAME_TASK_PLAY;
                 leaving = 0;
 
-                if (NowDngMap->map_type != 1 && selectMapNo == DUNGEON_DIVINE_BEAST_CAVE) {
-                    sceVu0FVECTOR moved;
-                    MoveCheckInfo info;
-                    sceVu0FVECTOR parts_pos;
-                    CBoxVu0       bound;
-                    CCPoly        foot;
-                    CCPoly       *polys;
-                    int           mode;
-
-                    sceVu0CopyVector(pos, CharaMain.pos);
-                    velo__2[2] = 0.0f;
-                    velo__2[0] = 0.0f;
-                    WorkBuffer__2->used = 0;
-                    polys = (CCPoly *) WorkBuffer__2->Alloc(0x7D0);
-                    bound.max[0] = 20.0f + pos[0];
-                    bound.max[1] = 20.0f + pos[1];
-                    bound.max[2] = 20.0f + pos[2];
-                    bound.min[0] = pos[0] - 20.0f;
-                    bound.min[1] = pos[1] - 40.0f;
-                    bound.min[2] = pos[2] - 20.0f;
-                    int          i = 0;
-                    int          offset;
-                    std::uintptr_t address;
-
-                    colPolyNum = 0;
-
-                    for (; (address = (std::uintptr_t) NowDngMap, offset = i * (int) sizeof(CDungeonParts), ((CDungeonMap *) (offset + address))->parts[0].frame[0] != NULL); i++) {
-                        CFrame *collision;
-                        int     turn;
-
-                        collision = i == -1 ? NULL : (address = (std::uintptr_t) NowDngMap, ((CDungeonMap *) (offset + address))->parts[0].collision);
-
-                        if (collision != NULL) {
-                            CDungeonParts *part = &((CDungeonMap *) ((char *) NowDngMap + offset))->parts[0];
-
-                            sceVu0CopyVector(parts_pos, part->frame_offset[0]);
-
-                            CDungeonParts *turn_part = &((CDungeonMap *) ((char *) NowDngMap + offset))->parts[0];
-
-                            turn = (int) turn_part->frame_turn[0];
-                            turn += turn_part->collision_turn;
-
-                            if (turn > 3) {
-                                turn -= 3;
-                            }
-
-                            if (turn == 3) {
-                                turn = -1;
-                            }
-
-                            float rot = PI * (-90.0f * turn) / 180.0f;
-
-                            collision->SetRotation(0.0f, rot, 0.0f);
-                            collision->SetPosition(parts_pos);
-                            colPolyNum += collision->PickUpNearPoly(&polys[colPolyNum], bound);
-                        }
-                    }
-
-                    colPolyNum = NowDranMapField->AddCollision(polys, colPolyNum, bound);
-                    mode = 1;
-
-                    if (UserStatus->cur_chara == CHARA_OSMOND) {
-                        mode = 8;
-                    }
-
-                    MoveCheck(pos, velo__2, moved, &info, polys, colPolyNum, mode);
-
-                    if (colPolyNum >= 0x190) {
-                        printf("er -> %d\n", colPolyNum);
-                    }
-
-                    sceVu0SubVector(ref_off, moved, pos);
+                bool can_walk = FirstPersonDungeonKeyboardVelocity(velo__2, viewAngleH__2, BtActStatus,
+                    driveStepHold || CMonUnitHold, UserStatus->CheckLife() > 0, StatusErrCheck(AILMENT_GOO) != 0);
+                NowMonstorUnit->MoveCheck(pos, velo__2, lockOnTargetFlag);
+                MoveCheckInfo info{};
+                sceVu0FVECTOR before;
+                sceVu0CopyVector(before, pos);
+                auto *fields = NowDngMap->map_type != 1 && selectMapNo == DUNGEON_DIVINE_BEAST_CAVE ?
+                    reinterpret_cast<DRAN_MAP_FIELD_SET *>(NowDranMapField) : nullptr;
+                if (FirstPersonDungeonStep(*NowDngMap, fields, pos, velo__2, info, UserStatus->cur_chara == CHARA_OSMOND ? 8 : 1)) {
+                    sceVu0SubVector(ref_off, pos, before);
                     veloOld[1] = velo__2[1];
-                    velo__2[1] -= 0.1f;
-
-                    if (velo__2[1] < -10.0f) {
-                        velo__2[1] = -10.0f;
+                    velo__2[1] = info.landed ? 0.0f : std::max(-10.0f, velo__2[1] - 0.1f);
+                    if (info.landed) {
+                        BtActStatus.foot_sound = info.poly.attr.foot_sound;
+                        BtActStatus.ground_kind = info.poly.attr.ground_kind;
                     }
-
-                    sceVu0CopyVector(pos, moved);
-
-                    if (info.landed != 0) {
-                        velo__2[1] = 0.0f;
-                        foot = info.poly;
-                        BtActStatus.foot_sound = foot.attr.foot_sound;
-                        BtActStatus.ground_kind = foot.attr.ground_kind;
-                    }
-
-                    if (info.ground_found != 0) {
-                        BtActStatus.ground_height = pos[1] - info.ground_point[1];
-                    }
-
+                    if (info.ground_found) BtActStatus.ground_height = pos[1] - info.ground_point[1];
                     CharaMain.SetPosition(pos);
-
-                    if (pos[1] <= -30.0f) {
-                        leaving = 1;
-                    }
+                    // EyeCamera already applied this read's mouse look. Translate its view with the
+                    // collided step, rather than applying that mouse motion a second time.
+                    sceVu0FVECTOR eye, look;
+                    NowCamera__3->GetPos(eye);
+                    NowCamera__3->GetRef(look);
+                    sceVu0AddVector(eye, eye, ref_off);
+                    sceVu0AddVector(look, look, ref_off);
+                    NowCamera__3->SetPos(eye);
+                    NowCamera__3->SetRef(look);
+                    static float walked = 0.0f;
+                    if (can_walk && info.landed && UserStatus->cur_chara != CHARA_OSMOND) {
+                        walked += hypotf(ref_off[0], ref_off[2]);
+                        if (walked >= 10.0f) {
+                            static int foot = 0;
+                            SndPlayFootSound(BtActStatus.foot_sound, foot, pos);
+                            foot ^= 1;
+                            walked = fmodf(walked, 10.0f);
+                        }
+                    } else walked = 0.0f;
+                    if (NowDngMap->map_type != 1 && selectMapNo == DUNGEON_DIVINE_BEAST_CAVE && pos[1] <= -30.0f) leaving = 1;
                 }
 
                 if (GamePad.Down(PadInput_OK) != 0 && BtActStatus.movement_locked == 0 && BtActStatus.in_water != 0) {
@@ -3404,8 +3347,10 @@ PC_OVERRIDE void EyeCamera() {
     float         stick_x;
     float         stick_y;
 
-    stick_x = GamePad.GetLXf();
-    stick_y = -GamePad.GetLYf();
+    auto keyboard = InputGetKeyboardMovement();
+    bool walking = keyboard.x || keyboard.y;
+    stick_x = walking ? 0.0f : GamePad.GetLXf();
+    stick_y = walking ? 0.0f : -GamePad.GetLYf();
 
     if (stick_x > 0.0f) {
         float rate = 0.02f;

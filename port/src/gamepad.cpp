@@ -84,3 +84,8 @@ PC_OVERRIDE int CGamePad::Down2(int mask) {
 
     return (mask & (pad[0].input.status.button & ~previous_pad[0].input.status.button)) != 0;
 }
+
+PC_OVERRIDE void CGamePad::KeyLock(int mask) {
+    key_lock = mask;
+    InputSetMovementLocked(mask != 0);
+}

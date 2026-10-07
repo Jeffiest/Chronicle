@@ -4,7 +4,9 @@
 #include <filesystem>
 #include <memory>
 
+#include "../camera_port.hpp"
 #include "../camera_zoom.hpp"
+#include "../mouse_collision.hpp"
 #include "../platform/clock.hpp"
 #include "../platform/config.hpp"
 #include "../platform/input.hpp"
@@ -108,14 +110,17 @@ TEST(CameraZoom, RetailRelaxationCannotExpandPastAWallAndResetReturnsToNormal) {
 TEST(CameraZoom, ExtendedDistanceInClearSpaceClampsAndResets) {
     auto root = std::filesystem::temp_directory_path() /
                 ("chronicle-zoom-range-test-" + std::to_string(dc::test::ProcessId()));
+
     struct Cleanup {
         std::filesystem::path root;
+
         ~Cleanup() {
             std::error_code error;
             std::filesystem::remove(root / "config.json", error);
             std::filesystem::remove(root, error);
         }
     } cleanup{root};
+
     PathsSetSaveRoot(root);
     Config config;
     config.mouse_zoom = true;
@@ -149,4 +154,93 @@ TEST(CameraZoom, ExtendedDistanceInClearSpaceClampsAndResets) {
     InputLatchPad(0);
     DungeonZoomApply(&camera, map.get(), false, 2000.0f);
     ASSERT_FLOAT_EQ(camera.distance, 60.0f);
+}
+
+TEST(CameraZoom, StationaryContractedEyeCanZoomInAndTurnWithoutCrossingWall) {
+    auto root = std::filesystem::temp_directory_path() /
+                ("chronicle-zoom-recovery-test-" + std::to_string(dc::test::ProcessId()));
+
+    struct Cleanup {
+        std::filesystem::path root;
+
+        ~Cleanup() {
+            std::error_code error;
+            std::filesystem::remove(root / "config.json", error);
+            std::filesystem::remove(root, error);
+        }
+    } cleanup{root};
+
+    PathsSetSaveRoot(root);
+    Config config;
+    config.mouse_zoom = true;
+    config.mouse_capture = false;
+    ASSERT_TRUE(ConfigChange(config));
+    InputApplyConfig(config);
+    ClockSetUnbounded(true);
+    ClockReset();
+    auto map = std::make_unique<CDungeonMap>();
+    map->map_type = 0;
+    CFrame        frame;
+    CCollisionMDT collision;
+    CCPolyBox     mesh{};
+    const float   points[3][3] = {
+        {-200, -100, 50},
+        {200,  -100, 50},
+        {0,    200,  50}
+    };
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            mesh.poly.vertex[i][j] = points[i][j];
+        }
+    }
+    for (int j = 0; j < 3; ++j) {
+        mesh.box.min[j] = collision.min[j] = std::min({points[0][j], points[1][j], points[2][j]});
+        mesh.box.max[j] = collision.max[j] = std::max({points[0][j], points[1][j], points[2][j]});
+    }
+    collision.mesh = &mesh;
+    collision.mesh_count = 1;
+    frame.flags = 1;
+    frame.collision = &collision;
+    map->parts[0].frame[0] = &frame;
+    map->parts[0].camera_collision = &frame;
+    CCameraFollow camera(60.0f, 30.0f, 0.0f, 8.0f);
+    camera.Step(-1);
+    camera.pos[2] = 20.0f; // Retail contracted the visible eye, but its old target remains beyond the wall.
+    ASSERT_TRUE(MouseCameraClear(camera.pos, camera.ref, 0, 0, &mesh.poly, 1));
+    InputKeyboardMouse input;
+    input.mouse_wheel = 3.0f;
+    InputSetScriptedDevices(input);
+    InputLatchPad(0);
+    DungeonZoomApply(&camera, map.get(), false, 60.0f);
+    ASSERT_FLOAT_EQ(camera.distance, 36.0f);
+    ASSERT_FLOAT_EQ(camera.pos[2], 20.0f); // Recovery itself never teleports the eye.
+    for (int frame_no = 0; frame_no < 100; ++frame_no) {
+        camera.Step(1);
+        ASSERT_LT(camera.pos[2], 40.0f);
+        ASSERT_LT(camera.next_pos[2], 40.0f);
+    }
+    ASSERT_NEAR(camera.pos[2], 36.0f, 1e-3f);
+    // Yaw uses the same recovery independently of the zoom option.
+    camera.pos[2] = 20.0f;
+    camera.next_pos[2] = 60.0f;
+    camera.distance = 60.0f;
+    camera.angle = camera.next_angle = 0.0f;
+    float accepted = MouseCameraClamp(camera, 0.2f, &mesh.poly, 1);
+    ASSERT_FLOAT_EQ(accepted, 0.2f);
+    ASSERT_FLOAT_EQ(camera.distance, 20.0f);
+    ASSERT_FLOAT_EQ(camera.pos[2], 20.0f);
+    MouseLookTurnOrbit(&camera, accepted);
+    for (int frame_no = 0; frame_no < 100; ++frame_no) {
+        camera.Step(1);
+        ASSERT_LT(camera.pos[2], 40.0f);
+        ASSERT_LT(camera.next_pos[2], 40.0f);
+        ASSERT_TRUE(MouseCameraClear(camera.pos, camera.ref, 0, 0, &mesh.poly, 1));
+    }
+    // An actually invalid eye must still refuse both operations, rather than noclip out.
+    camera.pos[0] = 0;
+    camera.pos[2] = 45.0f;
+    camera.next_pos[2] = 60.0f;
+    camera.distance = 60.0f;
+    ASSERT_FLOAT_EQ(MouseCameraClamp(camera, -0.2f, &mesh.poly, 1), 0.0f);
+    ASSERT_FLOAT_EQ(MouseCameraClampDistance(camera, 30.0f, &mesh.poly, 1), 60.0f);
 }

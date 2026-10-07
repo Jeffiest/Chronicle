@@ -792,7 +792,7 @@ int RunGame(int argc, char **argv) {
     InitCDFile();
     // With one language there is nothing to choose: the game starts in it, past the language
     // select, as retail NTSC does. With several the select offers retail's five.
-    std::vector<s32> languages = DataLanguages();
+    std::vector<s32> languages = SupportedLanguages();
     if (languages.size() == 1) {
         LanguageCode = languages[0];
     } else if (languages.empty()) {

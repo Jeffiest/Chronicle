@@ -51,15 +51,19 @@ files remain in the extracted tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.
 
-The extractor also writes `languages.json`, the languages the data can run as
-`LanguageCode` numbers. With one, the port starts in it past the language
-select; with several, the select offers them. NTSC data has American English
-(1) alone, as retail NTSC: the disc's other languages are early drafts whose
-images were never translated (its French and German title cards read "Nolun
-Village" and "Sun/Moon Temple"), its British-named files have no town dialogue,
-and its Spanish is missing files. PAL data has the five its select offers,
-English being British (2). Data extracted before this file existed starts at the
-select, with a note to extract again.
+The extractor also writes `languages.json`: the release the disc is and the
+languages it carries, as `LanguageCode` numbers. It knows a release by a
+fingerprint of its `DATA.HD2` (dcdata's `KnownReleases`, which prints the name
+it found); a release it does not know gets NTSC's or PAL's languages by its file
+layout. The port offers the languages in `SupportedLanguages`: with one, it
+starts in it past the language select; with several, the select offers them.
+NTSC 1.02 has American English (1) alone, as retail NTSC: the disc's other
+languages are early drafts whose images were never translated (its French and
+German title cards read "Nolun Village" and "Sun/Moon Temple"), its
+British-named files have no town dialogue, and its Spanish is missing files.
+The July 12 PAL prototype has the five its select offers, English being British
+(2). Data extracted before this file existed starts at the select, with a note
+to extract again.
 
 The select is retail's one image of all five buttons, so it cannot yet leave out
 a language the data lacks, and its English button reads as the disc's art does.

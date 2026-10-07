@@ -153,7 +153,8 @@ PC_OVERRIDE int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
     return 1;
 }
 
-// languages.json is {"languages": [n, ...]}; the numbers inside its brackets are the languages.
+// languages.json is {"release": "...", "languages": [n, ...]}; the numbers in the brackets after
+// "languages" are the languages.
 std::vector<s32> DataLanguages() {
     std::vector<s32> languages;
     const fs::path  *file = Lookup(dcdata::kLanguagesFile);
@@ -162,9 +163,10 @@ std::vector<s32> DataLanguages() {
     }
     std::ifstream stream(*file);
     std::string   text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-    std::size_t   open = text.find('[');
-    std::size_t   close = text.find(']', open);
-    if (open == std::string::npos || close == std::string::npos) {
+    std::size_t   key = text.find("\"languages\"");
+    std::size_t   open = key == std::string::npos ? key : text.find('[', key);
+    std::size_t   close = open == std::string::npos ? open : text.find(']', open);
+    if (close == std::string::npos) {
         return languages;
     }
     const char *at = text.data() + open + 1;
@@ -178,6 +180,10 @@ std::vector<s32> DataLanguages() {
         at = error == std::errc() ? next : at + 1;
     }
     return languages;
+}
+
+std::vector<s32> SupportedLanguages() {
+    return DataLanguages();
 }
 
 PC_OVERRIDE void InitReadBG() {

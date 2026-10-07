@@ -118,8 +118,8 @@ TEST(DataExtract, FromIso) {
     ASSERT_TRUE(summary.warnings == 0);
     CheckExtracted(out, disc);
     ASSERT_TRUE(dcdata::Mismatched(dcdata::ParseIndex(disc.hd2), out).empty());
-    // Not NTSC's layout: PAL's five languages.
-    std::string languages = "{\"languages\": [2, 3, 4, 5, 6]}\n";
+    // A release the table lacks, without NTSC's layout: PAL's five languages.
+    std::string languages = "{\"release\": \"unknown release, PAL layout\", \"languages\": [2, 3, 4, 5, 6]}\n";
     EXPECT_EQ(ReadBytes(out / "languages.json"), Bytes(languages.begin(), languages.end()));
     fs::remove_all(dir);
 }
@@ -175,7 +175,7 @@ TEST(DataExtract, NormalizesNtscAssets) {
     EXPECT_EQ(members[1].name, "start_f.img");
     EXPECT_EQ(members[1].data, start);
     EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_1.mes"), (Bytes{1, 2, 3, 4}));
-    std::string languages = "{\"languages\": [1]}\n";
+    std::string languages = "{\"release\": \"unknown release, NTSC layout\", \"languages\": [1]}\n";
     EXPECT_EQ(ReadBytes(out / "languages.json"), Bytes(languages.begin(), languages.end()));
     EXPECT_EQ(ReadBytes(out / "dun/script/d01/d01_2.mes"), (Bytes{1, 2, 3, 4}));
     auto battle = dcdata::ReadPack(ReadBytes(out / "normalized/commenu/a_eng/dungeon/dunmenu5.pak"));
@@ -194,6 +194,20 @@ TEST(DataExtract, NormalizesNtscAssets) {
     EXPECT_EQ(again.written, 0);
     EXPECT_EQ(again.kept, 6);
     fs::remove_all(dir);
+}
+
+TEST(DataExtract, KnowsReleasesByTheirIndex) {
+    Bytes index = Pattern(64, 3);
+    ASSERT_EQ(dcdata::IdentifyRelease(index), nullptr);
+    for (const dcdata::Release &release : dcdata::KnownReleases()) {
+        ASSERT_FALSE(release.languages.empty());
+        for (const dcdata::Release &other : dcdata::KnownReleases()) {
+            ASSERT_TRUE(&release == &other || release.index_fnv != other.index_fnv);
+        }
+    }
+    // FNV-1a's published value for "a".
+    const unsigned char a[] = {'a'};
+    ASSERT_EQ(dcdata::Fnv1a64(a), 0xaf63dc4c8601ec8cULL);
 }
 
 TEST(DataExtract, FromDirectory) {

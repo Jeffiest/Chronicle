@@ -101,9 +101,11 @@ TEST(DataRead, LanguagesFromTheExtraction) {
     fs::path dir = InstallStandardData("read_languages");
     ASSERT_TRUE((DataLanguages() == std::vector<s32>{2, 3, 4, 5, 6}));
 
-    WriteBytes(dir / "data/languages.json", Bytes{'{', '"', 'l', '"', ':', ' ', '[', '1', ',', '9', ']', '}'});
+    std::string text = R"({"release": "[x]", "languages": [1, 9]})";
+    WriteBytes(dir / "data/languages.json", Bytes(text.begin(), text.end()));
     InitCDFile();
-    ASSERT_TRUE((DataLanguages() == std::vector<s32>{1})); // 9 is no language
+    ASSERT_TRUE((DataLanguages() == std::vector<s32>{1})); // 9 is no language, [x] no list
+    ASSERT_TRUE((SupportedLanguages() == std::vector<s32>{1}));
 
     fs::remove(dir / "data/languages.json");
     InitCDFile();

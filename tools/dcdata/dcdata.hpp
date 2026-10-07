@@ -515,28 +515,82 @@ inline bool IsNtscLayout(bool has_system_pack, bool has_pal_common_system_pack) 
     return has_system_pack && !has_pal_common_system_pack;
 }
 
-// The languages an extraction can run, as LanguageCode numbers, written to the data's root for the
-// port. NTSC shipped American English (1) alone: the disc's other languages are early drafts whose
-// images were never translated (its French and German title cards still read "Nolun Village" and
-// "Sun/Moon Temple"), and its Spanish is missing files. PAL runs the five its language select
-// offers, English being British (2).
+// What the extraction can run, written to the data's root for the port: the release it came from
+// and the languages its disc carries, as LanguageCode numbers. Localization packs, once they exist,
+// add their own languages to these in the port.
 inline constexpr std::string_view kLanguagesFile = "languages.json";
 
-inline std::vector<int> SupportedLanguages(bool ntsc) {
-    return ntsc ? std::vector<int>{1} : std::vector<int>{2, 3, 4, 5, 6};
+// A release the extractor knows by a fingerprint of its DATA.HD2, the index of every file on the
+// disc, which differs from release to release.
+struct Release {
+    std::string_view name;
+    std::uint64_t    index_size;
+    std::uint64_t    index_fnv; // FNV-1a, 64-bit
+    std::vector<int> languages;
+};
+
+// NTSC shipped American English alone. The disc's other languages are early drafts whose images
+// were never translated (its French and German title cards read "Nolun Village" and "Sun/Moon
+// Temple"), its British-named files have no town dialogue, and its Spanish is missing files.
+inline const std::vector<int> &NtscLanguages() {
+    static const std::vector<int> languages = {1};
+    return languages;
 }
 
-inline void WriteLanguages(const fs::path &out, const std::vector<Record> &records) {
+// PAL: the five languages its select offers, English being British.
+inline const std::vector<int> &PalLanguages() {
+    static const std::vector<int> languages = {2, 3, 4, 5, 6};
+    return languages;
+}
+
+inline const std::vector<Release> &KnownReleases() {
+    static const std::vector<Release> releases = {
+        {"NTSC 1.02",                     294080, 0x806bb1d43be8a8dcULL, NtscLanguages()},
+        {"PAL prototype (July 12, 2001)", 312864, 0x5942a32563c2a8b1ULL, PalLanguages() },
+    };
+    return releases;
+}
+
+inline std::uint64_t Fnv1a64(std::span<const unsigned char> data) {
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    for (unsigned char byte : data) {
+        hash = (hash ^ byte) * 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+inline const Release *IdentifyRelease(std::span<const unsigned char> index) {
+    std::uint64_t fnv = Fnv1a64(index);
+    for (const Release &release : KnownReleases()) {
+        if (release.index_size == index.size() && release.index_fnv == fnv) {
+            return &release;
+        }
+    }
+    return nullptr;
+}
+
+// The release by its index, or for one the table lacks, its family by the file layout: NTSC's
+// languages where the disc has NTSC's system pack alone, PAL's otherwise.
+inline Release ReleaseOf(std::span<const unsigned char> index, const std::vector<Record> &records) {
+    if (const Release *known = IdentifyRelease(index)) {
+        return *known;
+    }
     bool system_pack = false;
     bool pal_common = false;
     for (const Record &record : records) {
         system_pack |= record.path == kSystemPack;
         pal_common |= record.path == kPalCommonSystemPack;
     }
-    std::string text = "{\"languages\": [";
-    std::vector<int> languages = SupportedLanguages(IsNtscLayout(system_pack, pal_common));
-    for (std::size_t i = 0; i < languages.size(); i++) {
-        text += std::format("{}{}", i == 0 ? "" : ", ", languages[i]);
+    if (IsNtscLayout(system_pack, pal_common)) {
+        return {"unknown release, NTSC layout", index.size(), Fnv1a64(index), NtscLanguages()};
+    }
+    return {"unknown release, PAL layout", index.size(), Fnv1a64(index), PalLanguages()};
+}
+
+inline void WriteLanguages(const fs::path &out, const Release &release) {
+    std::string text = std::format("{{\"release\": \"{}\", \"languages\": [", release.name);
+    for (std::size_t i = 0; i < release.languages.size(); i++) {
+        text += std::format("{}{}", i == 0 ? "" : ", ", release.languages[i]);
     }
     text += "]}\n";
     WriteFile(out / kLanguagesFile, std::span(reinterpret_cast<const unsigned char *>(text.data()), text.size()));
@@ -730,7 +784,9 @@ inline Summary Extract(const Archive &archive, const fs::path &out, std::FILE *l
         Fail("write error on {}", index_copy.string());
     }
     Normalize(out, records);
-    WriteLanguages(out, records);
+    Release release = ReleaseOf(hd2, records);
+    Log(log, "release: {}\n", release.name);
+    WriteLanguages(out, release);
     return summary;
 }
 

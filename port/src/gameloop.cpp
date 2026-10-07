@@ -721,8 +721,14 @@ bool GameShowingFps() {
 }
 
 std::string GameFpsText() {
-    return std::format("FPS {:.1f}  TICK {:.1f}/{:g}  DRAWS {}", g_fps.frames.PerSecond(),
-                       g_fps.ticks.PerSecond(), ClockTickRate(), g_stats.last_draws);
+    std::string text = std::format("FPS {:.1f}", g_fps.frames.PerSecond());
+    if (g_present.fps_detail != ConfigFpsDetail::Fps) {
+        text += std::format("  TICK {:.1f}/{:g}", g_fps.ticks.PerSecond(), ClockTickRate());
+    }
+    if (g_present.fps_detail == ConfigFpsDetail::All) {
+        text += std::format("  DRAWS {}", g_stats.last_draws);
+    }
+    return text;
 }
 
 // kPreviousFrame outside a frame is the newest main image: the canonical render, or the loading

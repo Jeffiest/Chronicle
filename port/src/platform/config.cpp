@@ -86,6 +86,34 @@ const char *PresentModeName(ConfigPresentMode mode) {
     }
 }
 
+bool ReadFpsDetail(const Json &value, ConfigFpsDetail &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    std::string detail = Lower(value.get<std::string>());
+    if (detail == "fps") {
+        out = ConfigFpsDetail::Fps;
+    } else if (detail == "ticks") {
+        out = ConfigFpsDetail::Ticks;
+    } else if (detail == "all") {
+        out = ConfigFpsDetail::All;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+const char *FpsDetailName(ConfigFpsDetail detail) {
+    switch (detail) {
+        case ConfigFpsDetail::Fps:
+            return "fps";
+        case ConfigFpsDetail::Ticks:
+            return "ticks";
+        default:
+            return "all";
+    }
+}
+
 // The double that prints as the float does: 0.1f as 0.1, not 0.10000000149011612.
 double Shortest(float value) {
     return std::stod(std::format("{}", value));
@@ -341,6 +369,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "video.show_fps") {
         return ReadBool(value, config.show_fps);
     }
+    if (name == "video.fps_detail") {
+        return ReadFpsDetail(value, config.fps_detail);
+    }
     if (name == "video.detail_distance") {
         float distance = 0.0f;
         if (!ReadNumber(value, distance) || !(distance >= 0.0f) || !std::isfinite(distance)) {
@@ -462,6 +493,7 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["aspect"] = config.aspect == ConfigAspect::FourThree ? "4:3" : "auto";
     root["video"]["ui_scale"] = Shortest(config.ui_scale);
     root["video"]["show_fps"] = config.show_fps;
+    root["video"]["fps_detail"] = FpsDetailName(config.fps_detail);
     root["video"]["detail_distance"] = Shortest(config.detail_distance);
     root["video"]["shadow_distance"] = Shortest(config.shadow_distance);
     root["video"]["soft_focus"] = options.soft_focus;

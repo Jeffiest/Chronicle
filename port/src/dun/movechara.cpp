@@ -14,6 +14,8 @@
 #include "btmisc.hpp"
 #include "btsysscript.hpp"
 #include "camera.hpp"
+#include "camera_port.hpp"
+#include "camera_zoom.hpp"
 #include "camerafollow.hpp"
 #include "character.hpp"
 #include "clothread.hpp"
@@ -194,7 +196,9 @@ extern s32 viewMode__2;
 
 // The dungeon's MoveChara (renamed DunMoveChara by port/include/stubs/dun/gameloop.hpp, as the PS2
 // link does) and BtCheckDamageProc, retail's, with the addresses of NowDngMap's parts and of the
-// active item counters formed on the whole pointer instead of an unsigned int.
+// active item counters formed on the whole pointer instead of an unsigned int, and the mouse
+// turning the camera beside the right stick (camera_port.hpp). EyeCamera, the first-person view,
+// is retail's with the mouse turning it beside the left stick.
 
 namespace {
 
@@ -1561,9 +1565,9 @@ PC_OVERRIDE void DunMoveChara() {
                                                             }
 
                                                             HealingWater();
-                                                            float turn = GamePad.GetRXf();
+                                                            float turn = MouseLookTurn(NowCamera__3, 0.04f, GamePad.GetRXf());
 
-                                                            NowCamera__3->AddHeight(-GamePad.GetRYf());
+                                                            NowCamera__3->AddHeight(-MouseLookRise(NowCamera__3, GamePad.GetRYf(), 30.0f));
 
                                                             if (NowCamera__3->GetHeight() >= 30.0f) {
                                                                 NowCamera__3->SetHeight(30.0f);
@@ -1651,7 +1655,13 @@ PC_OVERRIDE void DunMoveChara() {
                                                                     NowCamera__3->SetFollow(pos[0] + to_target[0], BtActStatus.camera_shake_offset + (to_target[1] + (6.0f + pos[1] + reference[1])), pos[2] + to_target[2]);
                                                                 }
 
+                                                                extern float camera_up_near_dist;
+                                                                float normal_near = camera_up_near_dist;
+                                                                float zoom_start_distance = NowCamera__3->GetDistance();
+                                                                camera_up_near_dist = DungeonZoomNearDistance(NowCamera__3, normal_near, lockOnTargetFlag != 0);
                                                                 autoCamTrial();
+                                                                camera_up_near_dist = normal_near;
+                                                                DungeonZoomApply(NowCamera__3, NowDngMap, lockOnTargetFlag != 0, zoom_start_distance);
                                                             }
                                                         }
                                                     }
@@ -3384,4 +3394,77 @@ PC_OVERRIDE int BtCheckDamageProc() {
     }
 
     return taken;
+}
+
+PC_OVERRIDE void EyeCamera() {
+    sceVu0FVECTOR pos;
+    sceVu0FVECTOR ref;
+    sceVu0FMATRIX rotation;
+    sceVu0FMATRIX unit;
+    float         stick_x;
+    float         stick_y;
+
+    stick_x = GamePad.GetLXf();
+    stick_y = -GamePad.GetLYf();
+
+    if (stick_x > 0.0f) {
+        float rate = 0.02f;
+
+        viewAngleH__2 -= stick_x * rate;
+
+        if (viewAngleH__2 < -PI) {
+            viewAngleH__2 += TWO_PI;
+        }
+    }
+
+    if (stick_x < -0.0f) {
+        float rate = 0.02f;
+
+        viewAngleH__2 -= stick_x * rate;
+
+        if (viewAngleH__2 > PI) {
+            viewAngleH__2 -= TWO_PI;
+        }
+    }
+
+    if (stick_y > 0.0f) {
+        if (viewAngleV__2 < 0.65f) {
+            float rate = 0.02f;
+
+            viewAngleV__2 += stick_y * rate;
+        }
+    }
+
+    if (stick_y < -0.0f) {
+        if (viewAngleV__2 > -1.0f) {
+            float rate = 0.02f;
+
+            viewAngleV__2 += stick_y * rate;
+        }
+    }
+
+    viewAngleH__2 = MouseLookEyeAngleH(viewAngleH__2);
+    viewAngleV__2 = MouseLookEyeAngleV(viewAngleV__2);
+
+    ref[0] = 0.0f;
+    ref[1] = 0.0f;
+    ref[2] = 10.0f;
+    ref[3] = 0.0f;
+
+    sceVu0UnitMatrix(unit);
+    sceVu0RotMatrixX(rotation, unit, viewAngleV__2);
+    sceVu0RotMatrixY(rotation, rotation, viewAngleH__2);
+    sceVu0ApplyMatrix(ref, rotation, ref);
+    sceVu0CopyVector(pos, CharaMain.pos);
+
+    CUserStatus *status = UserStatus;
+    float        height = CharaHeight(status);
+
+    pos[1] += height - 1.5f;
+    ref[0] += pos[0];
+    ref[1] += pos[1];
+    ref[2] += pos[2];
+
+    NowCamera__3->SetPos(pos);
+    NowCamera__3->SetRef(ref);
 }

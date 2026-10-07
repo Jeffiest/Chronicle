@@ -71,6 +71,7 @@ constexpr int kValueRight = 554;
 constexpr int kBarX = 580;
 constexpr int kExitX = 136;
 constexpr int kExitY = 352;
+constexpr int kExitHeight = 31;
 // A help window's frame round its middle (MenuHelpWinDraw): 24 pixels a side and 22 above and below.
 constexpr int kPlateSide = 24;
 constexpr int kPlateHeight = 44;
@@ -368,6 +369,72 @@ void RestoreMouseSensitivity(Config &config, const Config &defaults) {
     config.mouse_sensitivity = defaults.mouse_sensitivity;
 }
 
+constexpr const char *kZoomResetBindings[] = {"Mouse3", "Mouse4", "Mouse5", "Home", ""};
+constexpr const char *kZoomResetNames[] = {"Middle Mouse", "Mouse4", "Mouse5", "Home", "Disabled"};
+
+const std::vector<std::string> &ZoomResetBindings(const Config &config) {
+    static const std::vector<std::string> defaults = {"Mouse3"};
+    auto                                  binding = std::ranges::find(config.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    return binding == config.key_bindings.end() ? defaults : binding->keys;
+}
+
+int ZoomResetChoice(const Config &config) {
+    const auto &keys = ZoomResetBindings(config);
+    if (keys.empty()) {
+        return 4;
+    }
+    for (int choice = 0; choice < 4; ++choice) {
+        if (keys.size() == 1 && keys.front() == kZoomResetBindings[choice]) {
+            return choice;
+        }
+    }
+    return 5; // The file's custom binding remains a selectable choice until explicitly changed.
+}
+
+int ZoomResetCount(const Config &config) { return ZoomResetChoice(config) == 5 ? 6 : 5; }
+
+void SetZoomReset(Config &config, int choice) {
+    if (choice < 0 || choice >= 5) {
+        return;
+    }
+    auto                     binding = std::ranges::find(config.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    std::vector<std::string> keys;
+    if (choice < 4) {
+        keys.push_back(kZoomResetBindings[choice]);
+    }
+    if (binding == config.key_bindings.end()) {
+        config.key_bindings.push_back({"zoom_reset", std::move(keys)});
+    } else {
+        binding->keys = std::move(keys);
+    }
+}
+
+std::string ZoomResetText(const Config &config) {
+    int choice = ZoomResetChoice(config);
+    if (choice < 5) {
+        return kZoomResetNames[choice];
+    }
+    std::string text;
+    for (const auto &key : ZoomResetBindings(config)) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+        text += key;
+    }
+    return text;
+}
+
+void RestoreZoomReset(Config &config, const Config &defaults) {
+    auto binding = std::ranges::find(config.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    if (binding != config.key_bindings.end()) {
+        config.key_bindings.erase(binding);
+    }
+    auto default_binding = std::ranges::find(defaults.key_bindings, "zoom_reset", &ConfigKeyBinding::action);
+    if (default_binding != defaults.key_bindings.end()) {
+        config.key_bindings.push_back(*default_binding);
+    }
+}
+
 // 0.50 to 2.50 in twentieths.
 int StickSensitivityCount(const Config &) {
     return 41;
@@ -474,6 +541,10 @@ const Row kControlRows[] = {
         RestoreMouseSensitivity},
     OnOffRow<&Config::mouse_invert_y>("input.mouse_invert_y", "Invert Mouse Y",
                                       "\"Invert Mouse Y\"\nMoving the mouse up\nlooks down."),
+    OnOffRow<&Config::mouse_zoom>("input.mouse_zoom", "Mouse Wheel Zoom",
+                                  "\"Mouse Wheel Zoom\"\nScroll to move closer\nor farther from your\ncharacter."),
+    Row{"input.bindings.zoom_reset", "Reset Zoom", "\"Reset Zoom\"\nRestores the normal\ncamera distance.",
+        -1, ZoomResetCount, ZoomResetChoice, SetZoomReset, ZoomResetText, nullptr, RestoreZoomReset},
     Row{"input.stick_sensitivity", "Stick Sensitivity", "\"Stick Sensitivity\"\nHow far a gamepad's\nstick has to tilt.",
         -1, StickSensitivityCount, StickSensitivityChoice, SetStickSensitivity, StickSensitivityText, nullptr,
         RestoreStickSensitivity},
@@ -882,7 +953,7 @@ void RunMouse() {
             over_row = r;
         }
     }
-    if (Inside(x, y, kExitX, kExitY, kExitX + 60, kExitY + 29)) {
+    if (Inside(x, y, kExitX, kExitY, kExitX + 60, kExitY + kExitHeight)) {
         over_row = rows;
     }
     for (int t = 0; t < kTabCount; ++t) {
@@ -1097,6 +1168,16 @@ void WriteOptions(CSaveData &save, const ConfigGameOptions &options) {
 }
 
 } // namespace
+
+int OptionZoomResetChoice(const Config &config) { return ZoomResetChoice(config); }
+
+int OptionZoomResetCount(const Config &config) { return ZoomResetCount(config); }
+
+std::string OptionZoomResetText(const Config &config) { return ZoomResetText(config); }
+
+void OptionSetZoomReset(Config &config, int choice) { SetZoomReset(config, choice); }
+
+void OptionRestoreZoomReset(Config &config, const Config &defaults) { RestoreZoomReset(config, defaults); }
 
 std::vector<OptionResolution> OptionResolutionList(std::span<const DisplayModeSize> modes, int configured_width,
                                                    int configured_height, bool display_known, int display_width,
@@ -1316,7 +1397,7 @@ PC_OVERRIDE void DrawMenuOption() {
     DrawTabPlate(alpha);
     DrawScrollBar(alpha);
     MenuTextureReload(g_screen.block_no);
-    DrawSprite(kExitX, kExitY, 452, 224, 60, 29, alpha);
+    DrawSprite(kExitX, kExitY, 452, 224, 60, kExitHeight, alpha);
 
     if (g_screen.step == OPTION_STEP_RUN) {
         // The brackets go round whatever a click would act on.

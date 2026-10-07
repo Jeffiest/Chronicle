@@ -69,7 +69,7 @@ struct Config {
     float                         shadow_distance = 0.0f;
     float                         master_volume = 1.0f;
     std::vector<ConfigKeyBinding> key_bindings;
-    float                         mouse_sensitivity = 0.1f;
+    float                         mouse_sensitivity = 0.2f;
     float                         stick_sensitivity = 1.33f;
     bool                          stick_invert_x = false;
     bool                          stick_invert_y = false;
@@ -79,6 +79,7 @@ struct Config {
     bool                          gyro_invert_y = false;
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
+    bool                          mouse_zoom = false;
     std::vector<std::string>      mouse_release_keys = {"Escape"};
     ConfigGameOptions             options;
     bool                          discord_rich_presence = true;

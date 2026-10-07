@@ -1200,13 +1200,15 @@ gives back -1 and leaves the file as it was where either would not hold.
 ## The Options screen
 
 The game's Options screen, from the title, the town menu and the dungeon menu,
-is the port's settings screen (`port/src/menu_option.cpp`, which replaces
+is the port's settings screen (`port/src/menu_option.cpp` replaces
 `InitMenuOption`, `MenuOptionKey`, `DrawMenuOption` and
-`OptionMenuFadeOutStart`). It keeps the game's frame, cursor, sounds, EXIT
+`OptionMenuFadeOutStart` and hands them to `port/src/options/`: `rows` defines
+the pages and their rows, `screen` runs input and help, `draw` lays it out). It keeps the game's frame, cursor, sounds, EXIT
 button and help window, and draws its rows in the game's message font ("Game
-text"). Four pages, Game, Display, Audio and Controls, are named on a help
-window's plate with L1 and R1 at its ends; L1 and L2, R1 and R2 turn the page,
-and so do left and right on the page names. Each row is a label and a value:
+text"). Five pages, Game, Display, Audio, Controls and Accessibility,
+are named on a help window's plate with L1 and R1 at its ends; the names
+scroll along it, with `<` and `>` where more lie past an end. L1 and L2, R1
+and R2 turn the page, and so do left and right on the page names. Each row is a label and a value:
 left and right change the value at once, cross goes round its choices, and a
 value whose setting `ConfigAppliesOnRestart` names ends in ` *`. Every change
 goes through `ConfigChange`, so it applies at once and rewrites `config.json`.
@@ -1220,10 +1222,11 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 
 | Page | Rows |
 |---|---|
-| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names |
-| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, soft focus |
+| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence |
+| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), soft focus |
 | Audio | volume, sound (stereo or mono) |
-| Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, stick sensitivity |
+| Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
+| Accessibility | always win QTEs |
 
 Resolution choices are the sizes that fit the display (its usable area less
 the window's borders when windowed) and follow changes of mode. Desktop is

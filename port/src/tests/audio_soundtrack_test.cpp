@@ -89,12 +89,14 @@ TEST(AudioSoundtrack, CreatesMissingMappingAndPreservesExistingOne) {
     std::ostringstream text;
     text << created.rdbuf();
     EXPECT_EQ(text.str(), "{\n  \"version\": 1,\n  \"overrides\": {}\n}\n");
+    created.close();
     std::ofstream(path) << "custom mapping\n";
     ASSERT_TRUE(audio::SoundtrackEnsure());
     std::ifstream      existing(path);
     std::ostringstream preserved;
     preserved << existing.rdbuf();
     EXPECT_EQ(preserved.str(), "custom mapping\n");
+    existing.close();
     std::filesystem::remove_all(base);
 }
 

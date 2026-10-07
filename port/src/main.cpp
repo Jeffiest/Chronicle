@@ -55,6 +55,7 @@ struct Options {
     const char  *jump = nullptr;
     bool         fast_load = false;
     bool         show_fps = false;
+    bool         screenshot_fps = false;
 };
 
 Options g_options;
@@ -76,6 +77,8 @@ Options g_options;
                  "  --screenshot PATH  write the last tick's image (no FPS counter) to PATH on exit\n"
                  "  --input FILE       drive pad 1 from a script (default: DC_INPUT); see docs/PC.md\n"
                  "  --width, --height  window size in pixels (default: config.json, then the monitor's)\n"
+                 "  --screenshot-fps   with --screenshot and --show-fps: the image as a window shows it, the\n"
+                 "                     FPS counter over it\n"
                  "  --display-per-tick N  headless: also render N interpolated display frames per tick\n"
                  "  --show-fps         draw the FPS counter on presented frames when headless too\n"
                  "test hooks:\n"
@@ -125,6 +128,8 @@ Options ParseOptions(int argc, const char **argv) {
             options.fast_load = true;
         } else if (arg == "--show-fps") {
             options.show_fps = true;
+        } else if (arg == "--screenshot-fps") {
+            options.screenshot_fps = true;
         } else if (arg == "--display-per-tick") {
             options.display_per_tick = static_cast<int>(number());
         } else {
@@ -304,7 +309,9 @@ int Screenshot(const char *path) {
     std::vector<uint8_t> pixels;
     uint32_t             width = 0;
     uint32_t             height = 0;
-    if (!GameScreenshot(pixels, width, height) || !gfx::WritePng(PathsFromUtf8(path), pixels.data(), width, height)) {
+    bool                 grabbed = g_options.screenshot_fps ? GameScreenshotWithFps(pixels, width, height)
+                                                            : GameScreenshot(pixels, width, height);
+    if (!grabbed || !gfx::WritePng(PathsFromUtf8(path), pixels.data(), width, height)) {
         std::fprintf(stderr, "cannot write the screenshot to %s\n", path);
         return kExitFailure;
     }

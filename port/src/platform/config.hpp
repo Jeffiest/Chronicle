@@ -54,6 +54,7 @@ struct ConfigGameOptions {
 struct Config {
     double            tick_rate = 60.0;
     bool              debug_mode = false;
+    bool              qte_always_win = false;
     ConfigPresentMode present_mode = ConfigPresentMode::Fifo;
     bool              interpolation = true;
     double            max_fps = 0.0;

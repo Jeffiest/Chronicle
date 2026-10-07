@@ -95,6 +95,7 @@ key is optional; these are the defaults:
     "game": {
         "tick_rate": 60,            // logic ticks (the game's VSyncs) per second
         "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
+        "qte_always_win": false,    // button-prompt events (event battles) still play, but always end in a perfect
         "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
         "message_speed": "normal",  // normal or fast
         "clock": true,              // the town clock

@@ -110,14 +110,6 @@ gfx::Vertex2D Vertex(float x, float y, float z, float u, float v, u_char r, u_ch
     return vertex;
 }
 
-// A window rarely shows a sprite at the size the game drew it. Where two sprites meet, or where a
-// sprite's texels meet, the centre of a pixel can then fall exactly on the line between them, and
-// nothing decides which side it belongs to but the rounding of the last bit of the interpolated
-// coordinate. When that rounds the wrong way nearest sampling reads the texel across the line: a
-// hairline of the neighbouring graphic, or of the scene behind, along an edge that shows at some
-// window sizes and not at others. Starting each sprite's coordinates a sliver after its first
-// texel settles every such centre on the texel the sprite means. At the retail size the picture is
-// the game's own and is left as it is.
 constexpr float kEdgeSettle = 1.0f / 256.0f;
 
 bool ScaledOnMainTarget() {

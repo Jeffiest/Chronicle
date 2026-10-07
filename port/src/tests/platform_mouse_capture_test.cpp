@@ -85,10 +85,11 @@ TEST_F(MouseCapture, ExplicitWindowedReleaseSurvivesRefocus) {
     }
     MouseStart();
     ASSERT_TRUE(MouseCaptured());
+    ASSERT_STREQ(SDL_GetHint(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE), "0");
     SDL_Event event{};
     event.type = SDL_EVENT_KEY_DOWN;
     event.key.scancode = SDL_SCANCODE_ESCAPE;
-    ASSERT_TRUE(MouseHandleEvent(event));
+    ASSERT_FALSE(MouseHandleEvent(event));
     ASSERT_FALSE(MouseCaptured());
     event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
     MouseHandleEvent(event);

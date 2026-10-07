@@ -67,6 +67,18 @@ TEST(PlatformPad, ButtonOrderMatchesGame) {
     }
 }
 
+TEST(PlatformPad, DefaultMouseAndKeyboardCombatBindings) {
+    InputResetBindings();
+    InputKeyboardMouse held;
+    held.keys = {InputScancodeFromName("F")};
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputR1);
+    held.keys = {InputScancodeFromName("Escape")};
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputCircle);
+    held.keys.clear();
+    held.mouse_buttons = 1u << 1;
+    ASSERT_EQ(InputApplyKeyboardMouse({}, held).buttons, kInputCircle);
+}
+
 TEST(PlatformPad, ReadFillsDualshockLayout) {
     OpenPads();
     SetPad(0, kInputCross | kInputUp | kInputL2, 255, 0, 10, 200);

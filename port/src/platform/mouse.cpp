@@ -72,9 +72,7 @@ void MouseConfigure(bool capture, std::span<const int> release_scancodes) {
 }
 
 void MouseStart() {
-    // The look is linear in the mouse's counts, so relative mode must not apply the system's
-    // pointer acceleration. That is SDL's default; an environment variable may still ask for it.
-    SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0");
+    SDL_SetHintWithPriority(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0", SDL_HINT_OVERRIDE);
     g_released = false;
     SDL_Window *window = WindowHandle();
     if (g_capture_enabled && window != nullptr &&
@@ -155,7 +153,7 @@ bool MouseHandleEvent(const SDL_Event &event) {
                 g_dx = 0.0f;
                 g_dy = 0.0f;
                 g_wheel = 0.0f;
-                return true;
+                return false;
             }
             return false;
         default:

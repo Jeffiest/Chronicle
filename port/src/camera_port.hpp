@@ -33,8 +33,8 @@ float MouseLookTurn(CCameraFollow *camera, float radians, float stick);
 // target; height changes keep the retail easing and collision correction.
 float MouseLookRise(CCameraFollow *camera, float stick, float ceiling, float floor = 1.6f);
 
-// Preserves manual input and floor clearance, but slows the retail baseline descent to one fifth
-// after native mouse use. Only an active gameplay height read owns this operation.
+// Preserves manual input and floor clearance, but holds baseline descent while either mouse axis
+// moves and applies the configured return rate afterward. Only an active gameplay height read owns it.
 float MouseLookHeightDelta(CCameraFollow *camera, float delta);
 
 // The mouse's share of an AddAngle delta on camera: nonzero only for the delta of the reading

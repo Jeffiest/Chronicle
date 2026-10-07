@@ -18,7 +18,7 @@ extern float camera_far_dist;
 
 namespace {
 constexpr float kMinDistance = 30.0f;
-constexpr float kMaxDistance = 140.0f;
+constexpr float kMaxDistance = 2000.0f;
 constexpr float kWheelStep = 8.0f;
 
 struct Zoom {

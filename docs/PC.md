@@ -138,6 +138,7 @@ key is optional; these are the defaults:
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_zoom": false,        // optional third-person wheel zoom; middle click resets by default
+        "mouse_camera_return": 0.2, // vertical auto-return: 0 off, 1 retail speed after mouse input stops
         "mouse_release": ["Escape"], // keys that give the cursor back in a window ([]: none)
         "vibration": true,          // the gamepad's rumble
         "bindings": {
@@ -233,8 +234,8 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | WASD | left stick | walk (`dun/gameloop.cpp:3006`, the town's `EdMoveChara`); menus with `MenuModeOn` turn it into the d-pad; d-pad as well where nothing reads the stick (below) |
 | mouse motion | none | the camera, directly (see "Mouse look") |
 | left click, Space | cross | attack, open, talk (`dun/gameloop.cpp:3585`, `editloop.cpp:3885`); confirm |
-| right click, X | R1 | held while locked on: guard (`dun/gameloop.cpp:3347`, `guard_mode = 5` at :3374); unlocked, turns the camera (:4338) |
-| F | circle | lock on to the nearest enemy or let go; with none in range, swing the camera behind the character (`dun/gameloop.cpp:3243`); back in menus |
+| F, X | R1 | held while locked on: guard (`dun/gameloop.cpp:3347`, `guard_mode = 5` at :3374); unlocked, turns the camera (:4338) |
+| right click, Escape | circle | lock on to the nearest enemy or let go; with none in range, swing the camera behind the character (`dun/gameloop.cpp:3243`); back in menus, including the triangle menu |
 | E | square | use the active item (`dun/gameloop.cpp:3775`); held, a feather's speed boost (:3745) |
 | Tab | triangle | the menu (`dun/gameloop.cpp:3134`, `editloop.cpp:1824`) |
 | Z | L1 | next lock-on target while locked on (`dun/gameloop.cpp:3260`); otherwise turns the camera (:4342) |
@@ -304,8 +305,9 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   and clicks do not reach the game. Without capture they always do, and
   the motion is the cursor's, after the system's pointer acceleration;
   captured, it is the mouse's raw counts (SDL's relative mode with
-  `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE` off, unless the environment sets
-  `SDL_MOUSE_RELATIVE_SYSTEM_SCALE`, which wins).
+  `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE` forced off, including when an
+  environment variable requests system acceleration). Escape also sends
+  Circle when it releases the cursor.
 - **WASD on the d-pad.** The developer menu (`MenuLoop`) and the dungeon
   loader read only the d-pad and never call `MenuModeOn`; the dungeon reads
   the d-pad to pick the active item while WASD walks. So the movement keys
@@ -319,6 +321,15 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   dungeon and town menus) read the stick, so the game's own conversion
   turns a full WASD deflection (128) into the d-pad; a diagonal (91 per
   axis) stays under their threshold, as a gamepad's does.
+
+### First-person walking
+
+In towns, interiors and dungeons, the keyboard movement bindings (WASD by default)
+walk relative to the first-person view while the mouse looks around. A/D strafe;
+W/S move forward/backward, at the interior walking speed. Diagonals keep the same
+speed. Body collision, gravity, slopes, chests and Atla balls still constrain
+movement. Input locks, menus, freezing, actions and scripted fades block walking.
+Controller-only first-person look retains its retail controls.
 
 ### Mouse look
 
@@ -376,8 +387,11 @@ than a quarter of a second (a load) drops what came during it. A script's
 
 Third-person mouse pitch changes the follow camera's height while it keeps
 looking at the player. It does not rotate the view independently of the player.
-Height requests stay inside the gameplay limits, and the return toward the
-baseline is one fifth of its retail rate after mouse pitch input. Floor and
+Height requests stay inside the gameplay limits. The return toward the baseline
+pauses while either mouse axis moves. **Vertical Return**, under Options >
+Controls, sets the idle return speed: Off, Very Slow, Slow (the default, one fifth
+of retail), Moderate or Retail. A custom `input.mouse_camera_return` from 0 to 1
+can be set in the configuration file and takes effect without a restart. Floor and
 wall correction and the automatic horizontal swing behind a walking player
 retain their retail behavior.
 
@@ -388,7 +402,7 @@ Home or Disabled. Other bindings can be set with `input.bindings.zoom_reset`.
 With zoom enabled its reset binding takes priority over conflicting pad
 bindings; disabling zoom restores normal input behavior. Reset restores the
 town's normal distance or the dungeon camera's starting distance, as far as
-geometry allows. Zoom is limited to 30–140 world units, follows normal camera
+geometry allows. Zoom is limited to 30–2000 world units, follows normal camera
 easing and validates the entire pending distance corridor. Dungeon zoom retains
 ten-unit wall clearance and five-unit floor clearance for its normally lower
 eye. Collision can limit the requested distance and restore it when clear.

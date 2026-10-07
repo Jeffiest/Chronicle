@@ -52,11 +52,11 @@ constexpr Action kActions[] = {
     {"left",         ActionKind::Button,   kInputLeft,     kAxisLeftX,  0,  "Left"},
     {"right",        ActionKind::Button,   kInputRight,    kAxisLeftX,  0,  "Right"},
     {"cross",        ActionKind::Button,   kInputCross,    kAxisLeftX,  0,  "Mouse1, Space"},
-    {"circle",       ActionKind::Button,   kInputCircle,   kAxisLeftX,  0,  "F"},
+    {"circle",       ActionKind::Button,   kInputCircle,   kAxisLeftX,  0,  "Mouse2, Escape"},
     {"square",       ActionKind::Button,   kInputSquare,   kAxisLeftX,  0,  "E"},
     {"triangle",     ActionKind::Button,   kInputTriangle, kAxisLeftX,  0,  "Tab"},
     {"l1",           ActionKind::Button,   kInputL1,       kAxisLeftX,  0,  "Z"},
-    {"r1",           ActionKind::Button,   kInputR1,       kAxisLeftX,  0,  "Mouse2, X"},
+    {"r1",           ActionKind::Button,   kInputR1,       kAxisLeftX,  0,  "F, X"},
     {"l2",           ActionKind::Button,   kInputL2,       kAxisLeftX,  0,  "Q"},
     {"r2",           ActionKind::Button,   kInputR2,       kAxisLeftX,  0,  "R"},
     {"l3",           ActionKind::Button,   kInputL3,       kAxisLeftX,  0,  "V"},
@@ -614,6 +614,7 @@ void InputApplyConfig(const Config &config) {
 }
 
 void InputShutdown() {
+    InputSetMovementLocked(false);
     MouseStop();
     g_menu_mouse = false;
     g_menu_dx = 0.0f;
@@ -1000,4 +1001,38 @@ void InputSetScriptedDevices(const InputKeyboardMouse &held) {
     g_scripted = held;
     g_scripted_wheel = held.mouse_wheel;
     PollHostActions();
+}
+
+static bool g_movement_locked = false;
+
+void InputSetMovementLocked(bool locked) { g_movement_locked = locked; }
+
+InputKeyboardMovement InputGetKeyboardMovement() {
+    EnsureBindings();
+    if (g_menu_mouse || g_movement_locked) {
+        return {};
+    }
+    InputKeyboardMouse held = g_override[0] ? g_scripted : LiveKeyboardMouse();
+    int                x = 0, y = 0;
+    for (std::size_t i = 0; i < kActionCount; ++i) {
+        const auto &action = kActions[i];
+        if (action.kind != ActionKind::HalfAxis || action.axis > kAxisLeftY) {
+            continue;
+        }
+        bool down = std::ranges::any_of(g_bindings[i], [&](const Source &source) {
+            return source.kind == Source::Key && !ZoomReserved(source) && std::ranges::find(held.keys, source.code) != held.keys.end();
+        });
+        if (down) {
+            (action.axis == kAxisLeftX ? x : y) += action.direction;
+        }
+    }
+    InputKeyboardMovement move{float((x > 0) - (x < 0)), float((y > 0) - (y < 0))};
+    if (move.x && move.y) {
+        move.x *= std::numbers::sqrt2_v<float> / 2;
+        move.y *= std::numbers::sqrt2_v<float> / 2;
+    }
+    if (move.x || move.y) {
+        InputNoteLeftStickRead();
+    }
+    return move;
 }

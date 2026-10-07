@@ -7,10 +7,9 @@
 #include "editloop.hpp"
 #include "gamepad.hpp"
 #include "menu_save.hpp"
-#include "snd.hpp"
-
 #include "platform/config.hpp"
 #include "platform/input.hpp"
+#include "snd.hpp"
 
 struct EB_KEY {
     int frame;
@@ -192,11 +191,15 @@ PC_OVERRIDE int EBLoop() {
 }
 
 #include <libvu0.h>
+
 #include "camera.hpp"
 #include "camera_port.hpp"
 #include "camerafollow.hpp"
 #include "character.hpp"
 #include "edit.hpp"
+#include "fishing.hpp"
+#include "gameutil.hpp"
+#include "npcharacter.hpp"
 
 // Defined by ps2/src/ebattle.cpp without a header declaration.
 extern int   viewMode;
@@ -252,13 +255,15 @@ PC_OVERRIDE void EyeCamera(CCamera *camera, CCharacter *character, int right_sti
     float stick_x;
     float stick_y;
     bool  unlocked = (chara_mode & 3) == 0;
+    auto  keyboard = InputGetKeyboardMovement();
+    bool  walking = viewMode != 0 && (keyboard.x || keyboard.y);
 
     if (right_stick != 0) {
         stick_x = 0.0f;
         stick_y = unlocked && PortEdCheckKeyMode(1) ? -GamePad.GetRYf() : 0.0f;
     } else {
-        stick_x = unlocked ? EdGetLXf(1) : 0.0f;
-        stick_y = unlocked ? -EdGetLYf(1) : 0.0f;
+        stick_x = unlocked && !walking ? EdGetLXf(1) : 0.0f;
+        stick_y = unlocked && !walking ? -EdGetLYf(1) : 0.0f;
     }
 
     if (stick_x > 0.0f) {
@@ -304,4 +309,59 @@ PC_OVERRIDE void EyeCamera(CCamera *camera, CCharacter *character, int right_sti
     }
 
     EdEyeCamera(camera, character);
+}
+
+extern int chara_fishing;
+
+// Suppress the interior's keyboard steering; the collision seam supplies camera-relative WASD.
+PC_OVERRIDE float EdGetLXf(int mode) {
+    auto move = InputGetKeyboardMovement();
+    if (!PortEdCheckKeyMode(mode) || (viewMode && (move.x || move.y))) {
+        return 0.0f;
+    }
+    return GamePad.GetLXf();
+}
+
+PC_OVERRIDE float EdGetLYf(int mode) {
+    auto move = InputGetKeyboardMovement();
+    if (!PortEdCheckKeyMode(mode) || (viewMode && (move.x || move.y))) {
+        return 0.0f;
+    }
+    return GamePad.GetLYf();
+}
+
+int PortEdMoveCheck(float *pos, float *velocity, float *out_pos, MoveCheckInfo *out_info, CCPoly *polys, int poly_num, int mode) {
+    auto move = InputGetKeyboardMovement();
+    bool walking = viewMode && (move.x || move.y) && !(chara_mode & 3) &&
+                   !EdMoveCharaInfo.key_lock && PortEdCheckKeyMode(1) && chara_fishing <= ED_FISHING_STAND;
+    if (walking) {
+        float heading = MouseLookEyeAngleH(viewAngleH);
+        velocity[0] = 0.6f * (move.x * cosf(heading) - move.y * sinf(heading));
+        velocity[2] = 0.6f * (-move.y * cosf(heading) - move.x * sinf(heading));
+        auto *chara = static_cast<CMainChara *>(EdMoveCharaInfo.chara);
+        if (chara->move_info.landed) {
+            sceVu0FVECTOR normal;
+            sceVu0Normalize(normal, chara->move_info.ground_poly.normal);
+            velocity[0] *= fabsf(normal[1]);
+            velocity[2] *= fabsf(normal[1]);
+        }
+        sceVu0FVECTOR rotation;
+        chara->GetRotation(rotation);
+        rotation[1] = heading;
+        chara->SetRotation(rotation);
+    }
+    int result = MoveCheck(pos, velocity, out_pos, out_info, polys, poly_num, mode);
+    static float walked = 0.0f;
+    if (walking && !EdMoveCharaInfo.interior && out_info->landed) {
+        walked += hypotf(out_pos[0] - pos[0], out_pos[2] - pos[2]);
+        if (walked >= 10.0f) {
+            static int foot = 0;
+            SndPlayFootSound(out_info->poly.attr.foot_sound, foot, out_pos);
+            foot ^= 1;
+            walked = fmodf(walked, 10.0f);
+        }
+    } else {
+        walked = 0.0f;
+    }
+    return result;
 }

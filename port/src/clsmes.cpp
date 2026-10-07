@@ -22,7 +22,6 @@
 
 extern float     RandTbl[64];
 extern float     RandTbl2[64];
-extern MES_FUCHI FuchiTbl_E[];
 
 namespace {
 
@@ -303,10 +302,7 @@ bool QueueTtfGlyph(ClsMes &mes, int index, int dark, int offset_x, int offset_y,
             cast();
             break;
         case MES_EDGE_TABLE:
-            for (int i = 0; FuchiTbl_E[i].alpha > 0; i++) {
-                edge(static_cast<float>(FuchiTbl_E[i].x), static_cast<float>(FuchiTbl_E[i].y), FuchiTbl_E[i].r,
-                     FuchiTbl_E[i].g, FuchiTbl_E[i].b, FuchiTbl_E[i].alpha);
-            }
+            cast();
             break;
         case MES_EDGE_DOUBLE:
             cast();

@@ -51,11 +51,13 @@ files remain in the extracted tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.
 
-The language select's English is the disc's own: American (`LanguageCode` 1) on
-NTSC data and British (2) on PAL. The NTSC disc's British-named files are an
-early draft of the British text (Nolun Village) with no town dialogue, so they
-are left unused. The port tells the discs apart the way the extractor does: NTSC
-has `gedit/system/esys.pak` and no `esys_cmn.pak`.
+On NTSC data the port skips the language select and plays in American English
+(`LanguageCode` 1), as retail NTSC does. The NTSC disc's other languages are
+unfinished drafts: its British-named files are an early British text (Nolun
+Village) with no town dialogue, its French, German and Italian differ from what
+PAL shipped, and its Spanish is missing files. On PAL data the language select
+works as retail's, English being British (2). The port tells the discs apart the
+way the extractor does: NTSC has `gedit/system/esys.pak` and no `esys_cmn.pak`.
 
 `darkcloud` takes:
 
@@ -341,7 +343,7 @@ before the window opens. `GamePad.Down` fires on a press edge, so a press
 needs a later line that releases it:
 
 ```
-# language select (English), attract movie, title logo, menu
+# language select (English; not on NTSC data), attract movie, title logo, menu
 0
 70 cross
 75
@@ -382,7 +384,7 @@ the warm-up; the game then starts in `GAME_MODE_MENU`, the developer menu
 (`MenuLoop`, `ps2/src/main.cpp`), instead of the language select, and leaves
 pad 2 unlocked. The port takes `DebugMode` from `game.debug_mode` in
 `config.json`, which is off by default. The port starts at the language select
-whether this flag is true or false. Setting it to true enables debug controls
+(the attract movie on NTSC data) whether this flag is true or false. Setting it to true enables debug controls
 from startup; the debug toggle chord can also enable them during play.
 `darkcloud` prints `debug mode on` when the flag starts enabled. An explicit
 `--jump menu` opens the developer menu at startup.
@@ -537,6 +539,7 @@ with the hardware taken out, line for line otherwise:
 - The transitions are `GameApplyLoopResult` (what each mode's loop result
   does) and `GameFollowMapJump` (`NextMapNo` into the next mode), exported for
   the tests.
+- NTSC data starts at the attract movie, as if English had been chosen.
 - The language select goes straight on to the attract movie: retail's memory
   card check (`GAME_MODE_MEMORY_CHECK`, `MemCheckLoop`) is never entered, as
   there is no card (see "Saves and host files").

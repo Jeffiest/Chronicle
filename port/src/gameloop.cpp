@@ -720,6 +720,11 @@ int RunGame(int argc, char **argv) {
         MapNo = -1;
         mode = GAME_MODE_LANGUAGE;
         GamePad.KeyLock2(1);
+        // Retail NTSC has no language select, only American English; its disc's other languages
+        // are unfinished drafts.
+        if (DataIsNtsc()) {
+            GameApplyLoopResult(GAME_MODE_LANGUAGE, 1);
+        }
     }
     if (g_jump.set) {
         ApplyJump();

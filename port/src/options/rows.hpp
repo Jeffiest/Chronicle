@@ -7,15 +7,7 @@
 
 namespace options {
 
-enum class RowKind {
-    Setting,
-    Link,
-    Heading,
-    Text,
-};
-
 struct Row {
-    RowKind     kind = RowKind::Setting;
     const char *key = nullptr;
     const char *label = nullptr;
     const char *help = nullptr;
@@ -26,7 +18,6 @@ struct Row {
     std::string (*text)(const Config &) = nullptr;
     const char *names = nullptr;
     void (*restore)(Config &config, const Config &defaults) = nullptr;
-    const char *url = nullptr;
 };
 
 struct Page {
@@ -36,8 +27,6 @@ struct Page {
 };
 
 std::span<const Page> Pages();
-
-bool IsSetting(const Row &row);
 
 // The value a setting row shows, with " *" when it applies at the next start.
 std::string RowValue(const Row &row, const Config &config);

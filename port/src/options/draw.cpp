@@ -103,14 +103,7 @@ void DrawSelection(int alpha) {
         int x = TabX(g_screen.page);
         DrawCursor(x - 10, x + texts.tabs[g_screen.page].Width() - 6, kTabY - 6, alpha, L1X() - 44);
     } else if (g_screen.row < rows) {
-        const Row &row = CurrentPage().rows[g_screen.row];
-        int        top = RowTop(g_screen.row) - 7;
-        if (IsSetting(row)) {
-            DrawCursor(kValueX - 22, kValueRight - 2, top, alpha, kLabelX - 48);
-        } else {
-            int width = texts.labels[g_screen.page][g_screen.row].Width();
-            DrawCursor(kLabelX - 10, kLabelX + width - 6, top, alpha, kLabelX - 48);
-        }
+        DrawCursor(kValueX - 22, kValueRight - 2, RowTop(g_screen.row) - 7, alpha, kLabelX - 48);
     } else {
         DrawCursor(kExitX - 8, kExitX + kExitWidth - 8, kExitY - 4, alpha);
     }
@@ -143,14 +136,7 @@ void DrawRows(int alpha) {
         const Row &row = page.rows[r];
         int        y = RowTop(r) + 2;
         bool       selected = g_screen.row == r;
-        GameText  &label = texts.labels[g_screen.page][r];
-        if (row.kind == RowKind::Link) {
-            label.SetColour(selected ? FONT_COLOR_YELLOW : FONT_COLOR_CYAN);
-        }
-        label.Draw(kLabelX, y, alpha);
-        if (!IsSetting(row)) {
-            continue;
-        }
+        texts.labels[g_screen.page][r].Draw(kLabelX, y, alpha);
         GameText &value = texts.values[g_screen.page][r];
         value.Set(RowValue(row, config));
         value.SetColour(selected ? FONT_COLOR_YELLOW : FONT_COLOR_WHITE);

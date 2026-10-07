@@ -182,32 +182,8 @@ TEST(MenuOption, PagesInOrder) {
     for (const options::Page &page : pages) {
         names.push_back(page.name);
     }
-    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility", "About"}));
+    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility"}));
     ASSERT_TRUE(std::string_view(pages[4].rows[0].key) == "game.qte_always_win");
-}
-
-TEST(MenuOption, AboutLinksAndCredits) {
-    const options::Page &about = options::Pages()[5];
-    int                  links = 0;
-    std::string_view     section;
-    bool                 credited_carbon = false;
-    int                  developers = 0;
-    for (const options::Row &row : about.rows) {
-        ASSERT_TRUE(!options::IsSetting(row));
-        if (row.kind == options::RowKind::Link) {
-            ++links;
-            ASSERT_TRUE(std::string_view(row.url) == "https://github.com/TheMoonPeople/Chronicle");
-        } else if (row.kind == options::RowKind::Heading) {
-            section = row.label;
-        } else if (section == "Developers") {
-            ++developers;
-        } else if (section == "Artists" && std::string_view(row.label) == "Carbon") {
-            credited_carbon = true;
-        }
-    }
-    ASSERT_TRUE(links == 1);
-    ASSERT_TRUE(developers > 0);
-    ASSERT_TRUE(credited_carbon);
 }
 
 TEST(MenuOption, StepAndResetRows) {

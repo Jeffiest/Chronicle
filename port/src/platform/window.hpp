@@ -66,9 +66,6 @@ bool WindowSize(int &width, int &height);
 // window's borders taken off. False headless or with no window.
 bool WindowDisplaySize(int &width, int &height, bool windowed);
 
-// Opens a web address in the user's browser.
-bool WindowOpenUrl(const char *url);
-
 // A size in pixels, as a display lists its modes.
 struct DisplayModeSize {
     int width = 0;

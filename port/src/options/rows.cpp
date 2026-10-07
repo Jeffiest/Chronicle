@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <deque>
 #include <format>
 #include <iterator>
 #include <string>
@@ -10,7 +9,6 @@
 #include <vector>
 
 #include "menu_option.hpp"
-#include "options/credits.hpp"
 #include "platform/window.hpp"
 
 namespace options {
@@ -511,57 +509,20 @@ const Row kAccessibilityRows[] = {
                                       "\"Always Win QTEs\"\nButton prompts always\nend in a perfect."),
 };
 
-constexpr const char *kAboutHelp = "\"About\"\nChronicle, a Dark Cloud\ndecompilation and\nPC port.";
-
-std::vector<Row> AboutRows() {
-    std::vector<Row> rows = {
-        {.kind = RowKind::Heading, .label = "Chronicle", .help = kAboutHelp},
-        {.kind = RowKind::Text, .label = "A Dark Cloud decompilation", .help = kAboutHelp},
-        {.kind = RowKind::Text, .label = "and PC port.", .help = kAboutHelp},
-        {.kind = RowKind::Link,
-         .label = "github.com/TheMoonPeople/Chronicle",
-         .help = "\"Website\"\nOpens the project's\npage in a browser.",
-         .url = "https://github.com/TheMoonPeople/Chronicle"},
-    };
-    for (const char *line : kCredits) {
-        std::string_view text = line;
-        if (text.empty()) {
-            continue;
-        }
-        if (text.front() == '[' && text.back() == ']') {
-            static std::deque<std::string> headings;
-            const char *heading = headings.emplace_back(text.substr(1, text.size() - 2)).c_str();
-            rows.push_back({.kind = RowKind::Heading, .label = heading, .help = kAboutHelp});
-        } else {
-            rows.push_back({.kind = RowKind::Text, .label = line, .help = kAboutHelp});
-        }
-    }
-    return rows;
-}
-
 } // namespace
 
 std::span<const Page> Pages() {
-    static const std::vector<Row>  about = AboutRows();
     static const std::vector<Page> pages = {
         {"Game",          "\"Game\"\nHow the game plays.",                  kGameRows         },
         {"Display",       "\"Display\"\nThe window and picture.",            kDisplayRows      },
         {"Audio",         "\"Audio\"\nSound and music.",                     kAudioRows        },
         {"Controls",      "\"Controls\"\nMouse, gamepad and gyro.",          kControlRows      },
         {"Accessibility", "\"Accessibility\"\nHelp with harder parts\nof the game.", kAccessibilityRows},
-        {"About",         kAboutHelp,                                        about             },
     };
     return pages;
 }
 
-bool IsSetting(const Row &row) {
-    return row.kind == RowKind::Setting;
-}
-
 std::string RowValue(const Row &row, const Config &config) {
-    if (!IsSetting(row)) {
-        return {};
-    }
     std::string value = row.text != nullptr ? row.text(config) : ChoiceName(row.names, row.get(config));
     if (ConfigAppliesOnRestart(row.key)) {
         value += " *";
@@ -570,9 +531,6 @@ std::string RowValue(const Row &row, const Config &config) {
 }
 
 bool StepRow(const Row &row, Config &config, int direction, bool wrap) {
-    if (!IsSetting(row)) {
-        return false;
-    }
     int count = row.count(config);
     int choice = row.get(config);
     int next = wrap ? (choice + direction + count) % count : std::clamp(choice + direction, 0, count - 1);
@@ -586,9 +544,6 @@ bool StepRow(const Row &row, Config &config, int direction, bool wrap) {
 void ResetPage(const Page &page, Config &config) {
     const Config defaults;
     for (const Row &row : page.rows) {
-        if (!IsSetting(row)) {
-            continue;
-        }
         if (row.restore != nullptr) {
             row.restore(config, defaults);
         } else {

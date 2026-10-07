@@ -118,15 +118,6 @@ void Step(const Row &row, int direction, bool wrap) {
     }
 }
 
-void Activate(const Row &row) {
-    if (row.kind == RowKind::Link && row.url != nullptr) {
-        WindowOpenUrl(row.url);
-        ComMenuSePlay(MENU_SOUND_CONFIRM);
-    } else {
-        Step(row, 1, true);
-    }
-}
-
 void ShowHelp() {
     ClsMes &mes = CommonMenuMes2;
     short  *buffer = GetTexts().help.Data();
@@ -220,10 +211,6 @@ void SetPage(int page) {
 
 bool Inside(float x, float y, int left, int top, int right, int bottom) {
     return x >= left && x < right && y >= top && y < bottom;
-}
-
-int RowRight(const Row &row) {
-    return IsSetting(row) ? kValueRight : kLabelX + GetTexts().labels[g_screen.page][&row - CurrentPage().rows.data()].Width();
 }
 
 void RunMouse() {
@@ -320,11 +307,7 @@ void RunMouse() {
             return;
         } else if (over_row >= 0) {
             const Row &row = CurrentPage().rows[over_row];
-            if (!IsSetting(row)) {
-                if (x < RowRight(row)) {
-                    Activate(row);
-                }
-            } else if (x >= kValueX - 8 && x < kValueX + 24) {
+            if (x >= kValueX - 8 && x < kValueX + 24) {
                 Step(row, -1, false);
             } else if (x >= kValueRight - 16) {
                 Step(row, 1, false);
@@ -385,7 +368,7 @@ void RunKeys() {
         if (direction != 0) {
             Step(*row, direction, false);
         } else if ((actions & PAD_CROSS) != 0) {
-            Activate(*row);
+            Step(*row, 1, true);
         }
     } else if ((actions & PAD_CROSS) != 0) {
         Close();
@@ -417,13 +400,7 @@ Texts::Texts() {
         labels.emplace_back();
         values.emplace_back();
         for (const Row &row : page.rows) {
-            GameText &label = labels.back().emplace_back();
-            label.Set(row.label);
-            if (row.kind == RowKind::Heading) {
-                label.SetColour(FONT_COLOR_GOLD);
-            } else if (row.kind == RowKind::Link) {
-                label.SetColour(FONT_COLOR_CYAN);
-            }
+            labels.back().emplace_back().Set(row.label);
             values.back().emplace_back();
             if (row.help != nullptr) {
                 help.Set(kRowHelp + index, row.help);

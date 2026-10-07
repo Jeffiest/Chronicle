@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <numbers>
 #include <memory>
 #include <string_view>
@@ -14,7 +15,9 @@
 #include "../camera_port.hpp"
 #include "../mouse_collision.hpp"
 #include "../platform/clock.hpp"
+#include "../platform/config.hpp"
 #include "../platform/input.hpp"
+#include "../platform/paths.hpp"
 #include "camera.hpp"
 #include "camerafollow.hpp"
 #include "character.hpp"
@@ -26,6 +29,7 @@
 #include "dungeonmap.hpp"
 #include "frame.hpp"
 #include "gamepad.hpp"
+#include "platform_fixture.hpp"
 
 extern int   viewMode;
 extern float viewAngleH;
@@ -217,6 +221,82 @@ TEST(PlatformMouseLook, ThirdPersonHeightKeepsTheFollowTargetAndSoftensDescent) 
     InputLatchPad(0);
     camera.AddHeight(-0.5f);
     ASSERT_NEAR(camera.height, 30.5f, 1e-3f);
+}
+
+TEST(PlatformMouseLook, HorizontalMouseMotionHoldsHeightAndIdleResumesSoftDescent) {
+    Settings(0.2f, false);
+    for (float baseline : {5.0f, 35.0f}) {
+        CCameraFollow camera(60.0f, baseline + 20.0f, 0.0f, 8.0f);
+        camera.Step(-1);
+        const float height = camera.height;
+        // No preceding pitch input: a horizontal orbit alone must hold the height.
+        for (int frame = 0; frame < 60; ++frame) {
+            Move(3.0f, 0.0f);
+            ClockPump();
+            InputLatchPad(0);
+            camera.AddHeight(-MouseLookRise(&camera, 0.0f, 30.0f, 5.0f));
+            camera.AddHeight(-std::clamp((camera.height - baseline) * 0.05f, 0.15f, 0.5f));
+            ASSERT_FLOAT_EQ(camera.height, height);
+        }
+        ClockPump();
+        InputLatchPad(0);
+        camera.AddHeight(-MouseLookRise(&camera, 0.0f, 30.0f, 5.0f));
+        camera.AddHeight(-0.5f);
+        ASSERT_NEAR(camera.height, height - 0.1f, 1e-4f);
+        // Floor correction and explicit controller input still take their full delta.
+        camera.AddHeight(2.0f);
+        ASSERT_NEAR(camera.height, height + 1.9f, 1e-4f);
+        Move(3.0f, 0.0f);
+        ClockPump();
+        InputLatchPad(0);
+        camera.AddHeight(-MouseLookRise(&camera, 0.5f, 30.0f, 5.0f));
+        camera.AddHeight(-0.5f);
+        ASSERT_NEAR(camera.height, height + 0.9f, 1e-4f);
+        // A new read without a gameplay height callback cannot alter scripted descent.
+        ClockPump();
+        InputLatchPad(0);
+        camera.AddHeight(-0.5f);
+        ASSERT_NEAR(camera.height, height + 0.4f, 1e-4f);
+    }
+}
+
+TEST(PlatformMouseLook, AutoReturnSettingChangesImmediatelyAndMouseMotionPausesEveryRate) {
+    auto root = std::filesystem::temp_directory_path() /
+                ("chronicle-height-rate-test-" + std::to_string(dc::test::ProcessId()));
+    struct Cleanup {
+        std::filesystem::path root;
+        ~Cleanup() {
+            std::error_code error;
+            std::filesystem::remove(root / "config.json", error);
+            std::filesystem::remove(root, error);
+        }
+    } cleanup{root};
+    PathsSetSaveRoot(root);
+    Settings(0.2f, false);
+    CCameraFollow camera(60.0f, 25.0f, 0.0f, 8.0f);
+    camera.Step(-1);
+    Config config;
+    config.mouse_capture = false;
+    for (float rate : {0.0f, 0.05f, 0.2f, 0.5f, 1.0f, 0.37f}) {
+        config.mouse_camera_return = rate;
+        ASSERT_TRUE(ConfigChange(config));
+        camera.SetHeight(25.0f);
+        Move(3.0f, 0.0f);
+        ClockPump();
+        InputLatchPad(0);
+        camera.AddHeight(-MouseLookRise(&camera, 0.0f, 30.0f, 5.0f));
+        camera.AddHeight(-0.5f);
+        ASSERT_FLOAT_EQ(camera.height, 25.0f);
+        ClockPump();
+        InputLatchPad(0);
+        camera.AddHeight(-MouseLookRise(&camera, 0.0f, 30.0f, 5.0f));
+        camera.AddHeight(-0.5f);
+        ASSERT_NEAR(camera.height, 25.0f - 0.5f * rate, 1e-4f);
+        camera.AddHeight(2.0f);
+        ASSERT_NEAR(camera.height, 27.0f - 0.5f * rate, 1e-4f);
+        camera.AddHeight(-0.4f); // A distinct scripted/collision delta is not auto-return.
+        ASSERT_NEAR(camera.height, 26.6f - 0.5f * rate, 1e-4f);
+    }
 }
 
 TEST(PlatformMouseLook, ThirdPersonHeightBoundsReverseAndLeaveControllerUnchanged) {

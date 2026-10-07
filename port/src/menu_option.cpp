@@ -449,6 +449,35 @@ void RestoreZoomReset(Config &config, const Config &defaults) {
     }
 }
 
+constexpr float       kCameraReturnRates[] = {0.0f, 0.05f, 0.2f, 0.5f, 1.0f};
+constexpr const char *kCameraReturnNames[] = {"Off", "Very Slow", "Slow", "Moderate", "Retail"};
+
+int CameraReturnChoice(const Config &config) {
+    for (int choice = 0; choice < 5; ++choice) {
+        if (config.mouse_camera_return == kCameraReturnRates[choice]) {
+            return choice;
+        }
+    }
+    return 5;
+}
+
+int CameraReturnCount(const Config &config) { return CameraReturnChoice(config) == 5 ? 6 : 5; }
+
+void SetCameraReturn(Config &config, int choice) {
+    if (choice >= 0 && choice < 5) {
+        config.mouse_camera_return = kCameraReturnRates[choice];
+    }
+}
+
+std::string CameraReturnText(const Config &config) {
+    int choice = CameraReturnChoice(config);
+    return choice < 5 ? kCameraReturnNames[choice] : std::format("{:.4g}%", config.mouse_camera_return * 100.0f);
+}
+
+void RestoreCameraReturn(Config &config, const Config &defaults) {
+    config.mouse_camera_return = defaults.mouse_camera_return;
+}
+
 // 0.50 to 2.50 in twentieths.
 int StickSensitivityCount(const Config &) {
     return 41;
@@ -558,6 +587,9 @@ const Row kControlRows[] = {
         RestoreMouseSensitivity},
     OnOffRow<&Config::mouse_invert_y>("input.mouse_invert_y", "Invert Mouse Y",
                                       "\"Invert Mouse Y\"\nMoving the mouse up\nlooks down."),
+    Row{"input.mouse_camera_return", "Vertical Auto-Return",
+        "\"Vertical Auto-Return\"\nHow quickly the camera\nreturns to normal height\nwhen the mouse stops.",
+        -1, CameraReturnCount, CameraReturnChoice, SetCameraReturn, CameraReturnText, nullptr, RestoreCameraReturn},
     OnOffRow<&Config::mouse_zoom>("input.mouse_zoom", "Mouse Wheel Zoom",
                                   "\"Mouse Wheel Zoom\"\nScroll to move closer\nor farther from your\ncharacter."),
     Row{"input.bindings.zoom_reset", "Reset Zoom", "\"Reset Zoom\"\nRestores the normal\ncamera distance.",
@@ -1195,6 +1227,16 @@ std::string OptionZoomResetText(const Config &config) { return ZoomResetText(con
 void OptionSetZoomReset(Config &config, int choice) { SetZoomReset(config, choice); }
 
 void OptionRestoreZoomReset(Config &config, const Config &defaults) { RestoreZoomReset(config, defaults); }
+
+int OptionCameraReturnChoice(const Config &config) { return CameraReturnChoice(config); }
+
+int OptionCameraReturnCount(const Config &config) { return CameraReturnCount(config); }
+
+std::string OptionCameraReturnText(const Config &config) { return CameraReturnText(config); }
+
+void OptionSetCameraReturn(Config &config, int choice) { SetCameraReturn(config, choice); }
+
+void OptionRestoreCameraReturn(Config &config, const Config &defaults) { RestoreCameraReturn(config, defaults); }
 
 std::vector<OptionResolution> OptionResolutionList(std::span<const DisplayModeSize> modes, int configured_width,
                                                    int configured_height, bool display_known, int display_width,

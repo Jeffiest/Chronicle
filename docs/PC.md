@@ -138,6 +138,7 @@ key is optional; these are the defaults:
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_zoom": false,        // optional third-person wheel zoom; middle click resets by default
+        "mouse_camera_return": 0.2, // vertical auto-return: 0 off, 1 retail speed after mouse input stops
         "mouse_release": ["Escape"], // keys that give the cursor back in a window ([]: none)
         "vibration": true,          // the gamepad's rumble
         "bindings": {
@@ -376,8 +377,11 @@ than a quarter of a second (a load) drops what came during it. A script's
 
 Third-person mouse pitch changes the follow camera's height while it keeps
 looking at the player. It does not rotate the view independently of the player.
-Height requests stay inside the gameplay limits, and the return toward the
-baseline is one fifth of its retail rate after mouse pitch input. Floor and
+Height requests stay inside the gameplay limits. The return toward the baseline
+pauses while either mouse axis moves. **Vertical Auto-Return**, under Options >
+Controls, sets the idle return speed: Off, Very Slow, Slow (the default, one fifth
+of retail), Moderate or Retail. A custom `input.mouse_camera_return` from 0 to 1
+can be set in the configuration file and takes effect without a restart. Floor and
 wall correction and the automatic horizontal swing behind a walking player
 retain their retail behavior.
 
@@ -388,7 +392,7 @@ Home or Disabled. Other bindings can be set with `input.bindings.zoom_reset`.
 With zoom enabled its reset binding takes priority over conflicting pad
 bindings; disabling zoom restores normal input behavior. Reset restores the
 town's normal distance or the dungeon camera's starting distance, as far as
-geometry allows. Zoom is limited to 30–140 world units, follows normal camera
+geometry allows. Zoom is limited to 30–2000 world units, follows normal camera
 easing and validates the entire pending distance corridor. Dungeon zoom retains
 ten-unit wall clearance and five-unit floor clearance for its normally lower
 eye. Collision can limit the requested distance and restore it when clear.

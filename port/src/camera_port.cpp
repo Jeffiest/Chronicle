@@ -14,6 +14,7 @@
 #include "gameutil.hpp"
 #include "mouse_collision.hpp"
 #include "camera_zoom.hpp"
+#include "platform/config.hpp"
 #include "platform/input.hpp"
 
 namespace {
@@ -107,6 +108,7 @@ float MouseLookTurn(CCameraFollow *camera, float radians, float stick) {
 float MouseLookRise(CCameraFollow *camera, float stick, float ceiling, float floor) {
     const InputMouseLook &look = InputGetMouseLook();
     float pitch = look.pitch;
+    bool moving = look.yaw != 0.0f || pitch != 0.0f;
     bool native = g_height.camera == camera && g_height.native;
     if (!camera->follow_on || CCamera::StopCamera) {
         g_height = {};
@@ -120,7 +122,7 @@ float MouseLookRise(CCameraFollow *camera, float stick, float ceiling, float flo
         target = std::max(target, std::min(height, floor));
     }
     float reading = stick - (target - height);
-    g_height = {camera, look.read, -reading, true, native || pitch != 0.0f, pitch != 0.0f, stick != 0.0f};
+    g_height = {camera, look.read, -reading, true, native || moving, moving, stick != 0.0f};
     return reading;
 }
 
@@ -142,7 +144,7 @@ float MouseLookHeightDelta(CCameraFollow *camera, float delta) {
         if (camera->height > 5.0f) {
             float drop = std::clamp((camera->height - baseline) * 0.05f, 0.15f, 0.5f);
             if (delta == -drop) {
-                return g_height.moving ? 0.0f : delta * 0.2f;
+                return g_height.moving ? 0.0f : delta * ConfigGet().mouse_camera_return;
             }
         }
     }

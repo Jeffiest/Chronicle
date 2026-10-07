@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,6 +53,25 @@ TEST(PlatformConfig, OptionalMouseZoomRoundTripsAndKeepsResetBindings) {
     ASSERT_EQ(restored.key_bindings.size(), 2u);
     ASSERT_FALSE(ConfigAppliesOnRestart("input.mouse_zoom"));
     ASSERT_FALSE(ConfigAppliesOnRestart("input.bindings.zoom_reset"));
+}
+
+TEST(PlatformConfig, CameraReturnValidatesBoundsAndRoundTripsCustomRates) {
+    ASSERT_FLOAT_EQ(ConfigParse("").mouse_camera_return, 0.2f);
+    for (float rate : {0.0f, 0.05f, 0.2f, 0.5f, 1.0f, 0.37f}) {
+        Config config;
+        config.mouse_camera_return = rate;
+        ASSERT_FLOAT_EQ(ConfigParse(ConfigSerialize(config)).mouse_camera_return, rate);
+    }
+    for (const char *value : {"-0.01", "1.01", "1e100", "true", "\"slow\"", "null", "[]"}) {
+        std::string json = std::string("{\"input\":{\"mouse_camera_return\":") + value + "}}";
+        ASSERT_FLOAT_EQ(ConfigParse(json).mouse_camera_return, 0.2f) << value;
+    }
+    Config config;
+    config.mouse_camera_return = std::numeric_limits<float>::infinity();
+    ASSERT_FLOAT_EQ(ConfigParse(ConfigSerialize(config)).mouse_camera_return, 0.2f);
+    config.mouse_camera_return = std::numeric_limits<float>::quiet_NaN();
+    ASSERT_FLOAT_EQ(ConfigParse(ConfigSerialize(config)).mouse_camera_return, 0.2f);
+    ASSERT_FALSE(ConfigAppliesOnRestart("input.mouse_camera_return"));
 }
 
 TEST(PlatformConfig, ParsesJson) {
@@ -239,6 +259,36 @@ void ChangeAgain(const Config &before, const Config &after) {
 }
 
 } // namespace
+
+TEST(PlatformConfig, CameraReturnChangesLiveAndPersists) {
+    std::filesystem::path root = std::filesystem::temp_directory_path() / ("dc_camera_return_" + std::to_string(dc::test::ProcessId()));
+
+    struct Cleanup {
+        std::filesystem::path root;
+
+        ~Cleanup() {
+            ConfigRemoveChangeHook(RecordChange);
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+        }
+    } cleanup{root};
+
+    PathsSetSaveRoot(root);
+    g_changes.clear();
+    ConfigAddChangeHook(RecordChange);
+    Config config = ConfigGet();
+    config.mouse_camera_return = 0.37f;
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_FLOAT_EQ(ConfigGet().mouse_camera_return, 0.37f);
+    ASSERT_EQ(g_changes.size(), 1u);
+    ASSERT_FLOAT_EQ(g_changes.back().second.mouse_camera_return, 0.37f);
+    ASSERT_TRUE(ConfigLoad());
+    ASSERT_FLOAT_EQ(ConfigGet().mouse_camera_return, 0.37f);
+    config.mouse_camera_return = 2.0f;
+    ASSERT_TRUE(ConfigChange(config));
+    ASSERT_FLOAT_EQ(ConfigGet().mouse_camera_return, 0.2f);
+    ASSERT_EQ(g_changes.size(), 2u);
+}
 
 TEST(PlatformConfig, ChangeAppliesAndSaves) {
     std::filesystem::path root = std::filesystem::temp_directory_path() / ("dc_config_change_" + std::to_string(dc::test::ProcessId()));

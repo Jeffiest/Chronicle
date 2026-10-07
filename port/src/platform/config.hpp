@@ -88,9 +88,11 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     bool                          mouse_zoom = false;
-    std::vector<std::string>      mouse_release_keys = {"Escape"};
-    ConfigGameOptions             options;
-    bool                          discord_rich_presence = true;
+    // Third-person vertical return after mouse input: 0 holds height, 1 is retail's rate.
+    float                    mouse_camera_return = 0.2f;
+    std::vector<std::string> mouse_release_keys = {"Escape"};
+    ConfigGameOptions        options;
+    bool                     discord_rich_presence = true;
 
     bool operator==(const Config &) const = default;
 };

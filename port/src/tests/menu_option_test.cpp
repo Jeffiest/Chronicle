@@ -172,3 +172,45 @@ TEST(MenuOption, CustomZoomResetBindingIsShownAndKeptUntilChanged) {
     ASSERT_EQ(OptionZoomResetText(config), "F12, Mouse4");
     ASSERT_EQ(config.key_bindings.front(), before.key_bindings[1]);
 }
+
+TEST(MenuOption, CameraReturnPresetsAndDefaultRestoration) {
+    Config config;
+    ASSERT_EQ(OptionCameraReturnChoice(config), 2);
+    ASSERT_EQ(OptionCameraReturnText(config), "Slow");
+    const float rates[] = {0.0f, 0.05f, 0.2f, 0.5f, 1.0f};
+    const char *names[] = {"Off", "Very Slow", "Slow", "Moderate", "Retail"};
+    for (int choice = 0; choice < 5; ++choice) {
+        OptionSetCameraReturn(config, choice);
+        ASSERT_FLOAT_EQ(config.mouse_camera_return, rates[choice]);
+        ASSERT_EQ(OptionCameraReturnChoice(config), choice);
+        ASSERT_EQ(OptionCameraReturnCount(config), 5);
+        ASSERT_EQ(OptionCameraReturnText(config), names[choice]);
+    }
+    OptionRestoreCameraReturn(config, Config{});
+    ASSERT_FLOAT_EQ(config.mouse_camera_return, 0.2f);
+    ASSERT_EQ(OptionCameraReturnText(config), "Slow");
+}
+
+TEST(MenuOption, CustomCameraReturnIsShownAndKeptUntilPresetSelection) {
+    Config config;
+    config.mouse_camera_return = 0.37f;
+    config.mouse_zoom = true;
+    config.key_bindings = {
+        {"cross", {"Space", "Z"}}
+    };
+    const Config before = config;
+    ASSERT_EQ(OptionCameraReturnChoice(config), 5);
+    ASSERT_EQ(OptionCameraReturnCount(config), 6);
+    ASSERT_EQ(OptionCameraReturnText(config), "37%");
+    OptionSetCameraReturn(config, 5);
+    ASSERT_EQ(config, before);
+    OptionSetCameraReturn(config, 0);
+    ASSERT_FLOAT_EQ(config.mouse_camera_return, 0.0f);
+    ASSERT_EQ(config.key_bindings, before.key_bindings);
+    ASSERT_TRUE(config.mouse_zoom);
+    OptionRestoreCameraReturn(config, before);
+    ASSERT_EQ(config, before);
+    Config restored = ConfigParse(ConfigSerialize(config));
+    ASSERT_FLOAT_EQ(restored.mouse_camera_return, 0.37f);
+    ASSERT_EQ(OptionCameraReturnText(restored), "37%");
+}

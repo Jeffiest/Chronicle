@@ -67,7 +67,7 @@ TEST(CameraZoom, RetailRelaxationCannotExpandPastAWallAndResetReturnsToNormal) {
     CCameraFollow camera(60.0f, 30.0f, 0.0f, 8.0f);
     camera.Step(-1);
     InputKeyboardMouse input;
-    input.mouse_wheel = -5.0f;
+    input.mouse_wheel = -1000.0f;
     InputSetScriptedDevices(input);
     InputLatchPad(0);
     camera.SetDistance(62.0f); // Retail begins restoring toward 80 before the zoom hook.
@@ -103,4 +103,50 @@ TEST(CameraZoom, RetailRelaxationCannotExpandPastAWallAndResetReturnsToNormal) {
     ASSERT_FLOAT_EQ(DungeonZoomNearDistance(&camera, 60.0f, false), 36.0f);
     ASSERT_FLOAT_EQ(DungeonZoomNearDistance(&camera, 60.0f, true), 60.0f);
     ASSERT_FLOAT_EQ(DungeonZoomNearDistance(nullptr, 60.0f, false), 60.0f);
+}
+
+TEST(CameraZoom, ExtendedDistanceInClearSpaceClampsAndResets) {
+    auto root = std::filesystem::temp_directory_path() /
+                ("chronicle-zoom-range-test-" + std::to_string(dc::test::ProcessId()));
+    struct Cleanup {
+        std::filesystem::path root;
+        ~Cleanup() {
+            std::error_code error;
+            std::filesystem::remove(root / "config.json", error);
+            std::filesystem::remove(root, error);
+        }
+    } cleanup{root};
+    PathsSetSaveRoot(root);
+    Config config;
+    config.mouse_zoom = true;
+    config.mouse_capture = false;
+    ASSERT_TRUE(ConfigChange(config));
+    InputApplyConfig(config);
+    ClockSetUnbounded(true);
+    ClockReset();
+    auto map = std::make_unique<CDungeonMap>();
+    map->map_type = 0;
+    CCameraFollow camera(60.0f, 30.0f, 0.0f, 8.0f);
+    camera.Step(-1);
+    InputKeyboardMouse input;
+    input.mouse_wheel = -1000.0f;
+    InputSetScriptedDevices(input);
+    InputLatchPad(0);
+    DungeonZoomApply(&camera, map.get(), false, 60.0f);
+    ASSERT_FLOAT_EQ(camera.distance, 2000.0f);
+    camera.Step(-1);
+    input = {};
+    input.mouse_wheel = -1000.0f;
+    InputSetScriptedDevices(input);
+    ClockPump();
+    InputLatchPad(0);
+    DungeonZoomApply(&camera, map.get(), false, 2000.0f);
+    ASSERT_FLOAT_EQ(camera.distance, 2000.0f);
+    input = {};
+    input.mouse_buttons = 1u << 2;
+    InputSetScriptedDevices(input);
+    ClockPump();
+    InputLatchPad(0);
+    DungeonZoomApply(&camera, map.get(), false, 2000.0f);
+    ASSERT_FLOAT_EQ(camera.distance, 60.0f);
 }

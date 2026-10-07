@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <iterator>
 #include <vector>
 
@@ -189,11 +190,15 @@ bool QueueTtfGlyph(ClsMes &mes, int index, int dark, int offset_x, int offset_y,
     int r, g, b, alpha;
     GlyphTint(line.clut, dark, wide, r, g, b, alpha);
 
-    // The bitmaps' outlines were soft; a crisp glyph's reads thick at the same offsets, so they are
-    // brought in to 60%.
+    // The outline and the drop shadow sit at the offsets the bitmaps' use: the shadow is part of the
+    // look (it lifts the text off the picture), and at a fraction of the offset it vanishes under the glyph.
     const int cap = mes.edge_alpha;
-    auto      edge = [&](float dx, float dy, int er, int eg, int eb, int ea) {
-        TtfQuad(edges, glyph, x + dx * 0.6f, y + dy * 0.6f * rows, width, height, er, eg, eb, std::min(cap, ea));
+    // A thin stroke's outline covers little of a pixel, so it is laid down nine times to read as dark as the bitmaps'.
+    constexpr int passes = 9;
+    auto edge = [&](float dx, float dy, int er, int eg, int eb, int ea) {
+        for (int pass = 0; pass < passes; ++pass) {
+            TtfQuad(edges, glyph, x + dx, y + dy * rows, width, height, er, eg, eb, std::min(cap, ea));
+        }
     };
     switch (mes.style) {
         case MES_EDGE_WHITE: edge(1, 1, 0xFF, 0xFF, 0xFF, 0x40); break;

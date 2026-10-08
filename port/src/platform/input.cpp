@@ -646,7 +646,7 @@ std::uint16_t BindGamepadHeld() {
     std::uint16_t held = 0;
     for (std::size_t i = 0; i < std::size(kGamepadButtons); ++i) {
         bool down = std::ranges::any_of(g_slots, [&](const PadSlot &slot) {
-            return slot.gamepad != nullptr && SDL_GetGamepadButton(slot.gamepad, kGamepadButtons[i].button);
+            return slot.gamepad != nullptr && SDL_GetGamepadButton(slot.gamepad, kGamepadButtons[i]);
         });
         if (down) {
             held |= static_cast<std::uint16_t>(1u << i);
@@ -1226,7 +1226,7 @@ std::string InputTakeBindKey(bool allow_gamepad) {
         std::uint16_t pad = BindGamepadHeld();
         for (std::size_t i = 0; i < std::size(kGamepadButtons) && found.empty(); ++i) {
             if ((pad & (1u << i)) != 0 && (g_bind_pad & (1u << i)) == 0) {
-                const char *name = SDL_GetGamepadStringForButton(kGamepadButtons[i].button);
+                const char *name = SDL_GetGamepadStringForButton(kGamepadButtons[i]);
                 if (name != nullptr && *name != '\0') {
                     found = std::string("Gamepad:") + name;
                 }
@@ -1249,7 +1249,7 @@ bool InputBindSourceHeld(std::string_view name) {
         }
         std::uint16_t held = BindGamepadHeld();
         for (std::size_t i = 0; i < std::size(kGamepadButtons); ++i) {
-            if (kGamepadButtons[i].button == button) {
+            if (kGamepadButtons[i] == button) {
                 return (held & (1u << i)) != 0;
             }
         }

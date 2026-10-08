@@ -673,7 +673,10 @@ TEST(LocalizeOptions, ShippedTranslationsHaveExactlyTheCodesKeys) {
         const auto shipped = nlohmann::ordered_json::parse(stream);
         files++;
         for (const auto &[key, text] : english) {
-            ASSERT_TRUE(shipped.contains(key)) << name << " lacks " << key;
+            if (!shipped.contains(key)) {
+                ADD_FAILURE() << name << " lacks " << key;
+                continue;
+            }
             const std::string translated = shipped[key];
             EXPECT_FALSE(translated.empty()) << name << " " << key;
             EXPECT_EQ(tokens(translated), tokens(text)) << name << " " << key << ": placeholders and pad glyphs differ";

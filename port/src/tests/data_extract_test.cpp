@@ -273,6 +273,8 @@ TEST(DataExtract, NormalizesIconSheets) {
     // French: its sheet already shares itempack's palette.
     EXPECT_FALSE(fs::exists(out / "normalized/commenu/a_fre/quickchr.pac"));
     fs::remove_all(dir);
+}
+
 TEST(DataExtract, KnowsReleasesByTheirIndex) {
     Bytes index = Pattern(64, 3);
     ASSERT_EQ(dcdata::IdentifyRelease(index), nullptr);

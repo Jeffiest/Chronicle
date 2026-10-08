@@ -653,6 +653,8 @@ inline void NormalizeIconSheets(const fs::path &out, const std::vector<Record> &
             }
         }
     }
+}
+
 // The town system pack: one on NTSC, which PAL split into a common part and one per language.
 inline constexpr std::string_view kSystemPack = "gedit/system/esys.pak";
 inline constexpr std::string_view kPalCommonSystemPack = "gedit/system/esys_cmn.pak";

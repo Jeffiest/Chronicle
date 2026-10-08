@@ -52,6 +52,11 @@ PC_OVERRIDE int CGamePad::On(int mask) {
         return 0;
     }
 
+    // The pointer holds a button for the tick (the Allies turntable turns on held buttons).
+    if ((mask & MenuPointerSyntheticDown()) != 0) {
+        return 1;
+    }
+
     return (pad[0].input.status.button & mask) != 0;
 }
 

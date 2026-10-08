@@ -100,6 +100,10 @@ const u_int *LocalizePack(const u_int *pack, std::string_view name, const u_int 
 // read; verify counts, on stderr, texts that do not encode back to the retail codes.
 int LocalizeExport(const std::filesystem::path &out, bool verify);
 
+// A font file named on the command line (--font): LocalizeFindFile("font.ttf") gives it before the language
+// folders' own.
+void LocalizeSetFontPath(const std::filesystem::path &file);
+
 // The file called name in the language folders (the save folder's before the executable's), or an
 // empty path where neither has one.
 std::filesystem::path LocalizeFindFile(std::string_view name);

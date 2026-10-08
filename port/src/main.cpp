@@ -59,6 +59,7 @@ struct Options {
     bool         show_fps = false;
     bool         screenshot_fps = false;
     const char  *export_text = nullptr;
+    const char  *font = nullptr;
 };
 
 Options g_options;
@@ -84,6 +85,7 @@ Options g_options;
                  "                     FPS counter over it\n"
                  "  --display-per-tick N  headless: also render N interpolated display frames per tick\n"
                  "  --export-text DIR  write the game's message files to DIR as language JSON (docs/LOCALIZATION.md)\n"
+                 "  --font FILE        draw message text from this TrueType font (else lang/font.ttf)\n"
                  "  --show-fps         draw the FPS counter on presented frames when headless too\n"
                  "test hooks:\n"
                  "  --jump MODE[:MAP]  start in edit:<map>, dungeon:<0-6>, title, rush, opening or menu,\n"
@@ -132,6 +134,8 @@ Options ParseOptions(int argc, const char **argv) {
             options.fast_load = true;
         } else if (arg == "--export-text") {
             options.export_text = value();
+        } else if (arg == "--font") {
+            options.font = value();
         } else if (arg == "--show-fps") {
             options.show_fps = true;
         } else if (arg == "--screenshot-fps") {
@@ -365,6 +369,9 @@ int Run(int argc, const char **argv) {
     const char *fast_load = std::getenv("DC_FAST_LOAD");
     GameSetFastLoad(options.fast_load || (fast_load != nullptr && *fast_load != '\0' && *fast_load != '0'));
     RequireData();
+    if (options.font != nullptr) {
+        LocalizeSetFontPath(PathsFromUtf8(options.font));
+    }
     if (options.export_text == nullptr) {
         // Once per save folder: the extracted data's text as JSON for translators (docs/LOCALIZATION.md).
         std::filesystem::path seed = PathsSaveRoot() / "lang-export";

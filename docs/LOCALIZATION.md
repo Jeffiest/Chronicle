@@ -8,6 +8,21 @@ extracted data (below), and the files the port distributes hold only text writte
 The files are laid out as Minecraft's language files are: one flat JSON file per language, named
 `language_COUNTRY.json`, each an object of `"dotted.key": "text"`, with the same keys in every language.
 
+## Quick start
+
+1. **The language files.** Build the game and start it once with the game data in place. The first start writes
+   every language's JSON to `<save folder>/lang-export/` (`en_gb.json`, `fr_fr.json`...; the save folder is
+   `--save`, else `./save`). They come from your own disc, so the build cannot make them and the repository
+   does not hold them. To write them again, or anywhere else:
+   `darkcloud --data <data folder> --export-text <folder>`. Copy the file you want to change to
+   `<save folder>/lang/` and edit it.
+2. **Sharp text.** The port draws message text from a TrueType font instead of the game's blurry bitmaps. The
+   Dark Cloud Compendium Community Font (by Dayuppy and Moonbunny, used with their permission) is in
+   `tools/font/`, and the build copies it to `lang/font.ttf` beside the executable, so it works as built. To use another font, put it at `<save folder>/lang/font.ttf` (that wins), or start with
+   `--font <file>`; delete `lang/font.ttf` to go back to the game's bitmaps. The port says
+   `font: message text from ...` when it found one, and `font: no font.ttf ...` when it did not.
+3. **The language.** Options, Game page, Language row (or `game.language` in `config.json`).
+
 ## Where the files go
 
 One file per language, named by the language the game is set to:
@@ -245,7 +260,8 @@ letters and marks. The port logs `font: message text from <file>` when it loads 
   the like are textures, and stay as they are.
 - A word keeps the cells the game gave it: its letters are spaced by the font inside the word and the word
   is centred on its cells, so rows, indents and the icons between words stay where the game put them.
-- The font is not shipped with the port: each user adds a file they have the right to use.
+- The bundled font is the community font above (credited in `CREDITS`, see `tools/font/README.md`); a font you add
+  is yours to license.
 
 ## Limits, and what happens when they are passed
 

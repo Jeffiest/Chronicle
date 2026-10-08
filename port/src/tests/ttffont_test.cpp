@@ -7,8 +7,8 @@
 
 #include "platform/ttffont.hpp"
 
-// The tests that need a font read one from DC_TEST_FONT (a TrueType file); without it they skip, as no
-// font is shipped with the port. DC_TEST_FONT_DUMP=1 also prints each glyph as text.
+// The tests run on the font the repository holds (tools/font/DarkCloudCompendium.ttf), or the one DC_TEST_FONT names.
+// DC_TEST_FONT_DUMP=1 also prints each glyph as text.
 
 namespace {
 
@@ -22,7 +22,11 @@ struct Rendered {
 
 bool LoadTestFont() {
     const char *path = std::getenv("DC_TEST_FONT");
-    return path != nullptr && *path != '\0' && ttffont::Load(path);
+    if (path != nullptr && *path != '\0') {
+        return ttffont::Load(path);
+    }
+    return ttffont::Load(std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path() / "tools" / "font" /
+                         "DarkCloudCompendium.ttf");
 }
 
 Rendered Render(char32_t ch, int em_px = 40) {

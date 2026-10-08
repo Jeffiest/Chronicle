@@ -39,6 +39,11 @@ bool TtfReady() {
         std::filesystem::path file = LocalizeFindFile("font.ttf");
         if (!file.empty() && ttffont::Load(file)) {
             std::fprintf(stderr, "font: message text from %s\n", file.string().c_str());
+        } else if (file.empty()) {
+            // The community font ships in lang/; this is someone who removed it, so say where one goes.
+            std::fprintf(stderr,
+                         "font: no font.ttf in lang/ beside the executable or in the save folder, and no --font; message "
+                         "text uses the game's bitmaps (docs/LOCALIZATION.md)\n");
         }
     }
     return ttffont::Loaded();

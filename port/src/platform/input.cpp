@@ -16,6 +16,7 @@
 
 #include "clock.hpp"
 #include "config.hpp"
+#include "gamepad_map.hpp"
 #include "mouse.hpp"
 #include "touchpad.hpp"
 #include "window.hpp"
@@ -83,26 +84,25 @@ constexpr Action kActions[] = {
     {"zoom_reset",   ActionKind::Host,     0,              kAxisLeftX,  0,  "Mouse3"},
 };
 
-struct ButtonMap {
-    SDL_GamepadButton button;
-    std::uint16_t     pad;
-};
-
-const ButtonMap kGamepadButtons[] = {
-    {SDL_GAMEPAD_BUTTON_SOUTH,          kInputCross},
-    {SDL_GAMEPAD_BUTTON_EAST,           kInputCircle},
-    {SDL_GAMEPAD_BUTTON_WEST,           kInputSquare},
-    {SDL_GAMEPAD_BUTTON_NORTH,          kInputTriangle},
-    {SDL_GAMEPAD_BUTTON_BACK,           kInputSelect},
-    {SDL_GAMEPAD_BUTTON_START,          kInputStart},
-    {SDL_GAMEPAD_BUTTON_LEFT_STICK,     kInputL3},
-    {SDL_GAMEPAD_BUTTON_RIGHT_STICK,    kInputR3},
-    {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,  kInputL1},
-    {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, kInputR1},
-    {SDL_GAMEPAD_BUTTON_DPAD_UP,        kInputUp},
-    {SDL_GAMEPAD_BUTTON_DPAD_DOWN,      kInputDown},
-    {SDL_GAMEPAD_BUTTON_DPAD_LEFT,      kInputLeft},
-    {SDL_GAMEPAD_BUTTON_DPAD_RIGHT,     kInputRight},
+// Every gamepad button the game reads; GamepadButtonPad (gamepad_map.hpp) says which DualShock 2
+// button each one presses, which depends on the pad's type for Back and the touchpad click.
+// clang-format off
+constexpr SDL_GamepadButton kGamepadButtons[] = {
+    SDL_GAMEPAD_BUTTON_SOUTH,
+    SDL_GAMEPAD_BUTTON_EAST,
+    SDL_GAMEPAD_BUTTON_WEST,
+    SDL_GAMEPAD_BUTTON_NORTH,
+    SDL_GAMEPAD_BUTTON_BACK,
+    SDL_GAMEPAD_BUTTON_TOUCHPAD,
+    SDL_GAMEPAD_BUTTON_START,
+    SDL_GAMEPAD_BUTTON_LEFT_STICK,
+    SDL_GAMEPAD_BUTTON_RIGHT_STICK,
+    SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,
+    SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
+    SDL_GAMEPAD_BUTTON_DPAD_UP,
+    SDL_GAMEPAD_BUTTON_DPAD_DOWN,
+    SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+    SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
 };
 // clang-format on
 
@@ -382,9 +382,10 @@ bool GyroActive() {
 }
 
 void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
-    for (const ButtonMap &map : kGamepadButtons) {
-        if (SDL_GetGamepadButton(gamepad, map.button)) {
-            state.buttons |= map.pad;
+    SDL_GamepadType type = SDL_GetGamepadType(gamepad);
+    for (SDL_GamepadButton button : kGamepadButtons) {
+        if (SDL_GetGamepadButton(gamepad, button)) {
+            state.buttons |= GamepadButtonPad(type, button);
         }
     }
     if (SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > kTriggerThreshold) {

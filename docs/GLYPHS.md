@@ -33,3 +33,7 @@ drawn scaled so a round button fills the height of its slot. `tools/glyphs/build
 them from the source art (P4Gamepad/Retro, P5Gamepad/Retro, XGamepad/Alt 2, SGamepad/Retro, Keyboard_Mouse/Dark);
 Xbox's Menu button and the keyboard style's cursor-key clusters are composed by the tool. The atlases are read with
 stb_image (a pinned download, as stb_truetype is).
+
+The PS5 style is drawn from a flat pack of 64 px buttons (`ps5_a_butt.png`, `ps5_lstick_all.png`...):
+`tools/glyphs/build_glyphs.py --ps5-pack <folder>` rebuilds only `ps5.png` and its entry in `glyphs.json`, leaving the
+other styles. The pack's A, B, X and Y are Cross, Circle, Square and Triangle; L3 and R3 are its plain stick icons.

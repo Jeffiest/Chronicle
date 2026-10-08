@@ -501,6 +501,8 @@ const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::names, true>("game.names", "Names", "On|Off", 0x168),
     OnOffRow<&Config::discord_rich_presence>("discord.rich_presence", "Enable Discord",
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
+    OnOffRow<&Config::element_quick_select>("game.element_quick_select", "Element Quick Select",
+                                            "\"Element Quick Select\"\nD-pad Up in a dungeon\npicks the element."),
 };
 
 const Row kDisplayRows[] = {

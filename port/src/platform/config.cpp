@@ -349,6 +349,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "game.qte_always_win") {
         return ReadBool(value, config.qte_always_win);
     }
+    if (name == "game.element_quick_select") {
+        return ReadBool(value, config.element_quick_select);
+    }
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
     }
@@ -521,6 +524,7 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["tick_rate"] = config.tick_rate;
     root["game"]["debug_mode"] = config.debug_mode;
     root["game"]["qte_always_win"] = config.qte_always_win;
+    root["game"]["element_quick_select"] = config.element_quick_select;
     const ConfigGameOptions &options = config.options;
     root["game"]["save_cursor_position"] = options.save_cursor_position;
     root["game"]["message_speed"] = options.fast_messages ? "fast" : "normal";

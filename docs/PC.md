@@ -122,6 +122,7 @@ key is optional; these are the defaults:
         "tick_rate": 60,            // logic ticks (the game's VSyncs) per second
         "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
         "qte_always_win": false,    // button-prompt events (event battles) still play, but always end in a perfect
+        "element_quick_select": false, // D-pad Up in a dungeon opens the quick-change menu as an element picker
         "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
         "message_speed": "normal",  // normal or fast
         "clock": true,              // the town clock
@@ -273,7 +274,7 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | R | R2 | first-person look (`dun/gameloop.cpp:4354`) |
 | C, Backspace | select | switch character (`dun/gameloop.cpp:3185`) |
 | Return | start | pause (`dun/gameloop.cpp:3045`); the title's prompts |
-| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); menus |
+| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker when `game.element_quick_select` is on and the weapon has more than one element to pick between (`port/src/menu_dungeon.cpp`); menus |
 | V; middle click, B | L3; R3 | debug and editor functions only |
 | IJKL | right stick | the camera from the keyboard |
 | F3 | none | the FPS counter on and off (see "The FPS counter") |
@@ -1298,7 +1299,7 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 
 | Page | Rows |
 |---|---|
-| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence |
+| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select |
 | Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
 | Audio | volume, sound (stereo or mono) |
 | Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
@@ -1652,6 +1653,10 @@ renames what the unit takes from MWCC or from the PS2 link alone:
 - `mathutil` gets the Metrowerks runtime's own `std::exception` and
   `std::bad_exception` renamed apart from the host library's, and
   `__exception_magic`, which MWCC provides inside an exception handler.
+- `menu_dungeon` renames its `CharaChangeLoop` to `CharaChangeLoopRetail`. The
+  port's `CharaChangeLoop` (`port/src/menu_dungeon.cpp`) runs the dungeon's
+  quick-change menu as an element picker when D-pad Up opened it, and this
+  unit's loop when SELECT did.
 - `menu_save` and `memcard` export statics the other calls: memcard's
   `SaveMenuFunc` table names menu_save's eighteen `SaveMenuKey*` steps and
   menu_save calls memcard's `ExitSaveSelect`. The port's `SaveMenuFunc`

@@ -957,28 +957,36 @@ static void DrawProcess() {
         MGFillBox(CRect<int>(0, 0, 10240, SCREEN_HEIGHT * 8), 0, 0, 0, 64);
         TexManager.ReloadTexture(Vif1Packet, 19);
 
+        // Not every opening scene loads a pause texture (the last scenes load none), so the
+        // overlay is only drawn when the language's texture is actually present (#113).
+        CTexture *pause_sprite = NULL;
+
         switch (LanguageCode) {
             case LANG_JAPANESE:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause", -1);
                 break;
             case LANG_ENGLISH_US:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause_e", -1);
                 break;
             case LANG_ENGLISH_UK:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_e", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause_e", -1);
                 break;
             case LANG_FRENCH:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_f", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause_f", -1);
                 break;
             case LANG_GERMAN:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_g", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause_g", -1);
                 break;
             case LANG_ITALIAN:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_i", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause_i", -1);
                 break;
             case LANG_SPANISH:
-                set2DSprite(GetVif1Packet(), TexManager.GetTexture("pause_s", -1), CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
+                pause_sprite = TexManager.GetTexture("pause_s", -1);
                 break;
+        }
+
+        if (pause_sprite != NULL) {
+            set2DSprite(GetVif1Packet(), pause_sprite, CRect<int>(256, 160, 128, 128), CRect<int>(0, 0, 128, 128), 128);
         }
 
         setbilinear(1);

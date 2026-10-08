@@ -308,6 +308,7 @@ void ApplyConfigChange(const Config &before, const Config &after) {
         GameSetPresentSettings(PresentSettings(after));
     }
     gfx::SetPresentMode(PresentMode(after.present_mode));
+    gfx::SetAnisotropy(after.anisotropy);
     if (after.discord_rich_presence != before.discord_rich_presence) {
         ApplyDiscord(after);
     }
@@ -393,6 +394,7 @@ int Run(int argc, const char **argv) {
     renderer.offscreen = offscreen;
     renderer.layout = Layout(config);
     gfx::RendererInit(WindowHandle(), renderer);
+    gfx::SetAnisotropy(config.anisotropy);
 
     audio::DefaultMixer().SetMasterGain(config.master_volume);
     AudioSetSurround(config.surround);

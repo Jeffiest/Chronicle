@@ -121,6 +121,7 @@ key is optional; these are the defaults:
         "fps_detail": "all",        // what it shows: fps (the frame rate alone), ticks (and the logic ticks) or all (and the draws)
         "detail_distance": 0,       // how far full detail reaches (world units); 0: at any distance
         "shadow_distance": 0,       // how far town parts cast full shadows (world units); 0: at any distance
+        "anisotropy": 0,            // anisotropic filtering of 3D textures: 0 (off), 2, 4, 8 or 16 samples
         "soft_focus": true          // the game's farside soft focus
     },
     "audio": {
@@ -1253,7 +1254,7 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 | Page | Rows |
 |---|---|
 | Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence |
-| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), soft focus |
+| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
 | Audio | volume, sound (stereo or mono) |
 | Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
 | Accessibility | always win QTEs |

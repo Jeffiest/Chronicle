@@ -248,6 +248,20 @@ std::string MaxFpsText(const Config &config) {
     return config.max_fps > 0.0 ? std::format("{}", config.max_fps) : "Unlimited";
 }
 
+constexpr int kAnisotropy[] = {0, 2, 4, 8, 16};
+
+int AnisotropyCount(const Config &) {
+    return static_cast<int>(std::size(kAnisotropy));
+}
+
+int AnisotropyChoice(const Config &config) {
+    return std::max(0, static_cast<int>(std::ranges::find(kAnisotropy, config.anisotropy) - std::begin(kAnisotropy)));
+}
+
+void SetAnisotropy(Config &config, int choice) {
+    config.anisotropy = kAnisotropy[choice];
+}
+
 int Aspect(const Config &config) {
     return config.aspect == ConfigAspect::FourThree ? 1 : 0;
 }
@@ -510,6 +524,9 @@ const Row kDisplayRows[] = {
     OnOffRow<&Config::show_fps>("video.show_fps", "FPS Counter", "\"FPS Counter\"\nShows the frame rate\nin the corner."),
     SettingRow("video.fps_detail", "FPS Info", "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.",
                FpsDetailCount, FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"),
+    SettingRow("video.anisotropy", "Anisotropic Filter",
+               "\"Anisotropic Filter\"\nSharper textures on\nsurfaces seen at a\nslant.", AnisotropyCount,
+               AnisotropyChoice, SetAnisotropy, nullptr, "Off|2x|4x|8x|16x"),
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
 };
 

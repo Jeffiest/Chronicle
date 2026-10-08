@@ -317,6 +317,10 @@ void CreateDevice() {
     features.features.dualSrcBlend = VK_TRUE;
     features.features.shaderClipDistance = VK_TRUE;
     features.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+    VkPhysicalDeviceFeatures supported = {};
+    vkGetPhysicalDeviceFeatures(g.physical_device, &supported);
+    g.sampler_anisotropy = supported.samplerAnisotropy == VK_TRUE;
+    features.features.samplerAnisotropy = supported.samplerAnisotropy;
 
     std::vector<const char *> extensions;
     if (!g.offscreen) {
@@ -847,6 +851,14 @@ void RendererShutdown() {
 }
 
 void RendererResize() { g.resize_pending = true; }
+
+void SetAnisotropy(int samples) {
+    uint32_t level = 0;
+    while (level < kAnisotropyLevels && (2 << level) <= samples) {
+        ++level;
+    }
+    g.anisotropy_level = level;
+}
 
 void SetPresentMode(PresentMode mode) {
     if (mode != g.config.present_mode) {

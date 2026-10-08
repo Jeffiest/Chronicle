@@ -16,7 +16,10 @@ namespace gfx::detail {
 inline constexpr uint32_t kFramesInFlight = 2;
 // Descriptor slots in the bindless array; a handle's low 16 bits are its slot.
 inline constexpr uint32_t kMaxTextures = 8192;
-inline constexpr uint32_t kSamplerCount = 8;
+inline constexpr uint32_t kBaseSamplerCount = 8;
+// 2x, 4x, 8x and 16x anisotropic linear samplers, each in the four wrap combinations.
+inline constexpr uint32_t kAnisotropyLevels = 4;
+inline constexpr uint32_t kSamplerCount = kBaseSamplerCount + kAnisotropyLevels * 4;
 inline constexpr uint32_t kMaxMeshes = 65535;
 inline constexpr VkFormat kColorFormat = VK_FORMAT_R8G8B8A8_UNORM;
 inline constexpr uint32_t kFirstUserSlot = 3;
@@ -254,6 +257,8 @@ struct Context {
     bool                          triangle_fans = true;
     bool                          separate_stencil_masks = true;
     bool                          portability_subset = false;
+    bool                          sampler_anisotropy = false;
+    uint32_t                      anisotropy_level = 0;
     PFN_vkCmdSetColorWriteMaskEXT cmd_set_color_write_mask = nullptr;
     Swapchain                     swapchain;
     bool                          resize_pending = false;

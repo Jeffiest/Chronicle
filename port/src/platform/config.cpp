@@ -388,6 +388,17 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         config.detail_distance = distance;
         return true;
     }
+    if (name == "video.anisotropy") {
+        if (!value.is_number_integer()) {
+            return false;
+        }
+        int samples = value.get<int>();
+        if (samples != 0 && samples != 2 && samples != 4 && samples != 8 && samples != 16) {
+            return false;
+        }
+        config.anisotropy = samples;
+        return true;
+    }
     if (name == "video.shadow_distance") {
         float distance = 0.0f;
         if (!ReadNumber(value, distance) || !(distance >= 0.0f) || !std::isfinite(distance)) {
@@ -510,6 +521,7 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["fps_detail"] = FpsDetailName(config.fps_detail);
     root["video"]["detail_distance"] = Shortest(config.detail_distance);
     root["video"]["shadow_distance"] = Shortest(config.shadow_distance);
+    root["video"]["anisotropy"] = config.anisotropy;
     root["video"]["soft_focus"] = options.soft_focus;
     root["audio"]["master_volume"] = Shortest(config.master_volume);
     root["audio"]["sound"] = options.stereo ? "stereo" : "mono";

@@ -64,6 +64,7 @@ port's file index. Extract again after updating the port to refresh them.
 | `--width W`, `--height H` | window size in pixels, over `config.json` (default: the monitor's resolution) |
 | `--jump MODE[:MAP]` | test hook: start in a mode (see "Test hooks"); also `DC_JUMP` |
 | `--fast-load` | test hook: loading-screen holds and fades of a few ticks; also `DC_FAST_LOAD=1` |
+| `--give ITEM,...` | test hook: items and weapons the party is given when a town or dungeon starts (see "Test hooks"); also `DC_GIVE` |
 | `--display-per-tick N` | headless test aid: render N interpolated display frames per tick (offscreen, not presented) before presenting the tick's canonical image |
 | `--show-fps` | draw the FPS counter when headless too (a headless run leaves `show_fps` off) |
 | `--screenshot-fps` | with `--screenshot` and `--show-fps`: write the image as a window shows it, the counter over the canonical image, instead of the canonical image alone |
@@ -488,6 +489,12 @@ For tests and debugging only; nothing the game does depends on them.
 - `--fast-load` (or `DC_FAST_LOAD=1`) cuts the loading screen's start delay to
   one tick, its fades to two or four ticks and its holds (PAL 120, 183 and 83
   ticks) to two. The modes' own fades are untouched.
+- `--give ITEM,...` (or `DC_GIVE`) gives the party the items and weapons it
+  lacks, by their numbers in `ps2/include/itemdata.hpp` (`ITEM_*`), each time a
+  town or dungeon starts, through `CDngStatusData::GetItem` as an event's gift
+  would: an item into the dungeon inventory, a weapon to the character it
+  belongs to. One already held is skipped. `--give 210,211` gives the Sun and
+  Moon Signets. A bad list exits with status 2.
 
 `darkcloud --headless --jump dungeon:0 --fast-load --frames 60` shows the first
 dungeon's floor select after about five seconds on lavapipe.

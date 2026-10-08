@@ -148,3 +148,13 @@ TEST(IntegrationGameloop, LinkAliases) {
     ASSERT_TRUE(addresses[0] == addresses[1]);
     ASSERT_TRUE(addresses[2] == addresses[3]);
 }
+
+TEST(IntegrationGameloop, GiveListParses) {
+    ASSERT_TRUE(GameSetGive("210,211"));
+    ASSERT_TRUE(GameSetGive("268"));
+    ASSERT_TRUE(!GameSetGive(""));
+    ASSERT_TRUE(!GameSetGive("210,"));
+    ASSERT_TRUE(!GameSetGive("sun"));
+    ASSERT_TRUE(!GameSetGive("0"));
+    ASSERT_TRUE(!GameSetGive("9999"));
+}

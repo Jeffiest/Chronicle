@@ -94,8 +94,6 @@ struct FpsOverlay {
     std::string         text;
     gfx::LogicalMapping mapping = {};
     gfx::DisplayListRef list;
-    // The message font's texture the list was recorded with, 0 for the port's own font.
-    u_long font = 0;
 };
 
 FpsOverlay g_fps;
@@ -142,66 +140,19 @@ bool SameMapping(const gfx::LogicalMapping &a, const gfx::LogicalMapping &b) {
            a.offset_y == b.offset_y && a.pixel_width == b.pixel_width && a.pixel_height == b.pixel_height;
 }
 
-// The message font's gaiji texture while a mode has all of the message font's textures loaded,
-// else nullptr.
-CTexture *MessageFont() {
-    CTexture *gaiji = TexManager.GetTexture(const_cast<char *>("gaiji"), -1);
-    if (gaiji == nullptr || TexManager.GetTexture(const_cast<char *>("fontbase"), -1) == nullptr ||
-        TexManager.GetTexture(const_cast<char *>("syst04"), -1) == nullptr) {
-        return nullptr;
-    }
-    return gaiji;
-}
-
-// The counter's line in the game's message font, drawn as the menus draw their text but into a
-// display list of its own, at the top-left corner of what the window shows. Null where the font
-// cannot lay it out.
-gfx::DisplayListRef RecordFpsInGameFont(const std::string &line) {
-    static GameText *text = [] {
-        auto *made = new GameText;
-        made->KeepGameRandom(true);
-        return made;
-    }();
-    if (text->Set(line) < 0) {
-        return nullptr;
-    }
-    gfx::BeginRecording();
-    if (!gfx::Recording()) {
-        return nullptr;
-    }
-    // Drawing the text sets the sprite filter and the texture block as the menus' text does. The
-    // game's next tick takes both as it left them, so they are put back as they were.
-    const int bilinear = PortBilinear();
-    const int block = TexManager.last_block;
-    {
-        gfx::UiAnchorScope anchor(gfx::UiAnchor::Side(-1, -1));
-        text->Draw(6, 2);
-    }
-    setbilinear(bilinear);
-    TexManager.last_block = block;
-    return gfx::EndRecording();
-}
-
-// Recorded again only when the text, the window's mapping or the message font changed. The game's
-// message font while a mode has it loaded, the overlay's own 5x7 font otherwise (loading screens,
-// the moments between modes): the font draws the same words either way.
+// Recorded again only when the text or the window's mapping changed. Always drawn in the overlay's
+// own 5x7 font, so the badge looks the same on every screen: the game's message font is only
+// loaded inside a mode, which made a second, different-looking badge for the intro and loading.
 const gfx::DisplayList *FpsOverlayList() {
     if (!g_fps.on) {
         return nullptr;
     }
     std::string         text = GameFpsText();
     gfx::LogicalMapping mapping = gfx::GetLogicalMapping(gfx::kMainTarget);
-    CTexture           *font = MessageFont();
-    u_long              font_key = font != nullptr ? font->tex0 : 0;
-    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping) || font_key != g_fps.font) {
-        g_fps.list = font != nullptr ? RecordFpsInGameFont(text) : nullptr;
-        if (!g_fps.list) {
-            font_key = 0;
-            g_fps.list = OverlayRecord(text);
-        }
+    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping)) {
+        g_fps.list = OverlayRecord(text);
         g_fps.text = std::move(text);
         g_fps.mapping = mapping;
-        g_fps.font = font_key;
     }
     return g_fps.list.get();
 }

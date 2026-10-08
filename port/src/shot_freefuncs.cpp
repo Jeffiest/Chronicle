@@ -2,9 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
-#include <fstream>
-#include <vector>
 
 #include "btactstatus.hpp"
 #include "cloth.hpp"
@@ -15,7 +12,6 @@
 #include "mathutil.hpp"
 #include "mglib.hpp"
 #include "monstorunit.hpp"
-#include "platform/paths.hpp"
 #include "rect.hpp"
 #include "snd.hpp"
 #include "texture.hpp"
@@ -25,32 +21,6 @@
 extern int statusAlarmRate;
 
 namespace {
-
-// The dungeon sheet carries the floor caption omitted from the language-specific menu sheet.
-CTexture *DungeonItempack() {
-    char name[] = "dungeon_itempack";
-    if (CTexture *texture = TexManager.GetTexture(name, -1)) {
-        return texture;
-    }
-
-    std::ifstream file(PathsDataRoot() / "dun/etc/itempack.img", std::ios::binary | std::ios::ate);
-    if (!file) {
-        return nullptr;
-    }
-    std::streamsize size = file.tellg();
-    if (size < 64) {
-        return nullptr;
-    }
-    std::vector<u_char> image(static_cast<size_t>(size));
-    file.seekg(0);
-    if (!file.read(reinterpret_cast<char *>(image.data()), size)) {
-        return nullptr;
-    }
-    std::memset(image.data() + 16, 0, 32);
-    std::memcpy(image.data() + 16, name, sizeof(name));
-    TexManager.EnterIMGFile(image.data(), -1, 0, 0);
-    return TexManager.GetTexture(name, -1);
-}
 
 // A status bar's fill over the trough of its frame, which is cells caps and middles of four columns
 // from x 0x30. The trough runs from the left cap's fourth column to the right cap's second, on the
@@ -263,14 +233,9 @@ PC_OVERRIDE void topStatusInfo(int y, int selected_item, int floor) {
     }
 
     set2DSprite(Vif1Packet, icons, CRect_i_(0x1FC, y, 0x66, 0x29), CRect_i_(0x9A, 1, 0x66, 0x29));
-    CTexture *floor_icons = DungeonItempack();
-    if (floor_icons != nullptr) {
-        set2DSprite(Vif1Packet, floor_icons, CRect_i_(0x23C, y, 0x26, 0x29), CRect_i_(0xDA, 1, 0x26, 0x29));
-    }
 
     if (BtUraDongeon != 0) {
-        set2DSprite(Vif1Packet, floor_icons != nullptr ? floor_icons : icons,
-                    CRect_i_(0x23C, y, 0x26, 0x29), CRect_i_(0xDA, 0x2B, 0x26, 0x29));
+        set2DSprite(Vif1Packet, icons, CRect_i_(0x23C, y, 0x26, 0x29), CRect_i_(0xDA, 0x2B, 0x26, 0x29));
     }
 
     if (BtEquipMasuisyou != 0) {
@@ -295,10 +260,10 @@ PC_OVERRIDE void topStatusInfo(int y, int selected_item, int floor) {
         }
 
         if (floor + 1 >= 10) {
-            set2DSprite(Vif1Packet, frame, CRect_i_(x - 4, y + 0x12, 0xE, 0x11), CRect_i_((floor + 1) / 10 * 12, 0x9E, 0xC, 0x12));
+            set2DSprite(Vif1Packet, frame, CRect_i_(x - 4, y + 0xA, 0xE, 0x11), CRect_i_((floor + 1) / 10 * 12, 0x9E, 0xC, 0x12));
         }
 
-        set2DSprite(Vif1Packet, frame, CRect_i_(x + 9, y + 0x12, 0xE, 0x11), CRect_i_((floor + 1) % 10 * 12, 0x9E, 0xC, 0x12));
+        set2DSprite(Vif1Packet, frame, CRect_i_(x + 9, y + 0xA, 0xE, 0x11), CRect_i_((floor + 1) % 10 * 12, 0x9E, 0xC, 0x12));
     }
 
     selected_item *= 40;

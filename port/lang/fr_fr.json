@@ -158,5 +158,17 @@
     "options.video.text_shadow.label": "Ombre du texte",
     "options.video.text_shadow.help": "\"Ombre du texte\"\nOmbre sous le texte, avec\nune police TrueType.",
     "options.video.text_shadow.choice.0": "Légère",
-    "options.video.text_shadow.choice.1": "Marquée"
+    "options.video.text_shadow.choice.1": "Marquée",
+    "options.input.glyphs.label": "Symboles boutons",
+    "options.input.glyphs.help": "\"Symboles boutons\"\nNouveau: symboles refaits\npour votre manette.\nOriginal: ceux de la PS2.",
+    "options.input.glyphs.choice.0": "Original",
+    "options.input.glyphs.choice.1": "Nouveau",
+    "options.input.glyph_device.label": "Symboles affichés",
+    "options.input.glyph_device.help": "\"Symboles affichés\"\nAuto: l'appareil utilisé.\nOu toujours un des\nautres.",
+    "options.input.glyph_device.choice.0": "Auto",
+    "options.input.glyph_device.choice.1": "PS4",
+    "options.input.glyph_device.choice.2": "PS5",
+    "options.input.glyph_device.choice.3": "Xbox",
+    "options.input.glyph_device.choice.4": "Switch",
+    "options.input.glyph_device.choice.5": "Clavier"
 }

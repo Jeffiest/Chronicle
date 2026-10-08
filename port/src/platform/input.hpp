@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -169,6 +170,24 @@ bool InputDeveloperMenu();
 
 // Takes the pointer's motion and wheel since the last call, live and scripted.
 InputMenuMouse InputTakeMenuMouse();
+
+// The family of button symbols that matches the device last used: keyboard and mouse after a key,
+// a mouse button or the mouse moved, otherwise the first gamepad's make (PS4 before one has been
+// touched, and for a pad of unknown make).
+enum class InputGlyphFamily {
+    Ps4,
+    Ps5,
+    Xbox,
+    Switch,
+    Keyboard,
+};
+
+InputGlyphFamily InputActiveGlyphFamily();
+
+// The first key or mouse button bound to a pad action ("cross", "start", "up"...), named as the
+// glyph table spells them: SDL's scancode name lower-cased with spaces dropped ("space", "return",
+// "leftshift"), or "mouse1" to "mouse5" (left, right, middle, X1, X2). Empty if none is bound.
+std::string InputPrimaryBindingName(std::string_view action);
 
 // SDL scancode for a key name, any case; `_` stands for a space ("left_shift"), and Grave, Backquote
 // and Backtick name the key left of 1. -1 if unknown.

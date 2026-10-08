@@ -158,5 +158,17 @@
     "options.video.text_shadow.label": "Textschatten",
     "options.video.text_shadow.help": "\"Textschatten\"\nWie dunkel der Schatten\nunter dem Text ist (bei\nTrueType-Schrift).",
     "options.video.text_shadow.choice.0": "Weich",
-    "options.video.text_shadow.choice.1": "Tief"
+    "options.video.text_shadow.choice.1": "Tief",
+    "options.input.glyphs.label": "Tastensymbole",
+    "options.input.glyphs.help": "\"Tastensymbole\"\nNeu: neu gezeichnete\nSymbole für dein Gerät.\nOriginal: die der PS2.",
+    "options.input.glyphs.choice.0": "Original",
+    "options.input.glyphs.choice.1": "Neu",
+    "options.input.glyph_device.label": "Gezeigte Symbole",
+    "options.input.glyph_device.help": "\"Gezeigte Symbole\"\nAuto: das genutzte\nGerät. Oder immer eines\nder anderen.",
+    "options.input.glyph_device.choice.0": "Auto",
+    "options.input.glyph_device.choice.1": "PS4",
+    "options.input.glyph_device.choice.2": "PS5",
+    "options.input.glyph_device.choice.3": "Xbox",
+    "options.input.glyph_device.choice.4": "Switch",
+    "options.input.glyph_device.choice.5": "Tastatur"
 }

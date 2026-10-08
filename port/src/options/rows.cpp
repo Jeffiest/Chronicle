@@ -446,6 +446,18 @@ void SetGyro(Config &config, int choice) {
     config.gyro = static_cast<ConfigGyro>(choice);
 }
 
+int GlyphDeviceCount(const Config &) {
+    return 6;
+}
+
+int GlyphDeviceChoice(const Config &config) {
+    return static_cast<int>(config.glyph_device);
+}
+
+void SetGlyphDevice(Config &config, int choice) {
+    config.glyph_device = static_cast<ConfigGlyphDevice>(choice);
+}
+
 // 0.10 to 2.00 in twentieths.
 int GyroSensitivityCount(const Config &) {
     return 39;
@@ -545,6 +557,12 @@ const Row kAudioRows[] = {
 
 const Row kControlRows[] = {
     GameRow<&ConfigGameOptions::vibration, true>("input.vibration", "Vibration", "On|Off", 0x15F),
+    NamedRow<&Config::glyphs_new>("input.glyphs", "Button Symbols",
+                                  "\"Button Symbols\"\nNew: redrawn symbols\nfor your controller.\nOriginal: the PS2's.",
+                                  "Original|New"),
+    SettingRow("input.glyph_device", "Symbols Shown",
+               "\"Symbols Shown\"\nAuto: the device you\nuse. Or always show one\nof the others.", GlyphDeviceCount,
+               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS4|PS5|Xbox|Switch|Keyboard"),
     SettingRow("input.mouse_sensitivity", "Mouse Sensitivity", "\"Mouse Sensitivity\"\nHow fast the mouse\nturns the camera.",
                MouseSensitivityCount, MouseSensitivityChoice, SetMouseSensitivity, MouseSensitivityText, nullptr,
                RestoreMouseSensitivity),

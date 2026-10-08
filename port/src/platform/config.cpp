@@ -134,6 +134,22 @@ bool ReadAspect(const Json &value, ConfigAspect &out) {
     return true;
 }
 
+constexpr const char *kGlyphDeviceNames[] = {"auto", "ps4", "ps5", "xbox", "switch", "keyboard"};
+
+bool ReadGlyphDevice(const Json &value, ConfigGlyphDevice &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    const std::string &name = value.get_ref<const std::string &>();
+    for (std::size_t i = 0; i < std::size(kGlyphDeviceNames); ++i) {
+        if (name == kGlyphDeviceNames[i]) {
+            out = static_cast<ConfigGlyphDevice>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 constexpr const char *kGyroNames[] = {"off", "always", "first_person", "held"};
 
 bool ReadGyro(const Json &value, ConfigGyro &out) {
@@ -315,6 +331,16 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     }
     if (name == "input.mouse_capture") {
         return ReadBool(value, config.mouse_capture);
+    }
+    if (name == "input.glyphs") {
+        if (!value.is_string() || (value.get<std::string>() != "new" && value.get<std::string>() != "original")) {
+            return false;
+        }
+        config.glyphs_new = value.get<std::string>() == "new";
+        return true;
+    }
+    if (name == "input.glyph_device") {
+        return ReadGlyphDevice(value, config.glyph_device);
     }
     if (name == "input.mouse_zoom") {
         return ReadBool(value, config.mouse_zoom);
@@ -559,6 +585,8 @@ std::string ConfigSerialize(const Config &config) {
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_zoom"] = config.mouse_zoom;
+    root["input"]["glyphs"] = config.glyphs_new ? "new" : "original";
+    root["input"]["glyph_device"] = kGlyphDeviceNames[static_cast<std::size_t>(config.glyph_device)];
     root["input"]["mouse_camera_return"] = Shortest(config.mouse_camera_return);
     root["input"]["mouse_release"] = config.mouse_release_keys;
     root["input"]["vibration"] = options.vibration;

@@ -14,7 +14,9 @@
 #include "localize.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
+#include "glyph_draw.hpp"
 #include "platform/config.hpp"
+#include "platform/glyphs.hpp"
 #include "platform/ttffont.hpp"
 #include "rect.hpp"
 #include "snd.hpp"
@@ -799,6 +801,31 @@ PC_OVERRIDE int ClsMes::SetMesWinTbl(int code, int mode, short x, short y) {
     return 1;
 }
 
+// The pad buttons among the font's icons (kNamed in gametext.cpp), drawn from the button symbol
+// files (platform/glyphs.hpp) when input.glyphs is "new". The symbol keeps the proportions of its
+// art, scaled so a round face button fills the icon's height, and sits in the middle of the icon's
+// slot; a wide one (a key) may reach out of it, up to twice the slot's width.
+static bool DrawPadGlyph(int code, const CRect_i_ &screen, int alpha) {
+    glyphs::Button button;
+    switch (code) {
+        case -0x300: button = glyphs::Button::Select; break;
+        case -0x2FF: button = glyphs::Button::Start; break;
+        case -0x2FE: button = glyphs::Button::L1; break;
+        case -0x2FD: button = glyphs::Button::R1; break;
+        case -0x2FC: button = glyphs::Button::L2; break;
+        case -0x2FB: button = glyphs::Button::R2; break;
+        case -0x2FA: button = glyphs::Button::Circle; break;
+        case -0x2F9: button = glyphs::Button::Triangle; break;
+        case -0x2F8: button = glyphs::Button::Cross; break;
+        case -0x2F7: button = glyphs::Button::Square; break;
+        case -0x2F6: button = glyphs::Button::Dpad; break;
+        case -0x2F5: button = glyphs::Button::DpadUpDown; break;
+        case -0x2F4: button = glyphs::Button::DpadSides; break;
+        default: return false;
+    }
+    return GlyphDrawSlot(button, screen, alpha);
+}
+
 // Read a colour only for a palette entry FontColorTbl has. Retail looks up the red text's 0xFF too,
 // 240 entries past the table, and then sets that colour itself.
 PC_OVERRIDE void ClsMes::DrawGaijiFont(CTexture *texture, int index, const CRect_i_ &texel, const CRect_i_ &screen,
@@ -815,6 +842,9 @@ PC_OVERRIDE void ClsMes::DrawGaijiFont(CTexture *texture, int index, const CRect
     code = this->win_line[index].code;
 
     if (code >= -0x300 && code < -0x2DF) {
+        if (DrawPadGlyph(code, screen, this->edge_alpha < 0x80 ? this->edge_alpha : 0x80)) {
+            return;
+        }
         set2DSprite_Core(Vif1Packet, texture, screen, texel, 0x80, 0x80, 0x80,
                          this->edge_alpha < 0x80 ? this->edge_alpha : 0x80);
         return;

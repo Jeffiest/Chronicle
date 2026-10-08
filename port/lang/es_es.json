@@ -158,5 +158,17 @@
     "options.video.text_shadow.label": "Sombra del texto",
     "options.video.text_shadow.help": "\"Sombra del texto\"\nQué tan oscura es la\nsombra bajo el texto con\nfuente TrueType.",
     "options.video.text_shadow.choice.0": "Suave",
-    "options.video.text_shadow.choice.1": "Profunda"
+    "options.video.text_shadow.choice.1": "Profunda",
+    "options.input.glyphs.label": "Símbolos de botones",
+    "options.input.glyphs.help": "\"Símbolos de botones\"\nNuevos: símbolos\nrediseñados para tu mando.\nOriginales: los de PS2.",
+    "options.input.glyphs.choice.0": "Originales",
+    "options.input.glyphs.choice.1": "Nuevos",
+    "options.input.glyph_device.label": "Símbolos mostrados",
+    "options.input.glyph_device.help": "\"Símbolos mostrados\"\nAuto: el dispositivo\nque usas. O siempre uno\nde los otros.",
+    "options.input.glyph_device.choice.0": "Auto",
+    "options.input.glyph_device.choice.1": "PS4",
+    "options.input.glyph_device.choice.2": "PS5",
+    "options.input.glyph_device.choice.3": "Xbox",
+    "options.input.glyph_device.choice.4": "Switch",
+    "options.input.glyph_device.choice.5": "Teclado"
 }

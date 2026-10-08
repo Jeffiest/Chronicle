@@ -4,8 +4,14 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <set>
+#include <string>
+#include <tuple>
 
 #include "draw2d_port.hpp"
+#include "glyph_draw.hpp"
 #include "mglib_port.hpp"
 #include "rect.hpp"
 #include "texture.hpp"
@@ -54,9 +60,22 @@ void RectSprite(CTexture *texture, const CRect_i_ &screen, const CRect_i_ &texel
         return;
     }
 
+    static const bool trace = std::getenv("DC_SPRITE_TRACE") != nullptr;
+    if (trace) {
+        static std::set<std::tuple<std::string, int, int, int, int>> seen;
+        if (seen.emplace(texture->name, texel.x, texel.y, texel.width, texel.height).second) {
+            std::fprintf(stderr, "sprite %s texel %d %d %d %d screen %d %d %d %d\n", texture->name, texel.x, texel.y,
+                         texel.width, texel.height, screen.x, screen.y, screen.width, screen.height);
+        }
+    }
+
+    if (GlyphReplaceSprite(texture->name, screen, texel, colour.a)) {
+        return;
+    }
     std::array<gfx::Vertex2D, 4> quad = RectQuad(screen, texel, colour);
     draw2d::DrawTextured(gfx::Primitive::Quads, quad, texture->tex0, SpriteTex1(), draw2d::SpriteState());
     draw2d::RestoreTestZbuf();
+    GlyphOverlaySprite(texture->name, screen, texel, colour.a);
 }
 
 // XYZF2 keeps 16 bits of x and y, 24 of z and 8 of the fog coefficient.

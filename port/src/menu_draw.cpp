@@ -6,6 +6,13 @@
 #include "gfx/gfx.hpp"
 #include "menu_inventory.hpp"
 #include "menuetc.hpp"
+#include "gameutil.hpp"
+#include "mglib.hpp"
+#include "snd.hpp"
+#include "name_mouse.hpp"
+#include "memcard.hpp"
+#include "menu_dungeon.hpp"
+#include "menu_pointer.hpp"
 #include "rect.hpp"
 
 // Retail rounds up to 64 bytes through int, which only holds an address below 2 GiB.
@@ -41,4 +48,47 @@ PC_OVERRIDE void DrawFullSizePicture(CTexture *texture, int x, int y, int alpha)
     int               right = x + static_cast<int>(std::ceil(visible.x + visible.w));
     int               bottom = y + static_cast<int>(std::ceil(visible.y + visible.h));
     DrawMenu2DSprite(texture, CRect_i_(left, top, right - left, bottom - top), MenuDispRc, alpha);
+}
+
+// The Register Name screen's hand follows the mouse while the pointer is in use.
+PC_OVERRIDE void DrawMenu2DSprite(CTexture *texture, CRect_i_ screen, CRect_i_ texel, unsigned char r, unsigned char g,
+                                  unsigned char b, int alpha) {
+    NameMouseHand(texture, screen, texel, r == 0 && g == 0 && b == 0);
+    set2DSprite(GetVif1Packet(), texture, screen, texel, r, g, b, alpha);
+}
+
+extern PERSONAL_BOARD *PerBoardPt;
+
+// The item the cursor holds rides the mouse's hand while a screen has taken the mouse as a pointer
+// (port/src/menu_mouse.cpp); otherwise retail's body.
+PC_OVERRIDE void DrawMenuVibeItem(int x, int y, int offset_x, int offset_y, int alpha) {
+    float pointer_x = 0.0f;
+    float pointer_y = 0.0f;
+
+    if (MenuPointerHand(pointer_x, pointer_y)) {
+        x = static_cast<int>(pointer_x);
+        y = static_cast<int>(pointer_y);
+    }
+
+    int       item_x = x + offset_x;
+    int       item_y = y + offset_y;
+    s16       item_no = PerBoardPt->held_item.item_no;
+    CRect_i_  shadow(0x80, 0x28, 0x20, 0x20);
+    int       u;
+    int       v;
+    CTexture *texture = RetCTex(item_no, u, v);
+
+    if (texture != NULL) {
+        DrawObjectVibe(x + 4, y + 2, TexManager.GetTexture(const_cast<char *>("StayTex"), -1), shadow, 0, 0x50);
+        CRect_i_ source(u, v, 0x20, 0x20);
+        DrawObjectVibe(item_x + 4, item_y + 2, texture, source, 0, 0x50);
+        DrawObjectVibe(item_x, item_y, texture, source, 0x80, 0x80);
+        int number = GetAttachVolumeForMsg(&PerBoardPt->held_attach);
+
+        if (item_no == ITEM_ATTACH_SYNTHESIS_SPHERE) {
+            number = PerBoardPt->held_attach.sphere_weapon_no;
+        }
+
+        DrawAttachNumberOrWeapon(item_x, item_y, 0, 0x280, item_no, number, 0x80, 1);
+    }
 }

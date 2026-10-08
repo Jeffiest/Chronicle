@@ -1366,6 +1366,82 @@ change. `CMemoryCardAccess::SetBuff` zeroes them in the copy it writes, so
 `save.dat` carries no options; its layout is retail's, so their bytes remain,
 as zeros.
 
+## The Register Name screen
+
+While the name-entry screen is open (from the read of its textures until
+the game closes it) the mouse is a pointer there as well, taken with
+`InputSetMenuMouse` as the Options screen takes it: its motion and buttons stop
+pressing pad 1's buttons and reach `InputTakeMenuMouse`. The game's own hand
+follows the pointer freely across the screen, as the Options screen's does
+(`NameMouseHand`, through `DrawMenu2DSprite`), while the orange brackets stay on
+the control it is over. The pointer is a point in the
+640x480 space that the mouse's relative motion moves, through the mapping the 2D is
+drawn with (`gfx::GetUiMapping`, so `video.aspect` and `ui_scale` both hold, and a
+window whose size differs from its target's, as on a high-DPI display); a
+script's `mouse:DX,DY` counts main-target pixels. It starts at the hand's
+fingertip, appears on the first motion, click or wheel notch and goes back to
+the pad when a pad button or the left stick is used.
+
+- **Hover.** A key, a tab (ALPHABET, SYMBOL/NUMBERS, DEFAULT, DECIDE, the two
+  arrows, DEL., INS., PROFILE) puts the cursor on it, with the cursor
+  sound, by setting `NameSelect.area`, `cursor` and `side_row` as the pad would.
+  Nothing else moves; the name's slots are not hover targets, since they lie on the way
+  to the tabs.
+- **Left click** is Cross. On a key or tab it presses `PAD_CROSS` for the
+  tick, which `CGamePad::Down` reports from `NameMouseSyntheticDown`, so the game
+  types the character, switches the tab, deletes, inserts, moves the text cursor,
+  opens the PROFILE message or asks to confirm (DECIDE) with its own code and
+  sounds. On a slot of the name it moves the text cursor there. In the "Accept?"
+  dialog the Yes line is Cross and the No line Circle; a click on the message
+  of PROFILE or of the default-name notice closes it. A click on nothing does
+  nothing.
+- **Right click** is Circle, as on the pad: it blanks a character on the keyboard
+  and tabs, answers No in "Accept?" and closes a message.
+- **Wheel.** Away from the user goes left or back, toward the user right or
+  forward. Over the name it moves the text cursor, as L1 and R1 do; anywhere
+  else it cycles the keyboard tabs (ALPHABET and SYMBOL/NUMBERS), as L2 and R2 do.
+- Clicks are ignored while the screen fades in and out, and a button still held
+  when it closes (or as it opens, from the book before it) acts only once
+  released, so no click reaches the next screen.
+
+The hit areas (`port/src/name_mouse_layout.cpp`) are the places
+`DrawNameTemplete`, `DrawCharaName` and `NameEnterDraw` draw at, for PAL's
+languages: the alphabet keyboard with the accented rows of French, German,
+Italian and Spanish, the symbol keyboard without its blank keys, and each
+language's tabs. The kana keyboards are Japanese-only and not offered.
+`name_mouse.cpp` is called from `pad_button_read`, ahead of the game's read of
+the pad, so no function of `ps2/src` is replaced for it.
+
+## The mouse in the pause menu
+
+The pause menu (the ring of pages in a dungeon, and the same ring in town) takes the mouse as a
+pointer the way the Register Name screen does, through `MenuPointer` (`port/src/menu_pointer.cpp`):
+its relative motion, mapped through the 2D's own mapping, drives the game's hand, which
+`DrawMenuObjectVibe` now draws at the pointer while it is in use, brackets and all staying on the
+control the pointer is over. A hover moves the game's own cursor (state the pad would set, and the
+cursor sound); a left click presses Cross for the tick, a right click Circle, so the game's code does
+what it would for the pad; a held button acts only once let go, so no click reaches the next page. A page
+without a handler (Save, Manual, the world map, and the rarer modes of the pages below) leaves the
+mouse to the pad's buttons as before.
+
+| Page | Hover and click | Wheel |
+|---|---|---|
+| Ring | an icon's row moves the selection; click opens the page | |
+| Item | a quick slot, the weapon and defense squares, the portrait, a cell of the board or the trash can; a tab or arrow turns the board's page; a party arrow changes member | over the board scrolls it, elsewhere changes page or member |
+| Weapon | a click left or right of the weapon in the middle steps the list and in the middle opens the actions; a face at the top brings that member round; the action rows, the element rows, Yes and No; on the attachment screen a socket, a cell of the board or the trash can | steps the list or the rows |
+| Allies | a face on the turntable turns to it (one place a tick, as held d-pad does); the card in front selects | turns one place |
+| Georama Parts | the part, one of its chips, or a cell of the board; the arrows turn to the next town's parts | scrolls the list or the board |
+| Leave Dungeon | Yes or No | |
+
+An item picked up rides the hand: click it and click where it goes, or press, drag and let go over the
+target. Let go over empty ground and the game asks "Throw this item away?"; Yes sends it through the
+trash can, as the pad does. The scroll bar beside a board takes clicks on its arrows and can be
+dragged. On the attachment screen the three tabs of the tag board turn its pages and its rows follow
+the pointer.
+
+The hit areas are the places the pages draw their brackets at (`ItemMenuModeDraw`, `WeaponMenuDraw`,
+`DrawCharaSelect`, `DrawAtoraSelect`, `DrawMenuMove`), so they follow the interface size and aspect.
+
 ## Arenas
 
 `CDataAlloc2<1>::Alloc/Alloc64/Align64` and the carving in

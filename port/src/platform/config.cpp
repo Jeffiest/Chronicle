@@ -299,6 +299,28 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "input.mouse_capture") {
         return ReadBool(value, config.mouse_capture);
     }
+    if (name == "input.touchpad") {
+        return ReadBool(value, config.touchpad);
+    }
+    if (name == "input.lightbar") {
+        return ReadBool(value, config.lightbar);
+    }
+    if (name == "input.touchpad_sensitivity") {
+        float sensitivity = 0.0f;
+        if (!ReadNumber(value, sensitivity) || !(sensitivity > 0.0f) || !std::isfinite(sensitivity)) {
+            return false;
+        }
+        config.touchpad_sensitivity = sensitivity;
+        return true;
+    }
+    if (name == "input.rumble_strength") {
+        float strength = 0.0f;
+        if (!ReadNumber(value, strength) || !std::isfinite(strength) || strength < 0.0f || strength > 1.0f) {
+            return false;
+        }
+        config.rumble_strength = strength;
+        return true;
+    }
     if (name == "input.mouse_zoom") {
         return ReadBool(value, config.mouse_zoom);
     }
@@ -526,6 +548,10 @@ std::string ConfigSerialize(const Config &config) {
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_zoom"] = config.mouse_zoom;
+    root["input"]["touchpad"] = config.touchpad;
+    root["input"]["touchpad_sensitivity"] = Shortest(config.touchpad_sensitivity);
+    root["input"]["lightbar"] = config.lightbar;
+    root["input"]["rumble_strength"] = Shortest(config.rumble_strength);
     root["input"]["mouse_camera_return"] = Shortest(config.mouse_camera_return);
     root["input"]["mouse_release"] = config.mouse_release_keys;
     root["input"]["vibration"] = options.vibration;

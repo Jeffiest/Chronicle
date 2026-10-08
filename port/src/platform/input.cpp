@@ -17,6 +17,7 @@
 #include "clock.hpp"
 #include "config.hpp"
 #include "mouse.hpp"
+#include "touchpad.hpp"
 #include "window.hpp"
 
 namespace {
@@ -156,6 +157,9 @@ struct PadSlot {
     InputRumble  rumble;
     bool         rumble_sent = false;
     Uint64       rumble_time = 0;
+    // The lightbar colour the game asked for, kept to restore when the pad reconnects.
+    bool         led_wanted = false;
+    Uint8        led[3] = {};
 };
 
 std::array<std::vector<Source>, kActionCount>            g_bindings;
@@ -184,6 +188,18 @@ bool  g_menu_navigation = false;
 bool  g_developer_menu = false;
 float g_menu_dx = 0.0f;
 float g_menu_dy = 0.0f;
+// A DualSense's touchpad as a menu pointer (platform/touchpad.hpp): its motion and scroll since the
+// last take, the buttons it holds, and the taps still to show as a click, for two takes.
+TouchpadGestures g_touchpad;
+bool             g_touchpad_on = true;
+bool             g_lightbar_on = true;
+float            g_rumble_strength = 1.0f;
+float            g_touch_dx = 0.0f;
+float            g_touch_dy = 0.0f;
+float            g_touch_wheel = 0.0f;
+std::uint32_t    g_touch_held = 0;
+std::uint32_t    g_touch_tap = 0;
+bool             g_touch_tap_shown = false;
 // Per host action: presses not yet consumed, and whether its non-key sources (mouse and gamepad
 // buttons, the script's keys) were held at the last poll, for their press edges.
 std::array<int, kHostActionCount>  g_host_presses{};
@@ -401,6 +417,53 @@ void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
     state.right_y = InputStickByte(g_gyro_invert_y ? -pitch : pitch);
 }
 
+// Sets a pad's lightbar if it has one.
+void ApplyLightbar(const PadSlot &slot) {
+    if (slot.gamepad == nullptr || !slot.led_wanted || !g_lightbar_on) {
+        return;
+    }
+    SDL_PropertiesID properties = SDL_GetGamepadProperties(slot.gamepad);
+    if (SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false)) {
+        SDL_SetGamepadLED(slot.gamepad, slot.led[0], slot.led[1], slot.led[2]);
+    }
+}
+
+// Folds pad 0's touchpad, if it has one, into the menu pointer's inputs.
+void ReadTouchpad(SDL_Gamepad *gamepad) {
+    if (gamepad == nullptr || !g_touchpad_on || SDL_GetNumGamepadTouchpads(gamepad) < 1) {
+        g_touchpad.Reset();
+        g_touch_held = 0;
+        return;
+    }
+    TouchpadFrame frame;
+    int           fingers = std::min(2, SDL_GetNumGamepadTouchpadFingers(gamepad, 0));
+    for (int i = 0; i < fingers; ++i) {
+        bool  down = false;
+        float x = 0.0f;
+        float y = 0.0f;
+        if (SDL_GetGamepadTouchpadFinger(gamepad, 0, i, &down, &x, &y, nullptr)) {
+            frame.finger[i] = {down, x, y};
+        }
+    }
+    frame.click = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_TOUCHPAD);
+    frame.create = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1);
+    TouchpadStep step = g_touchpad.Update(frame, SDL_GetTicks());
+    g_touch_held = step.held;
+    if (!g_menu_mouse) {
+        // Not a pointer's screen: the pad's gestures mean nothing and must not wait for the next.
+        g_touch_dx = g_touch_dy = g_touch_wheel = 0.0f;
+        g_touch_tap = 0;
+        return;
+    }
+    g_touch_dx += step.dx;
+    g_touch_dy += step.dy;
+    g_touch_wheel += step.wheel;
+    if (step.tapped != 0) {
+        g_touch_tap |= step.tapped;
+        g_touch_tap_shown = false;
+    }
+}
+
 void EnableGyro(SDL_Gamepad *gamepad) {
     if (SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO)) {
         SDL_SetGamepadSensorEnabled(gamepad, SDL_SENSOR_GYRO, g_gyro != ConfigGyro::Off);
@@ -457,6 +520,8 @@ void SyncGamepads() {
                     std::fprintf(stderr, "input: SDL_OpenGamepad: %s\n", SDL_GetError());
                 } else {
                     EnableGyro(slot.gamepad);
+                    SDL_SetGamepadPlayerIndex(slot.gamepad, static_cast<int>(&slot - g_slots.data()));
+                    ApplyLightbar(slot);
                 }
                 break;
             }
@@ -470,8 +535,8 @@ void SendRumble(int pad) {
     if (slot.gamepad == nullptr) {
         return;
     }
-    Uint16 low = static_cast<Uint16>(slot.rumble.large_motor * 257);
-    Uint16 high = slot.rumble.small_motor ? 0xFFFF : 0;
+    Uint16 low = static_cast<Uint16>(slot.rumble.large_motor * 257 * g_rumble_strength);
+    Uint16 high = slot.rumble.small_motor ? static_cast<Uint16>(0xFFFF * g_rumble_strength) : 0;
     SDL_RumbleGamepad(slot.gamepad, low, high, kRumbleMilliseconds);
     slot.rumble_sent = true;
     slot.rumble_time = SDL_GetTicks();
@@ -583,6 +648,13 @@ void InputApplyConfig(const Config &config) {
     }
     g_stick_sensitivity = config.stick_sensitivity;
     g_gyro_sensitivity = config.gyro_sensitivity;
+    g_touchpad_on = config.touchpad;
+    g_touchpad.SetSensitivity(config.touchpad_sensitivity);
+    g_lightbar_on = config.lightbar;
+    g_rumble_strength = config.rumble_strength;
+    for (const PadSlot &slot : g_slots) {
+        ApplyLightbar(slot);
+    }
     g_gyro_invert_x = config.gyro_invert_x;
     g_gyro_invert_y = config.gyro_invert_y;
     g_stick_invert_x = config.stick_invert_x;
@@ -625,6 +697,9 @@ void InputShutdown() {
     g_developer_menu = false;
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
+    g_touchpad.Reset();
+    g_touch_dx = g_touch_dy = g_touch_wheel = 0.0f;
+    g_touch_held = g_touch_tap = 0;
     g_mouse_look = {0.0f, 0.0f, g_mouse_look.read};
     g_keys.fill(false);
     g_scripted = {};
@@ -658,6 +733,7 @@ void InputPoll() {
         g_device[pad] = state;
         Compose(pad);
     }
+    ReadTouchpad(g_slots[0].gamepad);
     PollHostActions();
 }
 
@@ -767,6 +843,8 @@ void InputSetMenuMouse(bool on) {
     g_menu_mouse = on;
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
+    g_touch_dx = g_touch_dy = g_touch_wheel = 0.0f;
+    g_touch_tap = 0;
     float dx = 0.0f;
     float dy = 0.0f;
     MouseTakeMotion(dx, dy);
@@ -800,10 +878,19 @@ InputMenuMouse InputTakeMenuMouse() {
     MouseTakeMotion(dx, dy);
     InputMenuMouse mouse;
     // A script's motion is per tick, and a menu takes once a tick.
-    mouse.dx = g_menu_dx + dx + g_scripted.mouse_dx;
-    mouse.dy = g_menu_dy + dy + g_scripted.mouse_dy;
-    mouse.wheel = MouseTakeWheel() + std::exchange(g_scripted_wheel, 0.0f);
-    mouse.buttons = MouseButtons() | g_scripted.mouse_buttons;
+    mouse.dx = g_menu_dx + dx + g_scripted.mouse_dx + std::exchange(g_touch_dx, 0.0f);
+    mouse.dy = g_menu_dy + dy + g_scripted.mouse_dy + std::exchange(g_touch_dy, 0.0f);
+    mouse.wheel = MouseTakeWheel() + std::exchange(g_scripted_wheel, 0.0f) + std::exchange(g_touch_wheel, 0.0f);
+    mouse.buttons = MouseButtons() | g_scripted.mouse_buttons | g_touch_held;
+    // A tap is a click the pointer sees pressed on one take and let go on the next.
+    if (g_touch_tap != 0) {
+        if (g_touch_tap_shown) {
+            g_touch_tap = 0;
+        } else {
+            mouse.buttons |= g_touch_tap;
+            g_touch_tap_shown = true;
+        }
+    }
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
     return mouse;
@@ -838,6 +925,21 @@ void InputSetRumble(int pad, InputRumble rumble) {
     if (changed || (active && SDL_GetTicks() - slot.rumble_time >= kRumbleMilliseconds / 2)) {
         SendRumble(pad);
     }
+}
+
+void InputSetLightbar(int pad, std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+    if (pad < 0 || pad >= kInputPadCount) {
+        return;
+    }
+    PadSlot &slot = g_slots[pad];
+    if (slot.led_wanted && slot.led[0] == red && slot.led[1] == green && slot.led[2] == blue) {
+        return;
+    }
+    slot.led_wanted = true;
+    slot.led[0] = red;
+    slot.led[1] = green;
+    slot.led[2] = blue;
+    ApplyLightbar(slot);
 }
 
 InputRumble InputGetRumble(int pad) {

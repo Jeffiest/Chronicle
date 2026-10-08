@@ -135,6 +135,10 @@ key is optional; these are the defaults:
         "gyro_sensitivity": 0.5,    // camera-stick deflection per radian per second the pad turns
         "gyro_invert_x": false,
         "gyro_invert_y": false,
+        "touchpad": true,           // a DualSense's touchpad is the menus' mouse
+        "touchpad_sensitivity": 1.0, // pointer speed: 1 is a swipe across the pad for 1500 window pixels
+        "lightbar": true,           // a DualSense's lightbar shows the active character's life in a dungeon
+        "rumble_strength": 1.0,     // scales a gamepad's rumble motors, 0 to 1
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_zoom": false,        // optional third-person wheel zoom; middle click resets by default
@@ -287,6 +291,19 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   or down, `gyro_sensitivity` times the rate in radians per second; below 0.03
   is ignored as drift. `gyro_invert_x`/`_y` flip it, and `stick_invert_x`/`_y`
   flip the camera stick the same way.
+- **DualSense.** A DualSense works as any gamepad; with SDL's HID driver (not Steam Input or
+  DS4Windows, which present an Xbox pad) it also gets:
+  - **Touchpad as a mouse.** On the screens that take the mouse as a pointer (the Options
+    screen) one finger moves the game's hand, pressing the pad is Cross, the
+    Create button and a quick two-finger tap are Circle, and two fingers sliding scroll like the
+    wheel. A single-finger tap does not click, so a brush of the pad never confirms anything.
+    `touchpad` turns it off; `touchpad_sensitivity` sets the speed.
+  - **Lightbar.** In a dungeon it follows the active character's life, green when whole through
+    yellow to red; elsewhere it rests at blue. `lightbar` turns it off.
+  - **Player light.** The pad lights its player number (1 for the first pad).
+  - **Rumble.** `rumble_strength` scales both motors, for pads whose motors feel stronger than a
+    DualShock 2's.
+  Adaptive triggers are not used.
 - **First-person view.** R2's view, in a dungeon or outdoors in a town, reads
   only the left stick, so while it is on, the right stick and the gyro drive the left stick whenever
   the left stick itself is centred.

@@ -2,6 +2,7 @@
 
 #include <libpad.h>
 
+#include "dualsense.hpp"
 #include "mainselect.hpp"
 #include "platform/input.hpp"
 
@@ -17,6 +18,7 @@ PC_OVERRIDE int pad_button_read(PAD_STATUS *status, int port, int slot) {
     unsigned char data[32];
     InputLatchPad(port);
     if (port == 0) {
+        DualSenseUpdate();
         g_debug_menu_pressed = InputHostPressed(InputHostAction::DebugMenu);
     }
     if (!scePadRead(port, slot, data)) {

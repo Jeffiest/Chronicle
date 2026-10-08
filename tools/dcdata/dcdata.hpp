@@ -506,7 +506,157 @@ inline bool AddPackAlias(std::vector<PackMember> &members, std::string_view name
     return false;
 }
 
+// Where a picture named `name` lies in an IM2 bank: the offset of its TIM2 file and its length.
+struct Im2Picture {
+    std::size_t offset = 0;
+    std::size_t size = 0;
+};
+
+inline Im2Picture FindIm2Picture(std::span<const unsigned char> bank, std::string_view name) {
+    if (bank.size() < 16 || std::memcmp(bank.data(), "IM2", 3) != 0) {
+        return {};
+    }
+    std::uint32_t count = Le32(bank.data() + 4);
+    if (16 + std::uint64_t(count) * 48 > bank.size()) {
+        return {};
+    }
+    for (std::uint32_t i = 0; i < count; i++) {
+        const unsigned char *entry = bank.data() + 16 + i * 48;
+        std::size_t          length = strnlen(reinterpret_cast<const char *>(entry), 32);
+        if (std::string_view(reinterpret_cast<const char *>(entry), length) != name) {
+            continue;
+        }
+        std::size_t offset = Le32(entry + 32);
+        if (offset + 32 > bank.size() || std::memcmp(bank.data() + offset, "TIM2", 4) != 0) {
+            return {};
+        }
+        // The picture header's total size is not reliable in the game's images; its parts are.
+        const unsigned char *picture = bank.data() + offset + 16;
+        std::size_t          size = 16 + std::size_t(picture[12] | picture[13] << 8) + Le32(picture + 8) + Le32(picture + 4);
+        if (size > bank.size() - offset) {
+            return {};
+        }
+        return {offset, size};
+    }
+    return {};
+}
+
+// The colours of an 8-bit TIM2 picture's 256-entry CLUT as RGB, or none.
+inline std::vector<std::uint32_t> Tim2Colours(std::span<const unsigned char> tim) {
+    if (tim.size() < 48 || tim[16 + 0x13] != 5 || (tim[16 + 0x0E] | tim[16 + 0x0F] << 8) != 256) {
+        return {};
+    }
+    std::size_t clut = 16 + (tim[16 + 0x0C] | tim[16 + 0x0D] << 8) + Le32(tim.data() + 16 + 8);
+    if (clut + 1024 > tim.size()) {
+        return {};
+    }
+    std::vector<std::uint32_t> colours(256);
+    for (int i = 0; i < 256; i++) {
+        colours[i] = Le32(tim.data() + clut + i * 4) & 0xFFFFFF;
+    }
+    return colours;
+}
+
+inline int SharedColours(const std::vector<std::uint32_t> &a, const std::vector<std::uint32_t> &b) {
+    int shared = 0;
+    for (std::size_t i = 0; i < a.size() && i < b.size(); i++) {
+        shared += a[i] == b[i];
+    }
+    return shared;
+}
+
+// The dungeon copies weapon icons by palette index from whichever wepicon sheet is loaded into the
+// HUD's itempack: a dungeon-entry pack's on a new floor, then a menu's once the main menu or the
+// quick-change ring closes or a script reloads the item list. So every wepicon sheet of a language
+// has to share itempack's palette, as the American ones do. On the PAL disc only English's
+// dungeon-entry sheets do, and the HUD icon comes out in the wrong colours after any of those; the
+// other languages' fishing and shop sheets are off as well, though only the town shows them. A
+// sheet in another palette takes the dungeon-entry sheet's place: the same icons in itempack's.
+inline void NormalizeIconSheets(const fs::path &out, const std::vector<Record> &records) {
+    // A sheet in another palette shares a handful of its colours with itempack's.
+    constexpr int              kSharedPalette = 250;
+    constexpr std::string_view prefix = "commenu/";
+    constexpr std::string_view suffix = "/itempack.img";
+    for (const Record &record : records) {
+        if (!record.path.starts_with(prefix) || !record.path.ends_with(suffix)) {
+            continue;
+        }
+        std::string language = record.path.substr(prefix.size(), record.path.size() - prefix.size() - suffix.size());
+        if (language.empty() || language.find('/') != std::string::npos) {
+            continue;
+        }
+        std::vector<unsigned char> itempack = ReadFile(out / record.path);
+        Im2Picture                 hud = FindIm2Picture(itempack, "itempack");
+        if (hud.size == 0) {
+            continue;
+        }
+        std::vector<std::uint32_t> hud_colours = Tim2Colours(std::span(itempack).subspan(hud.offset, hud.size));
+
+        std::vector<unsigned char> donor;
+        std::string                entry_packs = std::format("commenu/{}/dunenter/", language);
+        for (const Record &other : records) {
+            if (!donor.empty() || !other.path.starts_with(entry_packs) || !other.path.ends_with(".pak")) {
+                continue;
+            }
+            for (const PackMember &member : ReadPack(ReadFile(out / other.path))) {
+                Im2Picture icons = FindIm2Picture(member.data, "wepicon");
+                if (icons.size != 0 &&
+                    SharedColours(Tim2Colours(std::span(member.data).subspan(icons.offset, icons.size)), hud_colours) >= kSharedPalette) {
+                    donor.assign(member.data.begin() + icons.offset, member.data.begin() + icons.offset + icons.size);
+                    break;
+                }
+            }
+        }
+        if (donor.empty()) {
+            continue;
+        }
+
+        // Whether the bank's wepicon was in another palette and the donor took its place.
+        auto replace = [&](std::vector<unsigned char> &bank) {
+            Im2Picture icons = FindIm2Picture(bank, "wepicon");
+            if (icons.size != donor.size() ||
+                SharedColours(Tim2Colours(std::span(bank).subspan(icons.offset, icons.size)), hud_colours) >= kSharedPalette) {
+                return false;
+            }
+            std::copy(donor.begin(), donor.end(), bank.begin() + icons.offset);
+            return true;
+        };
+        // Every image bank and pack of the language, but the leftovers the game never names (_x, x.old).
+        std::string folder = std::format("commenu/{}/", language);
+        for (const Record &file : records) {
+            std::string_view path = file.path;
+            std::string_view name = path.substr(path.rfind('/') + 1);
+            bool             bank = path.ends_with(".img");
+            if (!path.starts_with(folder) || name.starts_with('_') ||
+                !(bank || path.ends_with(".pak") || path.ends_with(".pac"))) {
+                continue;
+            }
+            std::vector<unsigned char> data = ReadFile(out / file.path);
+            if (bank) {
+                if (replace(data)) {
+                    WriteFile(out / "normalized" / file.path, data);
+                }
+                continue;
+            }
+            std::vector<PackMember> members;
+            try {
+                members = ReadPack(data);
+            } catch (const Error &) {
+                continue; // a .pac that holds no pack
+            }
+            bool changed = false;
+            for (PackMember &member : members) {
+                changed |= replace(member.data);
+            }
+            if (changed) {
+                WriteFile(out / "normalized" / file.path, WritePack(members));
+            }
+        }
+    }
+}
+
 inline void Normalize(const fs::path &out, const std::vector<Record> &records) {
+    NormalizeIconSheets(out, records);
     std::unordered_set<std::string> paths;
     for (const Record &record : records) {
         paths.insert(record.path);

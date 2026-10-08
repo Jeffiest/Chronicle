@@ -45,7 +45,13 @@ port/build/pc/darkcloud --data data --save save
 ```
 
 The extractor accepts a PAL or NTSC disc image. For NTSC data it supplies the
-localized filenames and pack members expected by the shared game code. Original
+localized filenames and pack members expected by the shared game code. For the
+PAL disc's English data it gives every weapon icon sheet the one in the HUD's
+palette, which the language's dungeon-entry packs carry. The game copies the
+HUD's weapon icon by palette index from whichever sheet a menu last loaded, and
+English's others keep the American palette, so on closing the main menu or the
+quick-change ring the icon came out in the wrong colours. The other languages'
+fishing and shop sheets get it too. Original
 disc files remain in the extracted tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.

@@ -1351,6 +1351,30 @@ language's tabs. The kana keyboards are Japanese-only and not offered.
 `name_mouse.cpp` is called from `pad_button_read`, ahead of the game's read of
 the pad, so no function of `ps2/src` is replaced for it.
 
+## The mouse in the pause menu
+
+The pause menu (the ring of pages in a dungeon, and the same ring in town) takes the mouse as a
+pointer the way the Register Name screen does, through `MenuPointer` (`port/src/menu_pointer.cpp`):
+its relative motion, mapped through the 2D's own mapping, drives the game's hand, which
+`DrawMenuObjectVibe` now draws at the pointer while it is in use, brackets and all staying on the
+control the pointer is over. A hover moves the game's own cursor (state the pad would set, and the
+cursor sound); a left click presses Cross for the tick, a right click Circle, so the game's code does
+what it would for the pad; a held button acts only once let go, so no click reaches the next page. A page
+without a handler (Save, Manual, the world map, and the rarer modes of the pages below) leaves the
+mouse to the pad's buttons as before.
+
+| Page | Hover and click | Wheel |
+|---|---|---|
+| Ring | an icon's row moves the selection; click opens the page | |
+| Item | a quick slot, the weapon and defense squares, the portrait, a cell of the board or the trash can; a tab or arrow turns the board's page; a party arrow changes member | over the board scrolls it, elsewhere changes page or member |
+| Weapon | a click left or right of the weapon in the middle steps the list and in the middle opens the actions; a face at the top brings that member round; the action rows, the element rows, Yes and No; on the attachment screen a socket, a cell of the board or the trash can | steps the list or the rows |
+| Allies | a face on the turntable turns to it (one place a tick, as held d-pad does); the card in front selects | turns one place |
+| Georama Parts | the part, one of its chips, or a cell of the board; the arrows turn to the next town's parts | scrolls the list or the board |
+| Leave Dungeon | Yes or No | |
+
+The hit areas are the places the pages draw their brackets at (`ItemMenuModeDraw`, `WeaponMenuDraw`,
+`DrawCharaSelect`, `DrawAtoraSelect`, `DrawMenuMove`), so they follow the interface size and aspect.
+
 ## Arenas
 
 `CDataAlloc2<1>::Alloc/Alloc64/Align64` and the carving in

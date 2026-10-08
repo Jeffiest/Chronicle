@@ -10,3 +10,8 @@ are blank in the file; the port builds them from the font's own letters and mark
 
 To use another font for message text, put it at `lang/font.ttf` in the save folder (that wins over this
 one) or start the game with `--font <file>`.
+
+## Cinzel-Regular.ttf
+
+Cinzel (Copyright 2020 The Cinzel Project Authors, https://github.com/NDISCOVER/Cinzel), SIL Open Font License 1.1. It is
+used only by `tools/textpack/build.py`, to letter the bosses' names (a Trajan-style serif) on the pictures that tool draws.

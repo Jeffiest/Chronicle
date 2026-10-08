@@ -2,11 +2,14 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <memory>
+#include <string>
 
 #include "dataread.hpp"
 #include "gameloop.hpp"
 #include "gfx/gfx.hpp"
+#include "localize_texture.hpp"
 #include "mainselect.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
@@ -34,6 +37,10 @@ struct LoadingSprite {
 
 LoadingSprite sprite;
 
+// The area name card's file name without its extension (mt01...), which is what the localization's picture is called:
+// the card is one texture called "maptitle" whatever the area.
+std::string card_name;
+
 u_char *Archive() {
     static std::unique_ptr<u_char[]> buffer(new u_char[kArchiveBytes + 64]);
     std::uintptr_t                   address = reinterpret_cast<std::uintptr_t>(buffer.get());
@@ -57,6 +64,9 @@ void Upload(CTexture *texture) {
         PortDecodedTexture decoded;
         if (PortDecodeTexture(texture->bpp, texture->width, texture->height, levels, 1, (u_char *) texture->clut, 0,
                               false, decoded)) {
+            if (texture == &nl_tex && !card_name.empty()) {
+                LocalizeTexture(card_name.c_str(), decoded);
+            }
             tbp = PortCreateTexture(decoded, PortTextureOwner::Loading, &cbp);
         }
     }
@@ -160,6 +170,7 @@ PC_OVERRIDE void init_now_loading(int title_number) {
     }
 
     char path[64] = "";
+    card_name.clear();
 
     if (title_number < 5) {
         std::snprintf(path, sizeof path, "%s/mt0%d.tm2", image_directory, title_number + 1);
@@ -189,6 +200,7 @@ PC_OVERRIDE void init_now_loading(int title_number) {
             return;
         }
 
+        card_name = std::filesystem::path(path).stem().string();
         LoadTexture((TM2_head *) archive, &nl_tex, 8000, 9000);
     }
 

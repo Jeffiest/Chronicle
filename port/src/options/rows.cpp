@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <format>
 #include <iterator>
 #include <string>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "menu_option.hpp"
+#include "platform/input.hpp"
 #include "platform/window.hpp"
 
 namespace options {
@@ -559,6 +561,96 @@ const Row kAccessibilityRows[] = {
                                       "\"Always Win QTEs\"\nButton prompts always\nend in a perfect."),
 };
 
+// Strings the binding rows point at. A deque never moves what it holds, so the c_str pointers the
+// rows keep stay valid as more are added.
+const char *Keep(std::string text) {
+    static std::deque<std::string> store;
+    return store.emplace_back(std::move(text)).c_str();
+}
+
+std::string ActionName(std::string_view action) {
+    static constexpr struct {
+        std::string_view action;
+        const char      *name;
+    } kNames[] = {
+        {"up",             "Up"              },
+        {"down",           "Down"            },
+        {"left",           "Left"            },
+        {"right",          "Right"           },
+        {"cross",          "Cross"           },
+        {"circle",         "Circle"          },
+        {"square",         "Square"          },
+        {"triangle",       "Triangle"        },
+        {"l1",             "L1"              },
+        {"r1",             "R1"              },
+        {"l2",             "L2"              },
+        {"r2",             "R2"              },
+        {"l3",             "L3"              },
+        {"r3",             "R3"              },
+        {"start",          "Start"           },
+        {"select",         "Select"          },
+        {"lx-",            "Left Stick Left" },
+        {"lx+",            "Left Stick Right"},
+        {"ly-",            "Left Stick Up"   },
+        {"ly+",            "Left Stick Down" },
+        {"rx-",            "Right Stick Left"},
+        {"rx+",            "Right Stick Right"},
+        {"ry-",            "Right Stick Up"  },
+        {"ry+",            "Right Stick Down"},
+        {"fps_toggle",     "Toggle FPS"      },
+        {"developer_menu", "Developer Menu"  },
+        {"debug_menu",     "Debug Menu"      },
+        {"gyro_hold",      "Gyro Hold"       },
+        {"zoom_reset",     "Reset Zoom"      },
+    };
+    for (const auto &entry : kNames) {
+        if (entry.action == action) {
+            return entry.name;
+        }
+    }
+    return std::string(action);
+}
+
+int One(const Config &) {
+    return 1;
+}
+
+int Zero(const Config &) {
+    return 0;
+}
+
+void NoopSet(Config &, int) {}
+
+void RemoveBinding(Config &config, std::string_view action) {
+    std::erase_if(config.key_bindings, [&](const ConfigKeyBinding &binding) {
+        return std::string_view(binding.action) == action;
+    });
+}
+
+// One row per action, in the order the game reads them. The whole-axis actions (lx ly rx ry) only
+// take MouseX/MouseY, so a key cannot go on them, and Reset Zoom is edited by its own Controls row.
+std::span<const Row> BindingRows() {
+    static const std::vector<Row> rows = [] {
+        std::vector<Row> list;
+        for (const InputActionInfo &info : InputActions()) {
+            if (info.whole_axis || info.action == "zoom_reset") {
+                continue;
+            }
+            Row row;
+            row.key = Keep("input.bindings." + std::string(info.action));
+            row.label = Keep(ActionName(info.action));
+            row.help = Keep("\"" + ActionName(info.action) + "\"\nPress confirm, then a\nkey or mouse button, to\nrebind it.");
+            row.count = One;
+            row.get = Zero;
+            row.set = NoopSet;
+            row.action = Keep(std::string(info.action));
+            list.push_back(row);
+        }
+        return list;
+    }();
+    return rows;
+}
+
 } // namespace
 
 std::span<const Page> Pages() {
@@ -568,11 +660,15 @@ std::span<const Page> Pages() {
         {"Audio",         "\"Audio\"\nSound and music.",                             kAudioRows        },
         {"Controls",      "\"Controls\"\nMouse, gamepad and gyro.",                  kControlRows      },
         {"Accessibility", "\"Accessibility\"\nHelp with harder parts\nof the game.", kAccessibilityRows},
+        {"Bindings",      "\"Bindings\"\nWhat each key and\nmouse button does.",       BindingRows()     },
     };
     return pages;
 }
 
 std::string RowValue(const Row &row, const Config &config) {
+    if (row.action != nullptr) {
+        return InputBindingLabel(row.action);
+    }
     std::string value = row.text != nullptr ? row.text(config) : ChoiceName(row.names, row.get(config));
     if (ConfigAppliesOnRestart(row.key)) {
         value += " *";
@@ -594,7 +690,9 @@ bool StepRow(const Row &row, Config &config, int direction, bool wrap) {
 void ResetPage(const Page &page, Config &config) {
     const Config defaults;
     for (const Row &row : page.rows) {
-        if (row.restore != nullptr) {
+        if (row.action != nullptr) {
+            RemoveBinding(config, row.action);
+        } else if (row.restore != nullptr) {
             row.restore(config, defaults);
         } else {
             row.set(config, row.get(defaults));
@@ -652,3 +750,18 @@ void OptionSetCameraReturn(Config &config, int choice) {
 void OptionRestoreCameraReturn(Config &config, const Config &defaults) {
     options::RestoreCameraReturn(config, defaults);
 }
+
+namespace options {
+
+void SetBinding(Config &config, std::string_view action, std::string_view key) {
+    auto binding = std::ranges::find(config.key_bindings, std::string(action), &ConfigKeyBinding::action);
+    std::vector<std::string> keys;
+    keys.emplace_back(key);
+    if (binding == config.key_bindings.end()) {
+        config.key_bindings.push_back({std::string(action), std::move(keys)});
+    } else {
+        binding->keys = std::move(keys);
+    }
+}
+
+} // namespace options

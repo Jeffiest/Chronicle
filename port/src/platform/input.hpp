@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -206,3 +207,37 @@ InputKeyboardMovement InputGetKeyboardMovement();
 
 // Mirrors pad 0 gameplay key lock for the independent keyboard movement channel.
 void InputSetMovementLocked(bool locked);
+
+// One action of the binding table, for a bindings menu. host is true for the actions the port reads
+// itself (fps_toggle, debug_menu, ...) rather than the game; whole_axis is true for lx/ly/rx/ry,
+// which only take MouseX/MouseY and so cannot be bound to a key.
+struct InputActionInfo {
+    std::string_view action;
+    bool             host = false;
+    bool             whole_axis = false;
+};
+
+// Every action of the binding table, in the order the game reads them.
+std::span<const InputActionInfo> InputActions();
+
+// Whether the action also takes "Gamepad:<button>" sources (the host actions do).
+bool InputActionTakesGamepad(std::string_view action);
+
+// The keys, mouse buttons and gamepad buttons now bound to an action, as text ("F, Mouse1"); "None"
+// when nothing is bound and "" when the action is unknown.
+std::string InputBindingLabel(std::string_view action);
+
+// Opens a rebind capture: the keys and buttons held now become the set already seen, so the press
+// that opens the capture is not itself bound.
+void InputBeginBindCapture();
+
+// While a capture is open: the name of the key, mouse button or gamepad button that went down since
+// the last call, or "" when none. The name reads back through InputBindKeys (SDL key names, Mouse1
+// to Mouse5, Gamepad:<button>); "Escape" is reported so a caller can cancel. Gamepad buttons are
+// only reported when allow_gamepad is set.
+std::string InputTakeBindKey(bool allow_gamepad);
+
+// Whether the source InputTakeBindKey named is held now. A caller that has just bound it keeps
+// swallowing input until it is let go, so the press that made the binding does not also act on the
+// action it was given to.
+bool InputBindSourceHeld(std::string_view name);

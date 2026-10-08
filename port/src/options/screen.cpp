@@ -153,6 +153,8 @@ void ShowHelp() {
 }
 
 void Close() {
+    g_screen.binding_row = -1;
+    g_screen.binding_wait.clear();
     g_screen.save_failed = !ConfigChange(ConfigGet());
     g_screen.step = OPTION_STEP_FADE_OUT;
     g_screen.step_count = 0;
@@ -198,6 +200,57 @@ int Pressed(std::uint16_t held, int mask, bool repeat) {
     return fired;
 }
 
+// A binding row is waiting for its new key: the cursor stays on it and the rest of the menu ignores
+// input until a key, mouse button or gamepad button arrives, or the player cancels. After a binding
+// the menu keeps ignoring input until the key is let go, so the press that made the binding does not
+// also press the action it was given to.
+void RunBindingCapture() {
+    const Row *row = CurrentRow();
+    if (row == nullptr || row->action == nullptr) {
+        g_screen.binding_row = -1;
+        g_screen.binding_wait.clear();
+        return;
+    }
+    if (!g_screen.binding_wait.empty()) {
+        if (InputBindSourceHeld(g_screen.binding_wait)) {
+            g_screen.binding_prompt = InputBindingLabel(row->action);
+            return;
+        }
+        g_screen.binding_wait.clear();
+        g_screen.binding_row = -1;
+        return;
+    }
+    if ((Pressed(HeldButtons(), PAD_CIRCLE, false) & PAD_CIRCLE) != 0) {
+        g_screen.binding_row = -1;
+        ComMenuSePlay(MENU_SOUND_REFUSE);
+        return;
+    }
+    std::string key = InputTakeBindKey(InputActionTakesGamepad(row->action));
+    if (key.empty()) {
+        return;
+    }
+    if (key == "Escape") {
+        g_screen.binding_row = -1;
+        ComMenuSePlay(MENU_SOUND_REFUSE);
+        return;
+    }
+    Config config = ConfigGet();
+    SetBinding(config, row->action, key);
+    Apply(config);
+    // Show what it became while the source is still down.
+    g_screen.binding_prompt = InputBindingLabel(row->action);
+    g_screen.binding_wait = key;
+    ComMenuSePlay(MENU_SOUND_CONFIRM);
+}
+
+void BeginBinding(int row) {
+    g_screen.binding_row = row;
+    g_screen.binding_prompt = "Press a key...";
+    g_screen.binding_wait.clear();
+    InputBeginBindCapture();
+    ComMenuSePlay(MENU_SOUND_CONFIRM);
+}
+
 void SetPage(int page) {
     int  count = static_cast<int>(Pages().size());
     bool on_exit = g_screen.row == RowCount(g_screen.page);
@@ -219,6 +272,11 @@ void RunMouse() {
     bool           moved = mouse.dx != 0.0f || mouse.dy != 0.0f;
     g_screen.mouse_buttons = mouse.buttons;
 
+    if (g_screen.binding_row >= 0) {
+        // A rebind is waiting for a button: keep the mouse out of the menu, but let its buttons
+        // reach the capture through the input layer.
+        return;
+    }
     if ((clicked & 2) != 0) {
         Close();
         return;
@@ -307,7 +365,9 @@ void RunMouse() {
             return;
         } else if (over_row >= 0) {
             const Row &row = CurrentPage().rows[over_row];
-            if (x >= kValueX - 8 && x < kValueX + 24) {
+            if (row.action != nullptr) {
+                BeginBinding(over_row);
+            } else if (x >= kValueX - 8 && x < kValueX + 24) {
                 Step(row, -1, false);
             } else if (x >= kValueRight - 16) {
                 Step(row, 1, false);
@@ -324,6 +384,10 @@ void RunMouse() {
 }
 
 void RunKeys() {
+    if (g_screen.binding_row >= 0) {
+        RunBindingCapture();
+        return;
+    }
     int           old_page = g_screen.page;
     int           old_row = g_screen.row;
     std::uint16_t held = HeldButtons();
@@ -368,7 +432,11 @@ void RunKeys() {
         if (direction != 0) {
             Step(*row, direction, false);
         } else if ((actions & PAD_CROSS) != 0) {
-            Step(*row, 1, true);
+            if (row->action != nullptr) {
+                BeginBinding(g_screen.row);
+            } else {
+                Step(*row, 1, true);
+            }
         }
     } else if ((actions & PAD_CROSS) != 0) {
         Close();

@@ -2,6 +2,7 @@
 
 #include <span>
 #include <string>
+#include <string_view>
 
 #include "platform/config.hpp"
 
@@ -18,6 +19,9 @@ struct Row {
     std::string (*text)(const Config &) = nullptr;
     const char *names = nullptr;
     void (*restore)(Config &config, const Config &defaults) = nullptr;
+    // A binding row: the input action it edits. Its value is the action's current keys, and
+    // pressing confirm starts listening for the next one. nullptr for every other row.
+    const char *action = nullptr;
 };
 
 struct Page {
@@ -36,6 +40,10 @@ bool StepRow(const Row &row, Config &config, int direction, bool wrap);
 
 // Puts every setting of the page back to its default.
 void ResetPage(const Page &page, Config &config);
+
+// Points the action of a binding row at one key or button name ("F", "Mouse2", "Gamepad:paddle2"),
+// replacing whatever config.json had for it.
+void SetBinding(Config &config, std::string_view action, std::string_view key);
 
 // Rebuilds the list of window sizes the Resolution row offers, for the window's monitor.
 void ListResolutions();

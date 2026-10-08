@@ -559,6 +559,39 @@ void PollHostActions() {
     }
 }
 
+// A rebind capture in progress: the keys, mouse buttons and gamepad buttons that were already held
+// at the last call, so the next call reports only what has gone down since.
+bool                                 g_bind_capture = false;
+std::array<bool, SDL_SCANCODE_COUNT> g_bind_keys{};
+std::uint32_t                        g_bind_mouse = 0;
+std::uint16_t                        g_bind_pad = 0;
+
+bool BindKeyHeld(int scancode) {
+    return g_keys[scancode] || std::ranges::find(g_scripted.keys, scancode) != g_scripted.keys.end();
+}
+
+// The gamepad buttons held now, one bit per entry of kGamepadButtons.
+std::uint16_t BindGamepadHeld() {
+    std::uint16_t held = 0;
+    for (std::size_t i = 0; i < std::size(kGamepadButtons); ++i) {
+        bool down = std::ranges::any_of(g_slots, [&](const PadSlot &slot) {
+            return slot.gamepad != nullptr && SDL_GetGamepadButton(slot.gamepad, kGamepadButtons[i].button);
+        });
+        if (down) {
+            held |= static_cast<std::uint16_t>(1u << i);
+        }
+    }
+    return held;
+}
+
+void SnapshotBind() {
+    for (int scancode = 0; scancode < SDL_SCANCODE_COUNT; ++scancode) {
+        g_bind_keys[scancode] = BindKeyHeld(scancode);
+    }
+    g_bind_mouse = MouseButtons() | g_scripted.mouse_buttons;
+    g_bind_pad = BindGamepadHeld();
+}
+
 } // namespace
 
 void InputInit() {
@@ -961,6 +994,133 @@ bool InputBindKeys(std::string_view action, std::span<const std::string_view> ke
         return true;
     }
     return false;
+}
+
+std::span<const InputActionInfo> InputActions() {
+    static const std::vector<InputActionInfo> actions = [] {
+        std::vector<InputActionInfo> list;
+        list.reserve(kActionCount);
+        for (std::size_t i = 0; i < kActionCount; ++i) {
+            list.push_back({kActions[i].name, i >= kFirstHostAction, kActions[i].kind == ActionKind::Axis});
+        }
+        return list;
+    }();
+    return actions;
+}
+
+bool InputActionTakesGamepad(std::string_view action) {
+    for (std::size_t i = 0; i < kActionCount; ++i) {
+        if (kActions[i].name == action) {
+            return i >= kFirstHostAction;
+        }
+    }
+    return false;
+}
+
+std::string InputBindingLabel(std::string_view action) {
+    EnsureBindings();
+    std::string text;
+    bool        known = false;
+    for (std::size_t i = 0; i < kActionCount; ++i) {
+        if (kActions[i].name != action) {
+            continue;
+        }
+        known = true;
+        for (const Source &source : g_bindings[i]) {
+            std::string one;
+            switch (source.kind) {
+                case Source::Key: {
+                    const char *name = SDL_GetScancodeName(static_cast<SDL_Scancode>(source.code));
+                    one = name != nullptr ? name : "";
+                    break;
+                }
+                case Source::MouseButton:
+                    one = "Mouse" + std::to_string(source.code);
+                    break;
+                case Source::MouseAxis:
+                    one = std::string(source.scale < 0.0f ? "-" : "") + (source.code == 0 ? "MouseX" : "MouseY");
+                    break;
+                case Source::GamepadButton: {
+                    const char *name = SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(source.code));
+                    one = name != nullptr ? std::string("Gamepad:") + name : "";
+                    break;
+                }
+            }
+            if (!one.empty()) {
+                if (!text.empty()) {
+                    text += ", ";
+                }
+                text += one;
+            }
+        }
+    }
+    if (!known) {
+        return {};
+    }
+    return text.empty() ? "None" : text;
+}
+
+void InputBeginBindCapture() {
+    EnsureBindings();
+    g_bind_capture = true;
+    SnapshotBind();
+}
+
+std::string InputTakeBindKey(bool allow_gamepad) {
+    if (!g_bind_capture) {
+        return {};
+    }
+    std::string found;
+    for (int scancode = 0; scancode < SDL_SCANCODE_COUNT && found.empty(); ++scancode) {
+        if (!BindKeyHeld(scancode) || g_bind_keys[scancode]) {
+            continue;
+        }
+        const char *name = SDL_GetScancodeName(static_cast<SDL_Scancode>(scancode));
+        if (name != nullptr && *name != '\0') {
+            found = name;
+        }
+    }
+    std::uint32_t mouse = MouseButtons() | g_scripted.mouse_buttons;
+    for (int bit = 0; bit < kMouseButtonCount && found.empty(); ++bit) {
+        if ((mouse & (1u << bit)) != 0 && (g_bind_mouse & (1u << bit)) == 0) {
+            found = "Mouse" + std::to_string(bit + 1);
+        }
+    }
+    if (allow_gamepad && found.empty()) {
+        std::uint16_t pad = BindGamepadHeld();
+        for (std::size_t i = 0; i < std::size(kGamepadButtons) && found.empty(); ++i) {
+            if ((pad & (1u << i)) != 0 && (g_bind_pad & (1u << i)) == 0) {
+                const char *name = SDL_GetGamepadStringForButton(kGamepadButtons[i].button);
+                if (name != nullptr && *name != '\0') {
+                    found = std::string("Gamepad:") + name;
+                }
+            }
+        }
+    }
+    SnapshotBind();
+    return found;
+}
+
+bool InputBindSourceHeld(std::string_view name) {
+    std::string lower = Lower(name);
+    if (lower.size() == 6 && lower.starts_with("mouse") && lower[5] >= '1' && lower[5] < '1' + kMouseButtonCount) {
+        return ((MouseButtons() | g_scripted.mouse_buttons) & (1u << (lower[5] - '1'))) != 0;
+    }
+    if (lower.starts_with("gamepad:")) {
+        SDL_GamepadButton button = SDL_GetGamepadButtonFromString(lower.substr(8).c_str());
+        if (button == SDL_GAMEPAD_BUTTON_INVALID) {
+            return false;
+        }
+        std::uint16_t held = BindGamepadHeld();
+        for (std::size_t i = 0; i < std::size(kGamepadButtons); ++i) {
+            if (kGamepadButtons[i].button == button) {
+                return (held & (1u << i)) != 0;
+            }
+        }
+        return false;
+    }
+    int scancode = InputScancodeFromName(name);
+    return scancode >= 0 && BindKeyHeld(scancode);
 }
 
 void InputResetBindings() {

@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 #include <libpad.h>
 
+#include <algorithm>
 #include <array>
+#include <span>
 #include <string_view>
 
 #include "../gameloop.hpp"
@@ -572,4 +574,37 @@ TEST(PlatformPad, ScriptedZoomWheelIsTakenOnceAndMenusOwnIt) {
     InputLatchPad(0);
     ASSERT_FALSE(InputGetMouseLook().zoom_reset);
     InputShutdown();
+}
+
+// The bindings menu reads the action table and shows each action's current keys.
+TEST(PlatformPad, ActionsListAndBindingLabel) {
+    InputResetBindings();
+    std::span<const InputActionInfo> actions = InputActions();
+    ASSERT_FALSE(actions.empty());
+    ASSERT_TRUE(actions.front().action == "up");
+    ASSERT_TRUE(std::ranges::any_of(actions, [](const InputActionInfo &info) {
+        return info.action == "fps_toggle" && info.host;
+    }));
+    ASSERT_FALSE(InputActionTakesGamepad("cross"));
+    ASSERT_TRUE(InputActionTakesGamepad("fps_toggle"));
+    ASSERT_EQ(InputBindingLabel("not_an_action"), "");
+    ASSERT_TRUE(InputBindKeys("triangle", std::array<std::string_view, 1>{"P"}));
+    ASSERT_EQ(InputBindingLabel("triangle"), "P");
+    InputResetBindings();
+    ASSERT_EQ(InputBindingLabel("triangle"), "Tab");
+}
+
+// A capture reports the first source that goes down, then not again until it is let go.
+TEST(PlatformPad, BindCaptureReportsTheFirstNewSource) {
+    InputResetBindings();
+    InputSetScriptedDevices({});
+    InputBeginBindCapture();
+    InputKeyboardMouse held;
+    held.keys = {InputScancodeFromName("P")};
+    InputSetScriptedDevices(held);
+    ASSERT_EQ(InputTakeBindKey(false), "P");
+    ASSERT_TRUE(InputBindSourceHeld("P"));
+    ASSERT_TRUE(InputTakeBindKey(false).empty());
+    InputSetScriptedDevices({});
+    ASSERT_FALSE(InputBindSourceHeld("P"));
 }

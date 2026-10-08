@@ -138,10 +138,14 @@ void DrawRows(int alpha) {
         bool       selected = g_screen.row == r;
         texts.labels[g_screen.page][r].Draw(kLabelX, y, alpha);
         GameText &value = texts.values[g_screen.page][r];
-        value.Set(RowValue(row, config));
+        if (row.action != nullptr && g_screen.binding_row == r) {
+            value.Set(g_screen.binding_prompt);
+        } else {
+            value.Set(RowValue(row, config));
+        }
         value.SetColour(selected ? FONT_COLOR_YELLOW : FONT_COLOR_WHITE);
         value.Draw((kValueX + kValueRight - value.Width()) / 2, y, alpha);
-        if (selected) {
+        if (selected && row.action == nullptr) {
             int choice = row.get(config);
             if (choice > 0) {
                 texts.left.Draw(kValueX + 8, y, alpha);

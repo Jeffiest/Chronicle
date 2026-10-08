@@ -45,16 +45,34 @@ port/build/pc/darkcloud --data data --save save
 ```
 
 The extractor accepts a PAL or NTSC disc image. For NTSC data it supplies the
-localized filenames and pack members expected by the shared game code. For the
+localized filenames and pack members expected by the shared game code, including
+the dungeon event text that NTSC keeps inside each `event.stb`. For the
 PAL disc's English data it gives every weapon icon sheet the one in the HUD's
 palette, which the language's dungeon-entry packs carry. The game copies the
 HUD's weapon icon by palette index from whichever sheet a menu last loaded, and
 English's others keep the American palette, so on closing the main menu or the
 quick-change ring the icon came out in the wrong colours. The other languages'
-fishing and shop sheets get it too. Original
-disc files remain in the extracted tree for verification against `DATA.HD2`;
+fishing and shop sheets get it too. Original disc files remain in the extracted
+tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.
+
+The extractor also writes `languages.json`: the release the disc is and the
+languages it carries, as `LanguageCode` numbers. It knows a release by a
+fingerprint of its `DATA.HD2` (dcdata's `KnownReleases`, which prints the name
+it found); a release it does not know gets NTSC's or PAL's languages by its file
+layout. The port offers the languages in `SupportedLanguages`: with one, it
+starts in it past the language select; with several, the select offers them.
+NTSC 1.02 has American English (1) alone, as retail NTSC: the disc's other
+languages are early drafts whose images were never translated (its French and
+German title cards read "Nolun Village" and "Sun/Moon Temple"), its
+British-named files have no town dialogue, and its Spanish is missing files.
+The July 12 PAL prototype has the five its select offers, English being British
+(2). Data extracted before this file existed starts at the select, with a note
+to extract again.
+
+The select is retail's one image of all five buttons, so it cannot yet leave out
+a language the data lacks, and its English button reads as the disc's art does.
 
 `darkcloud` takes:
 
@@ -483,7 +501,7 @@ before the window opens. `GamePad.Down` fires on a press edge, so a press
 needs a later line that releases it:
 
 ```
-# language select (English), attract movie, title logo, menu
+# language select (English; skipped when the data has one language), attract movie, title logo, menu
 0
 70 cross
 75
@@ -530,7 +548,7 @@ the warm-up; the game then starts in `GAME_MODE_MENU`, the developer menu
 (`MenuLoop`, `ps2/src/main.cpp`), instead of the language select, and leaves
 pad 2 unlocked. The port takes `DebugMode` from `game.debug_mode` in
 `config.json`, which is off by default. The port starts at the language select
-whether this flag is true or false. Setting it to true enables debug controls
+(the attract movie when the data has one language) whether this flag is true or false. Setting it to true enables debug controls
 from startup; the debug toggle chord can also enable them during play.
 `darkcloud` prints `debug mode on` when the flag starts enabled. An explicit
 `--jump menu` opens the developer menu at startup.
@@ -636,7 +654,7 @@ Cross enters the selected dungeon and Circle returns to the developer menu:
 | opening | the opening (`GAME_MODE_OPENING`, scenes op_a to op_d) |
 | `eventN` | one of three story events (map 23 event 310, map 41 event 150, map 19 event 305) |
 | `memory card N` | the save screen in mode N |
-| `Language N` | sets `LanguageCode` (PAL default 2, British English) |
+| `Language N` | sets `LanguageCode` (default: the data's one language when it has one, otherwise 2, British English) |
 
 ```
 0 down
@@ -691,6 +709,7 @@ with the hardware taken out, line for line otherwise:
 - The transitions are `GameApplyLoopResult` (what each mode's loop result
   does) and `GameFollowMapJump` (`NextMapNo` into the next mode), exported for
   the tests.
+- Data with one language starts at the attract movie, in that language.
 - The language select goes straight on to the attract movie: retail's memory
   card check (`GAME_MODE_MEMORY_CHECK`, `MemCheckLoop`) is never entered, as
   there is no card (see "Saves and host files").

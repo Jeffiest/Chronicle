@@ -13,6 +13,7 @@
 #include "battle_globals.hpp"
 #include "btsysscript.hpp"
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 #include "dataset.hpp"
 #include "draw2d_port.hpp"
 #include "dngstatusdata.hpp"
@@ -840,6 +841,14 @@ int RunGame(int argc, char **argv) {
     main_select_menu_no = 0;
     std::strcpy(main_select_param, "e01");
     InitCDFile();
+    // With one language there is nothing to choose: the game starts in it, past the language
+    // select, as retail NTSC does. With several the select offers retail's five.
+    std::vector<s32> languages = SupportedLanguages();
+    if (languages.size() == 1) {
+        LanguageCode = languages[0];
+    } else if (languages.empty()) {
+        std::fprintf(stderr, "the data has no languages.json; run dcdata extract again\n");
+    }
     MGInit();
     InitMemoryFile();
     BufferAllClear();
@@ -872,6 +881,9 @@ int RunGame(int argc, char **argv) {
         MapNo = -1;
         mode = GAME_MODE_LANGUAGE;
         GamePad.KeyLock2(1);
+        if (languages.size() == 1) {
+            GameApplyLoopResult(GAME_MODE_LANGUAGE, 1);
+        }
     }
     if (g_jump.set) {
         ApplyJump();

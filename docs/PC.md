@@ -251,6 +251,12 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | gamepad R4 (`paddle1`) | none | the town or dungeon debug menu, in debug mode, without Select+L2 |
 | gamepad L5 (`paddle4`) | none | held, the gyroscope turns the camera (`gyro` set to `held`) |
 
+The pad's buttons are the DualShock 2's, whichever gamepad SDL reports
+(`platform/gamepad_map.hpp`). Back/View is Select on every pad but the
+PlayStation ones that have a touchpad: a DualShock 4 or DualSense presses
+Select with the touchpad click and leaves Share/Create unbound (issue #73),
+and a PS3, which has no touchpad, keeps its Select on Select.
+
 The square button is not a guard in this game: the guard is R1 held while
 locked on, so right click is R1. The follow camera sits at
 `follow + distance * (sin a, cos a)` (`camerafollow.cpp`) and the stick's

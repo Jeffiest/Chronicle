@@ -79,11 +79,15 @@ else is internal. No game header is reachable from here: `platform/`, `gfx/` and
     image of the frame (`kPreviousFrame`, a frame target, a target sharing the main depth) or
     another image that shows past its frame, is carried to the target's edge on every side where it
     reaches the frame's edge from inside (its span crosses or ends on the edge, starting inside).
-    The rectangle itself is drawn as given; flanking quads cover the rest, with texture coordinates
-    continued (so an image of the frame shows its own sides) and colour, fog and depth held at the
-    edge. Fades, however tiled, full-frame fills and bands, the previous-frame feedback and frame
-    grabs drawn back therefore reach the window's edges; HUD pieces (textured from ordinary
-    textures) and anything wholly outside the frame do not grow. Nothing of a host list is carried:
+     The rectangle itself is drawn as given; flanking quads cover the rest, with texture coordinates
+     continued (so an image of the frame shows its own sides) and colour, fog and depth held at the
+     edge. A rectangle that instead covers the whole frame with an ordinary texture (a cutscene
+     still, a full-screen backdrop) is a cover: it is stretched to the target's edge on each axis the
+     target shows past its frame, so a 4:3 still fills a wider window rather than leaving its sides
+     bare. Fades, however tiled, full-frame fills and bands, the previous-frame feedback and frame
+     grabs drawn back therefore reach the window's edges; HUD pieces (textured from ordinary
+     textures, and never covering the whole frame) and anything wholly outside the frame do not
+     grow. Nothing of a host list is carried:
     a display render's `options.overlay`, and the list itself with `options.host` (the FPS counter,
     whose glyph runs would otherwise streak to the window's edge wherever one lies across the
     frame's).

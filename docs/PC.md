@@ -911,9 +911,12 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   blur and the haze reach the window's edges;
   the two outermost haze columns do not wander, which on the PS2 left a
   ragged strip of the sharp frame in the overscan. For heat haze, eight depth
-  samples build a gradual coverage mask around each focus distance. The
-  bands also test against depth at the front of that range, keeping nearby
-  objects sharp while the background haze fades in. `frame_image` is no
+  samples build a gradual coverage mask; the wobble's planes run from the
+  camera's near clip to past the far focus plane, spaced in 1/z (what the
+  frame's rows are linear in), so the haze ramps up evenly from the foreground
+  to the horizon and every object takes up as much of the wobble as its depth
+  gives instead of the effect starting at a line partway up the view. The near
+  pass keeps its narrower range around the near focus plane. `frame_image` is no
   longer written.
 - **Water** (`port/src/water_draw.cpp`) refracts the frame at its own
   resolution instead of the game's field copy, and only from where water

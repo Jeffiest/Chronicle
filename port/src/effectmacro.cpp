@@ -24,6 +24,10 @@ float g_jitter[21 * 15 + 1];
 
 float &Jitter(int i, int j) { return g_jitter[i * 15 + j]; }
 
+// The edit camera's near clip. The heat haze reaches the bottom of the view from here, so an
+// object in front of the focus planes still takes up as much of the wobble as its depth gives.
+constexpr float kHazeNear = 10.0f;
+
 // The columns of the logical frame the effect covers (retail's screen was the frame; a target that
 // shows past it is covered to its edges) and the texel width of the blurred image laid over them.
 struct Span {
@@ -55,9 +59,11 @@ std::array<gfx::Vertex2D, 4> Quad(float x0, float y0, float x1, float y1, float 
 }
 
 // Accumulate the frame beyond several nearby depth planes into a premultiplied image. With heat
-// haze, each plane contributes an equal fraction so the effect gains coverage gradually across the
-// focus distance instead of ending in a visible line on the ground.
-void DrawBeyond(gfx::TextureHandle beyond, gfx::TextureHandle snapshot, float focus, bool feather) {
+// haze, the planes are spread from `front` to `back` so the effect gains coverage gradually from
+// the nearest depth it reaches to the farthest; the depths are spaced in 1/z, which is what the
+// screen's rows are linear in, so the haze ramps at an even rate down the frame instead of fading
+// out in a band of a few rows. Each plane contributes an equal fraction.
+void DrawBeyond(gfx::TextureHandle beyond, gfx::TextureHandle snapshot, float front, float back, bool feather) {
     const uint8_t clear[4] = {};
     gfx::SetRenderTarget(beyond);
     gfx::Clear(true, clear, false, 0.0f);
@@ -72,7 +78,9 @@ void DrawBeyond(gfx::TextureHandle beyond, gfx::TextureHandle snapshot, float fo
     binding.filter = gfx::Filter::Nearest;
     const int samples = feather ? 8 : 1;
     for (int i = 0; i < samples; i++) {
-        sceVu0FVECTOR point = {0.0f, 0.0f, focus + (feather ? (i - 3.5f) * 24.0f : 0.0f), 1.0f};
+        float         t     = static_cast<float>(i) / 7.0f;
+        float         plane = feather ? 1.0f / (1.0f / front + (1.0f / back - 1.0f / front) * t) : front;
+        sceVu0FVECTOR point = {0.0f, 0.0f, plane, 1.0f};
         sceVu0ApplyMatrix(point, mgRenderInfo.screen, point);
         point[2] /= point[3];
         float depth = MGPortDepth(static_cast<unsigned>(static_cast<int>(point[2])) & 0xFFFFFF);
@@ -145,8 +153,11 @@ void AppendStrip(std::vector<gfx::Vertex2D> &triangles, const std::vector<gfx::V
 // scenery around it, and the quarter-width copy came back as blocks. The ordinary depth-of-field
 // passes retain their half- and quarter-size images of only the scenery beyond each plane. Heat
 // haze instead uses two full-resolution targets sharing the frame's depth buffer. Each target gains
-// coverage over eight depth planes; the bands test at the front edge of that range so nearby
-// objects stay sharp. The two outermost columns do not wander past the edges of the image.
+// coverage over eight depth planes. The wobble's target spans from the camera's near clip to beyond
+// the far focus plane, its planes spaced in 1/z so the haze ramps up evenly down the frame: every
+// object takes up as much of the wobble as its depth gives, and the background haze blends into the
+// foreground rather than starting at a line partway up the view. The two outermost columns do not
+// wander past the edges of the image.
 PC_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
     int phase;
     int i;
@@ -182,11 +193,15 @@ PC_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
     }
 
     if (haze) {
-        for (i = 0; i < 2; i++) {
-            sceVu0FVECTOR front = {0.0f, 0.0f, focus[i] - 84.0f, 1.0f};
-            sceVu0ApplyMatrix(front, mgRenderInfo.screen, front);
-            screen[i * 2][2] = screen[i * 2 + 1][2] = static_cast<int>(front[2] / front[3]);
-        }
+        // The wobble's image spans from the near clip to beyond the far focus plane, so the haze
+        // ramps in over the whole view rather than starting at a line partway up the frame; its
+        // bands test at that image's front. The near pass keeps its own front.
+        sceVu0FVECTOR near_front = {0.0f, 0.0f, focus[0] - 84.0f, 1.0f};
+        sceVu0ApplyMatrix(near_front, mgRenderInfo.screen, near_front);
+        screen[0][2] = screen[1][2] = static_cast<int>(near_front[2] / near_front[3]);
+        sceVu0FVECTOR far_front = {0.0f, 0.0f, kHazeNear, 1.0f};
+        sceVu0ApplyMatrix(far_front, mgRenderInfo.screen, far_front);
+        screen[2][2] = screen[3][2] = static_cast<int>(far_front[2] / far_front[3]);
     }
 
     gfx::TextureHandle snapshot = gfx::NamedRenderTarget("dof frame", 0x280, SCREEN_HEIGHT, false, false, true);
@@ -200,7 +215,8 @@ PC_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
                                gfx::SnapshotFrame(snapshot);
 
     if (ready) {
-        DrawBeyond(haze ? near_image : beyond, snapshot, focus[0], haze);
+        DrawBeyond(haze ? near_image : beyond, snapshot, haze ? focus[0] - 84.0f : focus[0],
+                   haze ? focus[0] + 84.0f : focus[0], haze);
         if (!haze) {
             Resize(beyond, span.left, 0.0f, span.right, gfx::kLogicalHeight, near_image, half_width, half_height);
         }
@@ -209,7 +225,7 @@ PC_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
             if (haze) {
                 far_image = gfx::NamedRenderTarget("dof far", 0x280, SCREEN_HEIGHT, true, true);
                 if (far_image != gfx::kNullTexture) {
-                    DrawBeyond(far_image, snapshot, focus[1], true);
+                    DrawBeyond(far_image, snapshot, kHazeNear, focus[1] + 84.0f, true);
                 }
             } else {
                 gfx::TextureHandle half = gfx::NamedRenderTarget("dof far half", half_width, half_height, true);
@@ -217,7 +233,7 @@ PC_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
                 far_image = gfx::NamedRenderTarget("dof far", half_width, half_height, true);
 
                 if (half != gfx::kNullTexture && quarter != gfx::kNullTexture && far_image != gfx::kNullTexture) {
-                    DrawBeyond(beyond, snapshot, focus[1], false);
+                    DrawBeyond(beyond, snapshot, focus[1], focus[1], false);
                     Resize(beyond, span.left, 0.0f, span.right, gfx::kLogicalHeight, half, half_width, half_height);
                     Resize(half, 0.0f, 0.0f, static_cast<float>(half_width), static_cast<float>(half_height), quarter,
                            quarter_width, quarter_height);

@@ -92,6 +92,13 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     bool                          mouse_zoom = false;
+    // A DualSense's touchpad as the menus' mouse, at this speed (1 is a swipe across the pad for 1500
+    // window pixels), and its lightbar showing the active character's life.
+    bool                          touchpad = true;
+    float                         touchpad_sensitivity = 1.0f;
+    bool                          lightbar = true;
+    // Scales a gamepad's rumble motors, 0 to 1.
+    float                         rumble_strength = 1.0f;
     // Third-person vertical return after mouse input: 0 holds height, 1 is retail's rate.
     float                    mouse_camera_return = 0.2f;
     std::vector<std::string> mouse_release_keys;

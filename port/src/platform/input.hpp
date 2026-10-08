@@ -123,6 +123,10 @@ void InputSetLookOnLeftStick(bool left);
 
 void InputSetRumble(int pad, InputRumble rumble);
 
+// Colours a DualSense's lightbar (and any pad with an RGB light) while input.lightbar is on. A pad
+// without one, or no pad, ignores it.
+void InputSetLightbar(int pad, std::uint8_t red, std::uint8_t green, std::uint8_t blue);
+
 InputRumble InputGetRumble(int pad);
 
 // Replaces what InputPoll reads for one pad, for tests and replays; nullptr

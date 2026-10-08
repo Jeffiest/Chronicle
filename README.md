@@ -43,7 +43,7 @@ start asks for the disc image and extracts the game's files from it.
 
 Game text can come from JSON language files (one per language, laid out as Minecraft's are) and be drawn from a
 TrueType font so it stays sharp at any window size. The first start writes the language files from your own
-game data; the Dark Cloud community font is bundled. See [docs/LOCALIZATION.md](docs/LOCALIZATION.md).
+game data; the Dark Cloud community font is bundled. See `docs/LOCALIZATION.md`.
 
 ## Repository layout
 

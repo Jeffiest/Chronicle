@@ -1219,7 +1219,7 @@ the last message by id may extend beyond that range. `GameTextFile::Set`
 gives back -1 and leaves the file as it was where either would not hold.
 
 The text of retail's message files can be replaced from JSON, one file per language, with the
-disc's text as the fallback: see [LOCALIZATION.md](LOCALIZATION.md).
+disc's text as the fallback: see `docs/LOCALIZATION.md`.
 
 ## The Options screen
 

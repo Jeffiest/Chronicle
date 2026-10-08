@@ -67,6 +67,11 @@ struct Screen {
     float       pointer_y = 0.0f;
     std::uint32_t mouse_buttons = 0;
     Glyph       glyph = Glyph::None;
+    // The binding row listening for a new key, or -1, and what its value shows meanwhile.
+    int         binding_row = -1;
+    std::string binding_prompt;
+    // The source just bound, held until it is let go so its press does not act on the new binding.
+    std::string binding_wait;
 };
 
 extern Screen g_screen;

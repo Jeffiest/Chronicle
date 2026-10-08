@@ -202,8 +202,25 @@ TEST(MenuOption, PagesInOrder) {
     for (const options::Page &page : pages) {
         names.push_back(page.name);
     }
-    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility"}));
+    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility",
+                                                        "Bindings"}));
     ASSERT_TRUE(std::string_view(pages[4].rows[0].key) == "game.qte_always_win");
+}
+
+TEST(MenuOption, BindingRowsSetAndReset) {
+    std::span<const options::Row> bindings = options::Pages()[5].rows;
+    ASSERT_FALSE(bindings.empty());
+    auto found = std::ranges::find_if(bindings, [](const options::Row &row) {
+        return row.action != nullptr && std::string_view(row.action) == "triangle";
+    });
+    ASSERT_TRUE(found != bindings.end());
+    Config config;
+    options::SetBinding(config, found->action, "P");
+    ASSERT_EQ(config.key_bindings.size(), 1u);
+    ASSERT_EQ(config.key_bindings.front().action, "triangle");
+    ASSERT_EQ(config.key_bindings.front().keys, (std::vector<std::string>{"P"}));
+    options::ResetPage(options::Pages()[5], config);
+    ASSERT_TRUE(config.key_bindings.empty());
 }
 
 TEST(MenuOption, StepAndResetRows) {

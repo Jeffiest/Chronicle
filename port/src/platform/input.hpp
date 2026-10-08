@@ -177,14 +177,23 @@ InputMenuMouse InputTakeMenuMouse();
 
 // The family of button symbols that matches the device last used: keyboard and mouse after a key,
 // a mouse button or the mouse moved, otherwise the first gamepad's make (PS4 before one has been
-// touched, and for a pad of unknown make).
+// touched; Xbox for a pad of unknown make).
 enum class InputGlyphFamily {
     Ps4,
     Ps5,
     Xbox,
     Switch,
     Keyboard,
+    Ps3,
+    SteamDeck,
+    SteamController,
 };
+
+// The family for a gamepad from what SDL reports of it: its SDL_GamepadType (as an int), USB vendor
+// and product. PlayStation, Xbox and Nintendo pads by type; Valve's pads (vendor 0x28DE) by product,
+// the Steam Deck apart from the Steam Controllers (the 2015 one and the 2026 one); a pad SDL does not
+// know is drawn as an Xbox pad, the layout most pads copy.
+InputGlyphFamily InputGlyphFamilyForGamepad(int sdl_gamepad_type, unsigned vendor, unsigned product);
 
 InputGlyphFamily InputActiveGlyphFamily();
 

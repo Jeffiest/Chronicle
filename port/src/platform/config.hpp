@@ -31,13 +31,16 @@ enum class ConfigGyro {
 };
 
 // input.glyph_device: whose button symbols the game draws. Auto follows the device in use (the
-// last of keyboard/mouse or gamepad to be touched; a gamepad's own family), PS4 until one is.
+// last of keyboard/mouse or gamepad to be touched; a gamepad's own family; Xbox for a pad of unknown make), PS4 until one is.
 enum class ConfigGlyphDevice {
     Auto,
+    Ps3,
     Ps4,
     Ps5,
     Xbox,
     Switch,
+    SteamDeck,
+    SteamController,
     Keyboard,
 };
 

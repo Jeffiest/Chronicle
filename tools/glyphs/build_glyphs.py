@@ -146,27 +146,31 @@ def pack(images, reference=REFERENCE):
     return atlas, rects
 
 
-def build_ps5_pack(folder, out):
+# The other flat packs (same layout and button names as the PS5 one): style name -> file prefix.
+EXTRA_PACKS = {"ps3": "ps3_", "steamdeck": "sd_", "steamcontroller": "sc_"}
+
+
+def build_ps5_pack(folder, out, style="ps5", prefix="ps5_"):
     images = {}
     missing = []
     for name, stem in PS5_PACK.items():
-        path = os.path.join(folder, "ps5_" + stem + ".png")
+        path = os.path.join(folder, prefix + stem + ".png")
         if os.path.exists(path):
             images[name] = load(path)
         else:
             missing.append(path)
     atlas, rects = pack(images, PS5_PACK_REFERENCE)
-    atlas.save(os.path.join(out, "ps5.png"), optimize=True)
+    atlas.save(os.path.join(out, style + ".png"), optimize=True)
     index_path = os.path.join(out, "glyphs.json")
     with open(index_path, encoding="utf-8") as f:
         index = json.load(f)
-    index["styles"]["ps5"] = {"atlas": "ps5.png", "glyphs": rects}
+    index["styles"][style] = {"atlas": style + ".png", "glyphs": rects}
     with open(index_path, "w", encoding="utf-8") as f:
         json.dump(index, f, indent=1, sort_keys=True)
         f.write("\n")
     for m in missing:
         print("missing:", m, file=sys.stderr)
-    print("ps5", len(rects), "glyphs")
+    print(style, len(rects), "glyphs")
     return 1 if missing else 0
 
 
@@ -175,13 +179,20 @@ def main():
     ap.add_argument("--src")
     ap.add_argument("--ps5-pack", help="folder of ps5_*.png buttons: rebuilds only the ps5 atlas from it, "
                     "keeping the other styles in the existing glyphs.json")
+    for style in EXTRA_PACKS:
+        ap.add_argument("--%s-pack" % style, help="folder of %s*.png buttons: rebuilds only the %s atlas, as --ps5-pack "
+                        "does for ps5" % (EXTRA_PACKS[style], style))
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "..", "port", "glyphs"))
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     if args.ps5_pack:
         return build_ps5_pack(args.ps5_pack, args.out)
+    for style, prefix in EXTRA_PACKS.items():
+        folder = getattr(args, style + "_pack")
+        if folder:
+            return build_ps5_pack(folder, args.out, style, prefix)
     if not args.src:
-        ap.error("--src or --ps5-pack is required")
+        ap.error("--src or one of the --*-pack folders is required")
     index = {"reference": CELL, "styles": {}}
     missing = []
 

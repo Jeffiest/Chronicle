@@ -202,14 +202,20 @@ const char *StyleName(const Config &config) {
     InputGlyphFamily family = InputGlyphFamily::Ps4;
     switch (config.glyph_device) {
         case ConfigGlyphDevice::Auto: family = InputActiveGlyphFamily(); break;
+        case ConfigGlyphDevice::Ps3: family = InputGlyphFamily::Ps3; break;
         case ConfigGlyphDevice::Ps4: family = InputGlyphFamily::Ps4; break;
         case ConfigGlyphDevice::Ps5: family = InputGlyphFamily::Ps5; break;
         case ConfigGlyphDevice::Xbox: family = InputGlyphFamily::Xbox; break;
         case ConfigGlyphDevice::Switch: family = InputGlyphFamily::Switch; break;
+        case ConfigGlyphDevice::SteamDeck: family = InputGlyphFamily::SteamDeck; break;
+        case ConfigGlyphDevice::SteamController: family = InputGlyphFamily::SteamController; break;
         case ConfigGlyphDevice::Keyboard: family = InputGlyphFamily::Keyboard; break;
     }
     switch (family) {
+        case InputGlyphFamily::Ps3: return "ps3";
         case InputGlyphFamily::Ps5: return "ps5";
+        case InputGlyphFamily::SteamDeck: return "steamdeck";
+        case InputGlyphFamily::SteamController: return "steamcontroller";
         case InputGlyphFamily::Xbox: return "xbox";
         case InputGlyphFamily::Switch: return "switch";
         case InputGlyphFamily::Keyboard: return "keyboard";

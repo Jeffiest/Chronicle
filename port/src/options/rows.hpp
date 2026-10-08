@@ -3,6 +3,8 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "platform/config.hpp"
 
@@ -31,6 +33,12 @@ struct Page {
 };
 
 std::span<const Page> Pages();
+
+// The key of a page's name: options.page.<name in lower case>; its help is that key with .help.
+std::string PageKey(const char *name);
+
+// Every string the settings rows draw that is their own: key and English, as LocalizeText takes them.
+std::vector<std::pair<std::string, std::string>> RowStrings();
 
 // The value a setting row shows, with " *" when it applies at the next start.
 std::string RowValue(const Row &row, const Config &config);

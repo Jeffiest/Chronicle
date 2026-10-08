@@ -206,6 +206,12 @@ void          DestroyTexture(TextureHandle texture);
 // index byte. Alpha is in the renderer's units: 0xFF is GS 0x80; ConvertPs2Alpha converts.
 bool UpdateTexture(TextureHandle texture, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                    const void *pixels, uint32_t row_length = 0);
+// UpdateTexture that is never recorded into a display list: it happens at once, even between
+// BeginRecording and EndRecording. For a texture that is filled once and kept (the TrueType
+// message font's atlas): a list that is recorded and never drawn, as the lists of ticks the window
+// skips are, would take its upload with it, and the texture would stay without it for good.
+bool UpdateTextureNow(TextureHandle texture, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+                      const void *pixels, uint32_t row_length = 0);
 bool UpdatePalette(TextureHandle palette, const uint32_t *rgba, uint32_t first = 0, uint32_t count = 256);
 
 std::optional<TextureInfo> GetTextureInfo(TextureHandle texture);

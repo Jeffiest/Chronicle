@@ -32,6 +32,7 @@
 #include "mglib_port.hpp"
 #include "nowload.hpp"
 #include "platform/clock.hpp"
+#include "localize.hpp"
 #include "platform/config.hpp"
 #include "platform/input.hpp"
 #include "platform/overlay.hpp"
@@ -883,9 +884,19 @@ int RunGame(int argc, char **argv) {
         GamePad.KeyLock2(1);
         if (languages.size() == 1) {
             GameApplyLoopResult(GAME_MODE_LANGUAGE, 1);
+        } else if (const int language = ConfigGet().language;
+                   std::ranges::find(languages, language) != languages.end()) {
+            LanguageCode = language;
+            MapNo = 801;
+            mode = GAME_MODE_RUSH_MOVIE;
         }
     }
     if (g_jump.set) {
+        // A jump skips the language screen, so the language chosen in config.json is the one it starts in.
+        if (const int language = ConfigGet().language;
+            std::ranges::find(languages, language) != languages.end()) {
+            LanguageCode = language;
+        }
         ApplyJump();
     }
 
@@ -894,6 +905,8 @@ int RunGame(int argc, char **argv) {
     bool data_loaded = false;
     bool skip_title = false;
     for (;;) {
+        // A language chosen on the Options screen takes hold here, where the next area is about to load.
+        LocalizeApplyPendingLanguage();
         if (mode != GAME_MODE_UNUSED_12 && !data_loaded) {
             initialize_data();
             data_loaded = true;
@@ -957,6 +970,15 @@ int RunGame(int argc, char **argv) {
 
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
+            if (result == 0 && LocalizeLanguagePending() && !MenuOptionOpen() &&
+                (mode == GAME_MODE_EDIT || mode == GAME_MODE_TITLE)) {
+                // The language was changed in this town or title and the Options screen has closed: load
+                // the same map again, now in the new language. A dungeon floor is not restarted for it;
+                // the language takes hold when the next area loads.
+                NextMapNo = MapNo;
+                StartEventNo = -1;
+                result = 1;
+            }
 
             GiveOnArrival();
             InputSetLookOnLeftStick((mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA) ||

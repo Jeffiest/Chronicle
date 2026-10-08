@@ -641,8 +641,9 @@ void DestroyTexture(TextureHandle handle) {
     DestroyDoomedTexture(handle);
 }
 
-bool UpdateTexture(TextureHandle handle, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
-                   const void *pixels, uint32_t row_length) {
+namespace {
+bool UpdateTextureImpl(TextureHandle handle, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+                       const void *pixels, uint32_t row_length, bool record) {
     Texture *texture = LookupTexture(handle);
     if (texture == nullptr || pixels == nullptr) {
         Error("UpdateTexture: no texture %#x", handle);
@@ -659,7 +660,7 @@ bool UpdateTexture(TextureHandle handle, uint32_t mip, uint32_t x, uint32_t y, u
     uint32_t texel = TexelSize(texture->desc.format);
     uint32_t stride = (row_length ? row_length : w) * texel;
     uint32_t row = w * texel;
-    if (RecordingCalls()) {
+    if (record && RecordingCalls()) {
         UpdateTextureEntry entry{handle, mip, x, y, w, h, std::vector<uint8_t>(static_cast<size_t>(row) * h)};
         for (uint32_t i = 0; i < h; i++) {
             std::memcpy(entry.pixels.data() + static_cast<size_t>(i) * row,
@@ -686,6 +687,18 @@ bool UpdateTexture(TextureHandle handle, uint32_t mip, uint32_t x, uint32_t y, u
                            &region);
     ToRest(cmd, image);
     return true;
+}
+
+} // namespace
+
+bool UpdateTexture(TextureHandle handle, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+                   const void *pixels, uint32_t row_length) {
+    return UpdateTextureImpl(handle, mip, x, y, w, h, pixels, row_length, true);
+}
+
+bool UpdateTextureNow(TextureHandle handle, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+                      const void *pixels, uint32_t row_length) {
+    return UpdateTextureImpl(handle, mip, x, y, w, h, pixels, row_length, false);
 }
 
 bool UpdatePalette(TextureHandle palette, const uint32_t *rgba, uint32_t first, uint32_t count) {

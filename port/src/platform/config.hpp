@@ -30,6 +30,17 @@ enum class ConfigGyro {
     Held,
 };
 
+// input.glyph_device: whose button symbols the game draws. Auto follows the device in use (the
+// last of keyboard/mouse or gamepad to be touched; a gamepad's own family), PS4 until one is.
+enum class ConfigGlyphDevice {
+    Auto,
+    Ps4,
+    Ps5,
+    Xbox,
+    Switch,
+    Keyboard,
+};
+
 struct ConfigKeyBinding {
     std::string              action;
     std::vector<std::string> keys;
@@ -100,11 +111,23 @@ struct Config {
     bool                          lightbar = true;
     // Scales a gamepad's rumble motors, 0 to 1.
     float                         rumble_strength = 1.0f;
+    // input.glyphs "new": the button symbols of glyphs/ (see glyphs.hpp); "original": the game's own.
+    bool                          glyphs_new = true;
+    ConfigGlyphDevice             glyph_device = ConfigGlyphDevice::Auto;
     // Third-person vertical return after mouse input: 0 holds height, 1 is retail's rate.
     float                    mouse_camera_return = 0.2f;
     std::vector<std::string> mouse_release_keys;
     ConfigGameOptions        options;
     bool                     discord_rich_presence = true;
+    // game.language: 0 asks at start-up, as retail does; 2 to 6 is the language to start in
+    // (LanguageCode: English, Francais, Deutsch, Italiano, Espanol) and skips the language screen.
+    int                           language = 0;
+    // video.text_shadow and video.glyph_shadow: how strong the shadow under the TrueType message text and
+    // under the button symbols in it is, in percent in steps of 5. 0 casts none, 50 is the soft shadow
+    // (the letters' default), 100 the deep one. The symbols' is lighter, because a solid shape stacks
+    // the shadow where a thin stroke does not.
+    int                           text_shadow = 50;
+    int                           glyph_shadow = 25;
 
     bool operator==(const Config &) const = default;
 };

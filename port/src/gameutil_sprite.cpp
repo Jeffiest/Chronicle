@@ -1,3 +1,9 @@
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <set>
+#include <string>
+#include <tuple>
 #include <vector>
 
 #include "draw2d_port.hpp"
@@ -32,6 +38,15 @@ PC_OVERRIDE void set2DSprite_Core(sceVif1Packet *packet, CTexture *texture, cons
                                   u8 red, u8 green, u8 blue, u8 alpha) {
     if (texture == nullptr || !g_batch_open) {
         return;
+    }
+
+    // DC_SPRITE_TRACE=1: each distinct (texture, texel rect) a sprite draws, once, for finding the art
+    // a draw site uses (button symbols baked into textures).
+    static const bool                                           trace = std::getenv("DC_SPRITE_TRACE") != nullptr;
+    static std::set<std::tuple<std::string, int, int, int, int>> seen;
+    if (trace && seen.emplace(texture->name, texel.x, texel.y, texel.width, texel.height).second) {
+        std::fprintf(stderr, "sprite %s texel %d %d %d %d screen %d %d %d %d\n", texture->name, texel.x, texel.y,
+                     texel.width, texel.height, screen.x, screen.y, screen.width, screen.height);
     }
 
     const float x0 = static_cast<float>(screen.x);

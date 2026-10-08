@@ -185,7 +185,10 @@ static void RunSystemEvent(int event_no, CCamera *camera) {
 PC_OVERRIDE int EditLoop() {
     goto_return_menu = 0;
 
-    if (EdPadDown(0x800, 4) != 0) {
+    // Pausing is a walking action: a cutscene/event must not open the pause menu over itself.
+    // Retail clears the flag again in the event case, but gating the input here keeps the intent
+    // (and the pause menu, which reads state only valid outside an event) safe at the source.
+    if (GameMode != ED_MODE_EVENT && EdPadDown(0x800, 4) != 0) {
         goto_return_menu = 1;
     }
 
@@ -1568,6 +1571,49 @@ PC_OVERRIDE void MoveCamera(CCameraFollow *camera) {
 }
 
 // Retail's EdDrawClock, kept in the window's top right corner.
+// DrawSysGra with two corrections: the day-transition text is a cutscene of its own and is not
+// drawn over an event (#72), and the pause sprite is not drawn from a null handle when an event
+// left the texture block without "pause" loaded (#113).
+PC_OVERRIDE void DrawSysGra() {
+    if (EdDebugParamDrawOff == 0) {
+        TexManager.ReloadTexture(Vif1Packet, 20);
+        EdDrawSysCursor(EditMapInfo->work.events.points, 256);
+
+        if (FishingDrawCheck() == 0) {
+            EdDrawClock(0, 0);
+        }
+
+        if (GameMode != ED_MODE_EVENT) {
+            DrawDay();
+        }
+
+        char      pause_texture[] = "pause";
+        CTexture *pause = TexManager.GetTexture(pause_texture, -1);
+
+        if (pause != NULL && ((unsigned int) (GameMode - 9) <= 1 || EdPauseFlag != 0)) {
+            CRect_i_ fade;
+            fade.x = 0;
+            fade.y = 0;
+            fade.width = 0x2800;
+            fade.height = (SCREEN_HALF_HEIGHT << 4);
+            MGFillBox(fade, 0, 0, 0, 0x40);
+            setbilinear(0);
+
+            CRect_i_ screen;
+            CRect_i_ texel;
+            texel.x = 0;
+            texel.y = 0;
+            texel.width = 0x80;
+            texel.height = 0x28;
+            screen.x = 0x100;
+            screen.y = 0xdc;
+            screen.width = 0x80;
+            screen.height = 0x28;
+            set2DSprite(GetVif1Packet(), pause, screen, texel, 0x80);
+        }
+    }
+}
+
 PC_OVERRIDE void EdDrawClock(int x, int y) {
     if (draw_clock != 0 && EditMapInfo->time_stop == 0) {
         gfx::UiAnchorScope anchor(gfx::UiAnchor::Side(1, -1));

@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <format>
+#include <memory>
 #include <optional>
 
 #include "clsmes.hpp"
 #include "dataread.hpp"
 #include "gamepad.hpp"
 #include "gameutil.hpp"
+#include "localize.hpp"
+#include "mainselect.hpp"
 #include "memcard.hpp"
 #include "menu_draw.hpp"
 #include "menuetc.hpp"
@@ -18,12 +21,12 @@
 #include "sound.hpp"
 #include "texture.hpp"
 
-#define PAD_GLYPH_L1 "{-766}"
-#define PAD_GLYPH_R1 "{-765}"
-#define PAD_GLYPH_CIRCLE "{-762}"
-#define PAD_GLYPH_TRIANGLE "{-761}"
-#define PAD_GLYPH_CROSS "{-760}"
-#define PAD_GLYPH_SQUARE "{-759}"
+#define PAD_GLYPH_L1 "{L1}"
+#define PAD_GLYPH_R1 "{R1}"
+#define PAD_GLYPH_CIRCLE "{circle}"
+#define PAD_GLYPH_TRIANGLE "{triangle}"
+#define PAD_GLYPH_CROSS "{cross}"
+#define PAD_GLYPH_SQUARE "{square}"
 
 namespace options {
 
@@ -44,6 +47,18 @@ constexpr int kSaveHelp = 997;
 constexpr int kExitHelp = 999;
 constexpr int kPageHelp = 900;
 constexpr int kRowHelp = 1000;
+
+// The screen's fixed texts in English, with the keys their translations have.
+constexpr const char *kShortcutsText = PAD_GLYPH_SQUARE " Reset page\n" PAD_GLYPH_TRIANGLE " Undo changes\n" PAD_GLYPH_CIRCLE
+                                                         " Close";
+constexpr const char *kSaveHelpText = "Could not save.\nChanges apply now.\nClose to retry writing\nconfig.json.";
+constexpr const char *kDisplayHelpText = "The display could not\nchange, and kept the\nmode it had. Try\nanother mode or size.";
+constexpr const char *kTurnPageText = PAD_GLYPH_L1 " " PAD_GLYPH_R1 " turn the page.";
+constexpr const char *kExitHelpText = PAD_GLYPH_CROSS " Close\n" PAD_GLYPH_SQUARE " This page's defaults\n" PAD_GLYPH_TRIANGLE
+                                                      " Undo every change\n" PAD_GLYPH_CIRCLE " Close from any row";
+constexpr const char *kDisplayNowText = "The display could not\nchange as asked. It is\nnow %1";
+constexpr const char *kFullscreenNowText = "fullscreen.";
+constexpr const char *kWindowNowText = "a %1 x %2\nwindow.";
 
 int HelpIndex(int page, int row) {
     int index = row;
@@ -126,10 +141,13 @@ void ShowHelp() {
         message = kDisplayHelp;
     } else if (DisplayGetWarning() == DisplayWarning::Changed) {
         WindowMode  mode = DisplayShownMode();
-        std::string now = mode.fullscreen ? "fullscreen." : std::format("a {} x {}\nwindow.", mode.width, mode.height);
+        std::string now = mode.fullscreen ? LocalizeText("options.display.fullscreen_now", kFullscreenNowText)
+                                          : LocalizeFormat(LocalizeText("options.display.window_now", kWindowNowText),
+                                                           {std::to_string(mode.width), std::to_string(mode.height)});
         if (now != g_screen.display_now) {
             g_screen.display_now = now;
-            GetTexts().help.Set(kDisplayNowHelp, "The display could not\nchange as asked. It is\nnow " + now);
+            GetTexts().help.Set(kDisplayNowHelp,
+                                LocalizeFormat(LocalizeText("options.help.display_now", kDisplayNowText), {now}));
             buffer = GetTexts().help.Data();
             mes.mes_made = -1;
         }
@@ -387,32 +405,49 @@ Texts::Texts() {
     right.Set(">");
     l1.Set(PAD_GLYPH_L1);
     r1.Set(PAD_GLYPH_R1);
-    shortcuts.Set(PAD_GLYPH_SQUARE " Reset page\n" PAD_GLYPH_TRIANGLE " Undo changes\n" PAD_GLYPH_CIRCLE " Close");
-    help.Set(kSaveHelp, "Could not save.\nChanges apply now.\nClose to retry writing\nconfig.json.");
-    help.Set(kDisplayHelp, "The display could not\nchange, and kept the\nmode it had. Try\nanother mode or size.");
-    help.Set(kExitHelp, PAD_GLYPH_CROSS " Close\n" PAD_GLYPH_SQUARE " This page's defaults\n" PAD_GLYPH_TRIANGLE
-                                        " Undo every change\n" PAD_GLYPH_CIRCLE " Close from any row");
+    shortcuts.Set(LocalizeText("options.shortcuts", kShortcutsText));
+    help.Set(kSaveHelp, LocalizeText("options.help.save_failed", kSaveHelpText));
+    help.Set(kDisplayHelp, LocalizeText("options.help.display_kept", kDisplayHelpText));
+    help.Set(kExitHelp, LocalizeText("options.help.exit", kExitHelpText));
     int index = 0;
     for (int p = 0; p < static_cast<int>(Pages().size()); ++p) {
         const Page &page = Pages()[p];
-        tabs.emplace_back().Set(page.name);
-        help.Set(kPageHelp + p, std::string(page.help) + "\n" PAD_GLYPH_L1 " " PAD_GLYPH_R1 " turn the page.");
+        tabs.emplace_back().Set(LocalizeText(PageKey(page.name), page.name));
+        help.Set(kPageHelp + p, LocalizeText(PageKey(page.name) + ".help", page.help) + "\n" +
+                                    LocalizeText("options.help.turn_page", kTurnPageText));
         labels.emplace_back();
         values.emplace_back();
         for (const Row &row : page.rows) {
-            labels.back().emplace_back().Set(row.label);
+            labels.back().emplace_back().Set(LocalizeText("options." + std::string(row.key) + ".label", row.label));
             values.back().emplace_back();
             if (row.help != nullptr) {
-                help.Set(kRowHelp + index, row.help);
+                help.Set(kRowHelp + index, LocalizeText("options." + std::string(row.key) + ".help", row.help));
             }
             ++index;
         }
     }
 }
 
+namespace {
+
+std::unique_ptr<Texts> g_texts;
+int                    g_texts_language = -1;
+
+} // namespace
+
 Texts &GetTexts() {
-    static Texts texts;
-    return texts;
+    if (!g_texts) {
+        g_texts = std::make_unique<Texts>();
+        g_texts_language = LanguageCode;
+    }
+    return *g_texts;
+}
+
+// The screen's text is laid out for a language; opening the screen in another lays it out again.
+void RefreshTextsForLanguage() {
+    if (g_texts && g_texts_language != LanguageCode) {
+        g_texts.reset();
+    }
 }
 
 const Page &CurrentPage() {
@@ -472,6 +507,7 @@ int Open(int mode, int block_no, u_long128 *buffer) {
         return 0;
     }
 
+    RefreshTextsForLanguage();
     g_screen = Screen{};
     g_screen.open = true;
     g_screen.mode = mode;
@@ -571,3 +607,20 @@ int Run() {
 }
 
 } // namespace options
+
+std::vector<std::pair<std::string, std::string>> OptionStrings() {
+    std::vector<std::pair<std::string, std::string>> out = {
+        {"options.shortcuts",             options::kShortcutsText    },
+        {"options.help.save_failed",      options::kSaveHelpText     },
+        {"options.help.display_kept",     options::kDisplayHelpText  },
+        {"options.help.turn_page",        options::kTurnPageText     },
+        {"options.help.exit",             options::kExitHelpText     },
+        {"options.help.display_now",      options::kDisplayNowText   },
+        {"options.display.fullscreen_now", options::kFullscreenNowText},
+        {"options.display.window_now",    options::kWindowNowText    },
+    };
+    for (auto &entry : options::RowStrings()) {
+        out.push_back(std::move(entry));
+    }
+    return out;
+}

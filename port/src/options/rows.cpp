@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "localize.hpp"
 #include "menu_option.hpp"
 #include "platform/window.hpp"
 
@@ -445,6 +446,18 @@ void SetGyro(Config &config, int choice) {
     config.gyro = static_cast<ConfigGyro>(choice);
 }
 
+int GlyphDeviceCount(const Config &) {
+    return 6;
+}
+
+int GlyphDeviceChoice(const Config &config) {
+    return static_cast<int>(config.glyph_device);
+}
+
+void SetGlyphDevice(Config &config, int choice) {
+    config.glyph_device = static_cast<ConfigGlyphDevice>(choice);
+}
+
 // 0.10 to 2.00 in twentieths.
 int GyroSensitivityCount(const Config &) {
     return 39;
@@ -464,6 +477,19 @@ std::string GyroSensitivityText(const Config &config) {
 
 void RestoreGyroSensitivity(Config &config, const Config &defaults) {
     config.gyro_sensitivity = defaults.gyro_sensitivity;
+}
+
+// Ask, then the five languages of the language screen (LanguageCode 2 to 6).
+int LanguageChoice(const Config &config) {
+    return config.language >= 2 && config.language <= 6 ? config.language - 1 : 0;
+}
+
+void SetLanguage(Config &config, int choice) {
+    config.language = choice == 0 ? 0 : choice + 1;
+}
+
+int LanguageCount(const Config &) {
+    return 6;
 }
 
 const Row kGameRows[] = {
@@ -509,6 +535,13 @@ const Row kDisplayRows[] = {
     SettingRow("video.fps_detail", "FPS Info", "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.",
                FpsDetailCount, FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"),
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
+    Row{.key = "video.text_shadow",
+        .label = "Text Shadow",
+        .help = "\"Text Shadow\"\nHow dark the shadow\nunder the text is, when\nthe text is a TrueType\nfont.",
+        .count = Two,
+        .get = [](const Config &config) { return config.text_shadow; },
+        .set = [](Config &config, int choice) { config.text_shadow = choice; },
+        .names = "Soft|Deep"},
 };
 
 const Row kAudioRows[] = {
@@ -524,6 +557,12 @@ const Row kAudioRows[] = {
 
 const Row kControlRows[] = {
     GameRow<&ConfigGameOptions::vibration, true>("input.vibration", "Vibration", "On|Off", 0x15F),
+    NamedRow<&Config::glyphs_new>("input.glyphs", "Button Symbols",
+                                  "\"Button Symbols\"\nNew: redrawn symbols\nfor your controller.\nOriginal: the PS2's.",
+                                  "Original|New"),
+    SettingRow("input.glyph_device", "Symbols Shown",
+               "\"Symbols Shown\"\nAuto: the device you\nuse. Or always show one\nof the others.", GlyphDeviceCount,
+               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS4|PS5|Xbox|Switch|Keyboard"),
     SettingRow("input.mouse_sensitivity", "Mouse Sensitivity", "\"Mouse Sensitivity\"\nHow fast the mouse\nturns the camera.",
                MouseSensitivityCount, MouseSensitivityChoice, SetMouseSensitivity, MouseSensitivityText, nullptr,
                RestoreMouseSensitivity),
@@ -557,6 +596,13 @@ const Row kControlRows[] = {
 const Row kAccessibilityRows[] = {
     OnOffRow<&Config::qte_always_win>("game.qte_always_win", "Always Win QTEs",
                                       "\"Always Win QTEs\"\nButton prompts always\nend in a perfect."),
+    Row{.key = "game.language",
+        .label = "Language",
+        .help = "\"Language\"\nThe language of the game;\nAsk shows the language\nscreen at start-up.",
+        .count = LanguageCount,
+        .get = LanguageChoice,
+        .set = SetLanguage,
+        .names = "Ask|English|Francais|Deutsch|Italiano|Espanol"},
 };
 
 } // namespace
@@ -572,8 +618,67 @@ std::span<const Page> Pages() {
     return pages;
 }
 
+// The Options screen's own text is looked up by key, in the language the game is in (localize.hpp); the
+// English here is what it shows where the language has none. A setting's strings are options.<its
+// config.json name>.label, .help and .choice.<n>, and a page's is options.page.<name>.
+namespace {
+
+// A value a row works out itself ("Desktop", "Unlimited") by its English: options.<name>.value.<English>.
+std::string ValueText(const Row &row, const std::string &english) {
+    return LocalizeText("options." + std::string(row.key) + ".value." + english, english);
+}
+
+std::string ChoiceText(const Row &row, int choice) {
+    return LocalizeText("options." + std::string(row.key) + ".choice." + std::to_string(choice),
+                        ChoiceName(row.names, choice));
+}
+
+} // namespace
+
+std::string PageKey(const char *name) {
+    std::string key = "options.page.";
+    for (const char *c = name; *c != '\0'; ++c) {
+        key += static_cast<char>(*c >= 'A' && *c <= 'Z' ? *c - 'A' + 'a' : *c);
+    }
+    return key;
+}
+
+std::vector<std::pair<std::string, std::string>> RowStrings() {
+    std::vector<std::pair<std::string, std::string>> out;
+    // Rows may share a key (the key-binding rows share one help); the same text twice is listed once, and two
+    // texts under one key are both kept for the tests to find.
+    auto add = [&](std::string key, std::string english) {
+        for (const auto &[have_key, have_english] : out) {
+            if (have_key == key && have_english == english) {
+                return;
+            }
+        }
+        out.emplace_back(std::move(key), std::move(english));
+    };
+    for (const Page &page : Pages()) {
+        add(PageKey(page.name), page.name);
+        add(PageKey(page.name) + ".help", page.help);
+        for (const Row &row : page.rows) {
+            const std::string prefix = "options." + std::string(row.key);
+            add(prefix + ".label", row.label);
+            if (row.help != nullptr) {
+                add(prefix + ".help", row.help);
+            }
+            if (row.names != nullptr) {
+                const int count = row.count(ConfigGet());
+                for (int choice = 0; choice < count; ++choice) {
+                    add(prefix + ".choice." + std::to_string(choice), ChoiceName(row.names, choice));
+                }
+            }
+        }
+    }
+    add("options.video.width.value.Desktop", "Desktop");
+    add("options.video.max_fps.value.Unlimited", "Unlimited");
+    return out;
+}
+
 std::string RowValue(const Row &row, const Config &config) {
-    std::string value = row.text != nullptr ? row.text(config) : ChoiceName(row.names, row.get(config));
+    std::string value = row.text != nullptr ? ValueText(row, row.text(config)) : ChoiceText(row, row.get(config));
     if (ConfigAppliesOnRestart(row.key)) {
         value += " *";
     }

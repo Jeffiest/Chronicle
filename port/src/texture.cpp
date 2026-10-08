@@ -1,8 +1,11 @@
 #include "texture.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <string>
 
 #include "dataalloc.hpp"
 #include "mglib.hpp"
@@ -96,6 +99,86 @@ uint32_t BlendColors(uint32_t first, uint32_t second, unsigned first_weight, uns
         blended |= channel << shift;
     }
     return blended;
+}
+
+// DC_TEXTURE_DUMP=<dir>: every texture the game enters is written there as <name>.png (index
+// textures through their palette), for finding what the game draws where (button icons).
+void DumpTexture(const char *name, const PortDecodedTexture &texture) {
+    static const char *dir = std::getenv("DC_TEXTURE_DUMP");
+    if (dir == nullptr || texture.levels.empty()) {
+        return;
+    }
+    const unsigned       width = texture.width;
+    const unsigned       height = texture.height;
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4);
+    for (size_t i = 0; i < static_cast<size_t>(width) * height; i++) {
+        if (texture.format == gfx::TextureFormat::Index8) {
+            uint32_t c = texture.palette[texture.levels[0][i]];
+            std::memcpy(&rgba[i * 4], &c, 4);
+        } else {
+            std::memcpy(&rgba[i * 4], &texture.levels[0][i * 4], 4);
+        }
+    }
+    // A PNG with stored (uncompressed) deflate blocks.
+    auto crc = [](const uint8_t *data, size_t size, uint32_t crc_in) {
+        uint32_t c = ~crc_in;
+        for (size_t i = 0; i < size; i++) {
+            c ^= data[i];
+            for (int k = 0; k < 8; k++) {
+                c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1)));
+            }
+        }
+        return ~c;
+    };
+    std::vector<uint8_t> out = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    auto put32 = [&](std::vector<uint8_t> &v, uint32_t x) {
+        for (int s = 24; s >= 0; s -= 8) {
+            v.push_back(static_cast<uint8_t>(x >> s));
+        }
+    };
+    auto chunk = [&](const char *type, const std::vector<uint8_t> &body) {
+        put32(out, static_cast<uint32_t>(body.size()));
+        std::vector<uint8_t> typed(type, type + 4);
+        typed.insert(typed.end(), body.begin(), body.end());
+        out.insert(out.end(), typed.begin(), typed.end());
+        put32(out, crc(typed.data(), typed.size(), 0));
+    };
+    std::vector<uint8_t> ihdr;
+    put32(ihdr, width);
+    put32(ihdr, height);
+    ihdr.insert(ihdr.end(), {8, 6, 0, 0, 0});
+    chunk("IHDR", ihdr);
+    std::vector<uint8_t> raw;
+    for (unsigned y = 0; y < height; y++) {
+        raw.push_back(0);
+        raw.insert(raw.end(), rgba.begin() + static_cast<size_t>(y) * width * 4,
+                   rgba.begin() + static_cast<size_t>(y + 1) * width * 4);
+    }
+    std::vector<uint8_t> z = {0x78, 0x01};
+    uint32_t             a = 1;
+    uint32_t             b = 0;
+    for (uint8_t v : raw) {
+        a = (a + v) % 65521;
+        b = (b + a) % 65521;
+    }
+    for (size_t pos = 0; pos < raw.size() || pos == 0; pos += 65535) {
+        size_t n = std::min<size_t>(65535, raw.size() - pos);
+        z.push_back(pos + n >= raw.size() ? 1 : 0);
+        z.push_back(static_cast<uint8_t>(n));
+        z.push_back(static_cast<uint8_t>(n >> 8));
+        z.push_back(static_cast<uint8_t>(~n));
+        z.push_back(static_cast<uint8_t>((~n) >> 8));
+        z.insert(z.end(), raw.begin() + pos, raw.begin() + pos + n);
+    }
+    put32(z, (b << 16) | a);
+    chunk("IDAT", z);
+    chunk("IEND", {});
+    std::filesystem::create_directories(dir);
+    std::string path = std::string(dir) + "/" + name + ".png";
+    if (FILE *file = std::fopen(path.c_str(), "wb")) {
+        std::fwrite(out.data(), 1, out.size(), file);
+        std::fclose(file);
+    }
 }
 
 // Ground models repeat these images across UV islands and cells. Their source edges differ, so
@@ -266,6 +349,7 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
             return;
         }
         MakeGroundPeriodic(name, decoded);
+        DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
     }
     tex->tex0 = Tex0(tbp, tbw, psm, tw, th, cbp, indexed ? 1 : 0);
@@ -366,6 +450,7 @@ PC_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
     unsigned           tbp = 0;
     unsigned           cbp = 0;
     if (PortDecodeTexture(1, width, height, levels, 1, clut, 256, false, decoded)) {
+        DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
     }
     tex->tex0 = SCE_GS_SET_TEX0(tbp, 10, kPsmT8H, 10, 8, 1, 0, cbp, 0, 0, 0, 1);

@@ -30,6 +30,17 @@ enum class ConfigGyro {
     Held,
 };
 
+// input.glyph_device: whose button symbols the game draws. Auto follows the device in use (the
+// last of keyboard/mouse or gamepad to be touched; a gamepad's own family), PS4 until one is.
+enum class ConfigGlyphDevice {
+    Auto,
+    Ps4,
+    Ps5,
+    Xbox,
+    Switch,
+    Keyboard,
+};
+
 struct ConfigKeyBinding {
     std::string              action;
     std::vector<std::string> keys;
@@ -91,11 +102,19 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     bool                          mouse_zoom = false;
+    // input.glyphs "new": the button symbols of glyphs/ (see glyphs.hpp); "original": the game's own.
+    bool                          glyphs_new = true;
+    ConfigGlyphDevice             glyph_device = ConfigGlyphDevice::Auto;
     // Third-person vertical return after mouse input: 0 holds height, 1 is retail's rate.
     float                    mouse_camera_return = 0.2f;
     std::vector<std::string> mouse_release_keys;
     ConfigGameOptions        options;
     bool                     discord_rich_presence = true;
+    // game.language: 0 asks at start-up, as retail does; 2 to 6 is the language to start in
+    // (LanguageCode: English, Francais, Deutsch, Italiano, Espanol) and skips the language screen.
+    int                           language = 0;
+    // video.text_shadow: 0 is the soft shadow the TrueType message font casts, 1 a deeper one.
+    int                           text_shadow = 0;
 
     bool operator==(const Config &) const = default;
 };

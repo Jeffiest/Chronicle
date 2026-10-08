@@ -134,6 +134,22 @@ bool ReadAspect(const Json &value, ConfigAspect &out) {
     return true;
 }
 
+constexpr const char *kGlyphDeviceNames[] = {"auto", "ps4", "ps5", "xbox", "switch", "keyboard"};
+
+bool ReadGlyphDevice(const Json &value, ConfigGlyphDevice &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    const std::string &name = value.get_ref<const std::string &>();
+    for (std::size_t i = 0; i < std::size(kGlyphDeviceNames); ++i) {
+        if (name == kGlyphDeviceNames[i]) {
+            out = static_cast<ConfigGlyphDevice>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 constexpr const char *kGyroNames[] = {"off", "always", "first_person", "held"};
 
 bool ReadGyro(const Json &value, ConfigGyro &out) {
@@ -144,6 +160,23 @@ bool ReadGyro(const Json &value, ConfigGyro &out) {
     for (std::size_t i = 0; i < std::size(kGyroNames); ++i) {
         if (gyro == kGyroNames[i]) {
             out = static_cast<ConfigGyro>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+constexpr const char *kLanguageNames[] = {"ask", "", "english", "francais", "deutsch", "italiano", "espanol"};
+
+// "ask" or a language's name, as config.json spells them, becoming LanguageCode 0 or 2 to 6.
+bool ReadLanguage(const Json &value, int &out) {
+    if (!value.is_string()) {
+        return false;
+    }
+    std::string language = Lower(value.get<std::string>());
+    for (std::size_t i = 0; i < std::size(kLanguageNames); ++i) {
+        if (kLanguageNames[i][0] != '\0' && language == kLanguageNames[i]) {
+            out = static_cast<int>(i);
             return true;
         }
     }
@@ -299,6 +332,16 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "input.mouse_capture") {
         return ReadBool(value, config.mouse_capture);
     }
+    if (name == "input.glyphs") {
+        if (!value.is_string() || (value.get<std::string>() != "new" && value.get<std::string>() != "original")) {
+            return false;
+        }
+        config.glyphs_new = value.get<std::string>() == "new";
+        return true;
+    }
+    if (name == "input.glyph_device") {
+        return ReadGlyphDevice(value, config.glyph_device);
+    }
     if (name == "input.mouse_zoom") {
         return ReadBool(value, config.mouse_zoom);
     }
@@ -329,6 +372,20 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     }
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
+    }
+    if (name == "video.text_shadow") {
+        if (!value.is_string()) {
+            return false;
+        }
+        const std::string shadow = Lower(value.get<std::string>());
+        if (shadow != "soft" && shadow != "deep") {
+            return false;
+        }
+        config.text_shadow = shadow == "deep" ? 1 : 0;
+        return true;
+    }
+    if (name == "game.language") {
+        return ReadLanguage(value, config.language);
     }
     if (name == "video.present_mode") {
         return ReadPresentMode(value, config.present_mode);
@@ -488,6 +545,7 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["tick_rate"] = config.tick_rate;
     root["game"]["debug_mode"] = config.debug_mode;
     root["game"]["qte_always_win"] = config.qte_always_win;
+    root["game"]["language"] = kLanguageNames[config.language >= 2 && config.language <= 6 ? config.language : 0];
     const ConfigGameOptions &options = config.options;
     root["game"]["save_cursor_position"] = options.save_cursor_position;
     root["game"]["message_speed"] = options.fast_messages ? "fast" : "normal";
@@ -498,6 +556,7 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["player_damage"] = options.player_damage;
     root["game"]["enemy_hp"] = options.enemy_hp;
     root["game"]["names"] = options.names;
+    root["video"]["text_shadow"] = config.text_shadow == 1 ? "deep" : "soft";
     root["video"]["present_mode"] = PresentModeName(config.present_mode);
     root["video"]["interpolation"] = config.interpolation;
     root["video"]["max_fps"] = config.max_fps;
@@ -526,6 +585,8 @@ std::string ConfigSerialize(const Config &config) {
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_zoom"] = config.mouse_zoom;
+    root["input"]["glyphs"] = config.glyphs_new ? "new" : "original";
+    root["input"]["glyph_device"] = kGlyphDeviceNames[static_cast<std::size_t>(config.glyph_device)];
     root["input"]["mouse_camera_return"] = Shortest(config.mouse_camera_return);
     root["input"]["mouse_release"] = config.mouse_release_keys;
     root["input"]["vibration"] = options.vibration;

@@ -49,6 +49,21 @@ else()
     file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_vorbis.c
         ${AUDIO_DECODER_DIR}/stb_vorbis.c EXPECTED_HASH SHA256=4c7cb2ff1f7011e9d67950446b7eb9ca044f2e464d76bfbb0b84dd2e23e65636)
 endif()
+# The message font's rasterizer (platform/ttffont.cpp): a single-file library, public domain or MIT, at a pinned
+# commit. Flatpak has it as a source, since its build sandbox has no network; other builds fetch the same file.
+if(EXISTS ${CMAKE_SOURCE_DIR}/stb_truetype/stb_truetype.h)
+    set(TTF_DIR ${CMAKE_SOURCE_DIR}/stb_truetype)
+else()
+    set(TTF_DIR ${CMAKE_BINARY_DIR}/stb_truetype)
+    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_truetype.h
+        ${TTF_DIR}/stb_truetype.h EXPECTED_HASH SHA256=ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab)
+endif()
+# The button symbols' PNG atlases (platform/glyphs.cpp): the same library family at the same pinned commit, a
+# Flatpak source beside stb_truetype.h, or fetched.
+if(NOT EXISTS ${TTF_DIR}/stb_image.h)
+    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_image.h
+        ${TTF_DIR}/stb_image.h EXPECTED_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3)
+endif()
 
 set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
 set(PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -213,12 +228,12 @@ file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/options/credits.hpp
     CONTENT "#pragma once\ninline constexpr const char *kCredits[] = {${credit_names}};\n")
 
 add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
-target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR} ${AUDIO_DECODER_DIR})
+target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR} ${AUDIO_DECODER_DIR} ${TTF_DIR})
 target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
 target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections)
 
 add_library(dc_port OBJECT ${PORT_LIB_SOURCES})
-target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
+target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
 # Replacement units reach the host side as "gfx/gfx.hpp", "platform/window.hpp".
 target_include_directories(dc_port PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
 # The game's headers trip a few warnings that only describe how MWCC's source
@@ -268,6 +283,21 @@ endif()
 
 include(GNUInstallDirs)
 install(TARGETS darkcloud RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# The strings the port draws itself, translated (docs/LOCALIZATION.md): lang/ beside the executable, where the
+# game reads its language files.
+add_custom_target(dc_lang
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/lang $<TARGET_FILE_DIR:darkcloud>/lang
+    COMMENT "Copying the port's translated strings")
+add_dependencies(darkcloud dc_lang)
+install(DIRECTORY lang/ DESTINATION ${CMAKE_INSTALL_BINDIR}/lang)
+
+# The button symbols (docs/GLYPHS.md): glyphs/ beside the executable. Rebuilt from art by tools/glyphs/build_glyphs.py.
+add_custom_target(dc_glyphs
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/glyphs $<TARGET_FILE_DIR:darkcloud>/glyphs
+    COMMENT "Copying the button symbols")
+add_dependencies(darkcloud dc_glyphs)
+install(DIRECTORY glyphs/ DESTINATION ${CMAKE_INSTALL_BINDIR}/glyphs)
 
 # The tests use an installed GoogleTest, or fetch one at configure time; a build with neither turns them off.
 option(DC_BUILD_TESTS "Build darkcloud_tests" ON)

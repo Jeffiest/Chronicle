@@ -301,6 +301,8 @@ PC_OVERRIDE void BattleMenuDraw() {
         MenuWepLevelUp.Draw();
     }
 
+    MenuMouseDrawOverlay();
+
     if (GetInteriorOutFlag() != 0) {
         BtlEffectCt += 1.0f;
         int fade = (int) (3.0f * BtlEffectCt);

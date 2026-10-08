@@ -17,6 +17,9 @@ struct MenuPointerTake {
     // Mouse buttons pressed this tick (bit n-1 for Mouse n) and the wheel's turn in notches, positive
     // away from the user.
     std::uint32_t clicked = 0;
+    // Mouse buttons let go this tick, and every button held now.
+    std::uint32_t released = 0;
+    std::uint32_t held = 0;
     float         wheel = 0.0f;
 };
 

@@ -82,6 +82,8 @@ MenuPointerTake MenuPointer::Take(float start_x, float start_y) {
     }
     InputMenuMouse mouse = InputTakeMenuMouse();
     take.clicked = mouse.buttons & ~buttons_;
+    take.released = buttons_ & ~mouse.buttons;
+    take.held = mouse.buttons;
     take.wheel = mouse.wheel;
     buttons_ = mouse.buttons;
     bool motion = mouse.dx != 0.0f || mouse.dy != 0.0f;

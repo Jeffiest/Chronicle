@@ -1,5 +1,6 @@
 #include "menu_pointer.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "battlemenu.hpp"
@@ -8,6 +9,7 @@
 #include "editpartsinfo.hpp"
 #include "memcard.hpp"
 #include "gamepad.hpp"
+#include "gametext.hpp"
 #include "menu_draw.hpp"
 #include "menu_inventory.hpp"
 #include "menu_manual.hpp"
@@ -114,6 +116,124 @@ void YesNoMouse(const MenuPointerTake &take, int x, int y, T *answer) {
         MenuPointerPress(kInputCross);
     } else if ((take.clicked & 2) != 0) {
         MenuPointerPress(kInputCircle);
+    }
+}
+
+
+// The scroll bar of the personal board (the item board, the attachments board, the Georama board):
+// arrows at its ends step a row, a press on the track takes hold of the thumb, which follows the
+// pointer while the button is held.
+const Rect kScrollUp = {566, 124, 588, 142};
+const Rect kScrollDown = {566, 254, 588, 272};
+const Rect kScrollTrack = {566, 142, 588, 254};
+bool       g_scroll_drag = false;
+
+// Scrolls a board to top_row, and brings the cursor into the rows shown if it sat on the cells.
+void ScrollBoardTo(PERSONAL_BOARD &board, int max, int top_row, bool follow) {
+    int last_top = std::max(max / 5 - 4, 0);
+    top_row = std::clamp(top_row, 0, last_top);
+    if (top_row == board.top_row) {
+        return;
+    }
+    board.top_row = top_row;
+    if (follow && board.cursor_area == PERSONAL_BOARD_AREA_CELLS) {
+        int row = board.cursor / 5;
+        int column = board.cursor % 5;
+        if (row < top_row) {
+            board.cursor = top_row * 5 + column;
+        } else if (row > top_row + 3) {
+            board.cursor = (top_row + 3) * 5 + column;
+        }
+    }
+}
+
+// Returns true when the pointer is working the scroll bar.
+bool BoardScrollBar(const MenuPointerTake &take, PERSONAL_BOARD &board, int max, bool follow) {
+    if ((take.held & 1) == 0) {
+        g_scroll_drag = false;
+    }
+    if (!take.pointing) {
+        return false;
+    }
+    float x = g_battle.x;
+    float y = g_battle.y;
+    if ((take.clicked & 1) != 0) {
+        if (kScrollUp.Contains(x, y)) {
+            ScrollBoardTo(board, max, board.top_row - 1, follow);
+            return true;
+        }
+        if (kScrollDown.Contains(x, y)) {
+            ScrollBoardTo(board, max, board.top_row + 1, follow);
+            return true;
+        }
+        if (kScrollTrack.Contains(x, y)) {
+            g_scroll_drag = true;
+        }
+    }
+    if (g_scroll_drag) {
+        int   last_top = std::max(max / 5 - 4, 0);
+        float fraction = (y - kScrollTrack.top - 8.0f) / static_cast<float>(kScrollTrack.bottom - kScrollTrack.top - 16);
+        ScrollBoardTo(board, max, static_cast<int>(std::lround(std::clamp(fraction, 0.0f, 1.0f) * last_top)), follow);
+        return true;
+    }
+    return false;
+}
+
+// A wheel notch over a board scrolls it a row.
+void BoardWheel(const MenuPointerTake &take, PERSONAL_BOARD &board, int max, bool follow) {
+    ScrollBoardTo(board, max, board.top_row + (take.wheel < 0.0f ? 1 : -1), follow);
+}
+
+// The question asked before a held item is thrown away: dropped on empty ground, an item has nowhere
+// to go, and the trash can is the game's own way to lose one.
+struct Discard {
+    bool active = false;
+    int  answer = 1;
+};
+Discard g_discard;
+bool    g_item_dragging = false;
+int     g_item_drag_mode = -1;
+int     g_item_drag_cursor = -1;
+int     g_item_drag_area = -1;
+
+constexpr int kDiscardPlateX = 0x118;
+constexpr int kDiscardPlateY = 0xE8;
+
+bool HoldingItem() { return BtlHaveItemPt != nullptr && BtlHaveItemPt->item_no >= ITEM_ATTACH_START; }
+
+void AskToDiscard() {
+    if (IsEnableTrushThrow(BtlHaveItemPt->item_no) == 0) {
+        ComMenuSePlay(MENU_SOUND_REFUSE);
+        return;
+    }
+    g_discard.active = true;
+    g_discard.answer = 1;
+    ComMenuSePlay(MENU_SOUND_CONFIRM);
+}
+
+void DiscardMouse(const MenuPointerTake &take) {
+    if (!take.pointing || !HoldingItem()) {
+        g_discard.active = false;
+        return;
+    }
+    int hit = YesNoHit(kDiscardPlateX, kDiscardPlateY, g_battle.x, g_battle.y);
+    if (hit >= 0 && hit != g_discard.answer && take.moved) {
+        g_discard.answer = hit;
+        ComMenuSePlay(MENU_SOUND_CURSOR);
+    }
+    if ((take.clicked & 1) != 0 && hit >= 0) {
+        g_discard.active = false;
+        if (hit == 0) {
+            // Through the trash can, as the pad throws an item away.
+            ItemMenuMode.mode = ITEM_MENU_BOARD;
+            ItemMenuMode.board.cursor_area = PERSONAL_BOARD_AREA_TRASH;
+            MenuPointerPress(kInputCross);
+        } else {
+            ComMenuSePlay(MENU_SOUND_REFUSE);
+        }
+    } else if ((take.clicked & 2) != 0) {
+        g_discard.active = false;
+        ComMenuSePlay(MENU_SOUND_REFUSE);
     }
 }
 
@@ -235,6 +355,10 @@ void ItemMouse(const MenuPointerTake &take) {
         }
         return;
     }
+    if (g_discard.active) {
+        DiscardMouse(take);
+        return;
+    }
     if (!take.pointing) {
         return;
     }
@@ -243,6 +367,10 @@ void ItemMouse(const MenuPointerTake &take) {
     PERSONAL_BOARD &board = ItemMenuMode.board;
     bool            clicked = (take.clicked & 1) != 0;
     bool            act = take.moved || clicked;
+
+    if (BoardScrollBar(take, board, PersonalRetMax(board.page), ItemMenuMode.mode == ITEM_MENU_BOARD)) {
+        return;
+    }
 
     // The place the pointer is over, as the mode and cursor the game would be in with its hand there.
     int mode = -1;
@@ -298,8 +426,8 @@ void ItemMouse(const MenuPointerTake &take) {
     if (take.wheel != 0.0f) {
         // Over the board it scrolls; elsewhere it turns the page or the party member.
         bool forward = take.wheel < 0.0f;
-        if (kItemBoard.Contains(x, y) && ItemMenuMode.mode == ITEM_MENU_BOARD) {
-            MenuPointerPress(forward ? kInputDown : kInputUp);
+        if (kItemBoard.Contains(x, y)) {
+            BoardWheel(take, board, PersonalRetMax(board.page), ItemMenuMode.mode == ITEM_MENU_BOARD);
         } else {
             MenuPointerPress(forward ? kInputR1 : kInputL1);
         }
@@ -317,9 +445,33 @@ void ItemMouse(const MenuPointerTake &take) {
         }
     }
 
+    // An item picked up with the button held rides the pointer: let go over another place and it goes there,
+    // over empty ground and the question about throwing it away comes up, over the same place and it stays held.
+    if ((take.released & 1) != 0 && g_item_dragging) {
+        g_item_dragging = false;
+        if (HoldingItem()) {
+            bool same = mode == g_item_drag_mode && cursor == g_item_drag_cursor && area == g_item_drag_area;
+            if (mode >= 0 && !same) {
+                MenuPointerPress(kInputCross);
+            } else if (mode < 0 && tab < 0 && arrow == 0 && !kScrollTrack.Contains(x, y)) {
+                AskToDiscard();
+            }
+        }
+        return;
+    }
+
     if (clicked) {
         if (mode >= 0) {
+            if (!HoldingItem() && mode == ITEM_MENU_BOARD) {
+                g_item_dragging = true;
+                g_item_drag_mode = mode;
+                g_item_drag_cursor = cursor;
+                g_item_drag_area = area;
+            }
             MenuPointerPress(kInputCross);
+        } else if (HoldingItem() && tab < 0 && arrow == 0) {
+            // Set down on empty ground.
+            AskToDiscard();
         } else if (tab >= 0 || (arrow != 0 && !ItemPanelMode(ItemMenuMode.mode))) {
             // The page tabs and arrows work on the board's pages, as L1 and R1 do from the board.
             if (ItemPanelMode(ItemMenuMode.mode)) {
@@ -404,18 +556,19 @@ void AtlaMouse(const MenuPointerTake &take) {
         }
     }
 
+    if (BoardScrollBar(take, sel.board, PersonalRetMax(sel.board.page), sel.mode == ATORA_SIDE_CHIP_LIST)) {
+        return;
+    }
     if (take.wheel != 0.0f) {
         bool forward = take.wheel < 0.0f;
         if (kItemBoard.Contains(x, y)) {
-            if (sel.mode != ATORA_SIDE_CHIP_LIST) {
-                sel.mode = ATORA_SIDE_CHIP_LIST;
-                sel.board.cursor_area = PERSONAL_BOARD_AREA_CELLS;
-                sel.board.cursor = sel.board.top_row * 5;
+            BoardWheel(take, sel.board, PersonalRetMax(sel.board.page), sel.mode == ATORA_SIDE_CHIP_LIST);
+        } else {
+            if (sel.mode == ATORA_SIDE_BOARD) {
+                sel.board.cursor = 0;
             }
-        } else if (sel.mode == ATORA_SIDE_BOARD) {
-            sel.board.cursor = 0;
+            MenuPointerPress(forward ? kInputDown : kInputUp);
         }
-        MenuPointerPress(forward ? kInputDown : kInputUp);
         return;
     }
 
@@ -443,6 +596,33 @@ void AtlaMouse(const MenuPointerTake &take) {
     } else if ((take.clicked & 2) != 0) {
         MenuPointerPress(kInputCircle);
     }
+}
+
+// Where the game's brackets stand for a row of the tag board under the weapon (WeaponMenuDraw), or an
+// empty rectangle where the page has no such row.
+Rect WepTagRow(int page, int row) {
+    switch (page) {
+        case WEP_TAG_STATUS:
+            if (row < 2) {
+                return Rect{64, 270 + 20 * row, 266, 290 + 20 * row};
+            }
+            if (row < 6) {
+                return Rect{70, 322 + 16 * (row - 2), 266, 338 + 16 * (row - 2)};
+            }
+            break;
+        case WEP_TAG_ELEMENT:
+            if (row < 5) {
+                return Rect{70, 268 + 24 * row, 266, 292 + 24 * row};
+            }
+            break;
+        case WEP_TAG_VS_MONSTER:
+            if (row < 10) {
+                int left = 68 + 104 * (row / 5);
+                return Rect{left, 268 + 24 * (row % 5), left + 102, 292 + 24 * (row % 5)};
+            }
+            break;
+    }
+    return Rect{0, 0, 0, 0};
 }
 
 // The weapon page. WeaponMouse returns false in the modes the mouse does not handle, which leave it
@@ -615,6 +795,7 @@ bool WeaponMouse(const MenuPointerTake &take) {
             return true;
         case WEP_MENU_ATTACH_WEAPON:
         case WEP_MENU_ATTACH_SOCKETS:
+        case WEP_MENU_ATTACH_TAGS:
         case WEP_MENU_ATTACH_BOARD: {
             // The attachment screen: the weapon's sockets on the left, the board of attachments on the right.
             if (!take.pointing) {
@@ -646,9 +827,41 @@ bool WeaponMouse(const MenuPointerTake &take) {
                     }
                 }
             }
+            if (BoardScrollBar(take, board, PersonalRetMax(BOARD_PAGE_ATTACH), WepMenu.mode == WEP_MENU_ATTACH_BOARD)) {
+                return true;
+            }
             if (take.wheel != 0.0f) {
-                if (WepMenu.mode == WEP_MENU_ATTACH_BOARD && kItemBoard.Contains(x, y)) {
-                    MenuPointerPress(take.wheel < 0.0f ? kInputDown : kInputUp);
+                if (kItemBoard.Contains(x, y)) {
+                    BoardWheel(take, board, PersonalRetMax(BOARD_PAGE_ATTACH), WepMenu.mode == WEP_MENU_ATTACH_BOARD);
+                }
+                return true;
+            }
+            // The tag board under the weapon: its three tabs, and the rows of the one showing.
+            int tag_tab = -1;
+            for (int t = 0; t < 3; ++t) {
+                if (Rect{80 + 56 * t, 240, 80 + 56 * t + 52, 272}.Contains(x, y)) {
+                    tag_tab = t;
+                }
+            }
+            int tag_row = -1;
+            for (int r = 0; r < 10; ++r) {
+                if (WepTagRow(WepMenu.tag_page, r).Contains(x, y)) {
+                    tag_row = r;
+                }
+            }
+            if (tag_row >= 0 && (take.moved || clicked)) {
+                if (WepMenu.mode != WEP_MENU_ATTACH_TAGS || WepMenu.tag_row != tag_row) {
+                    WepMenu.mode = WEP_MENU_ATTACH_TAGS;
+                    WepMenu.tag_row = static_cast<char>(tag_row);
+                    ComMenuSePlay(MENU_SOUND_CURSOR);
+                }
+            }
+            if (clicked && tag_tab >= 0) {
+                int steps = (tag_tab - WepMenu.tag_page + 3) % 3;
+                if (steps == 1) {
+                    MenuPointerPress(kInputR1);
+                } else if (steps == 2) {
+                    MenuPointerPress(kInputL1);
                 }
                 return true;
             }
@@ -751,4 +964,31 @@ void MenuMouseUpdate() {
     } else {
         g_battle.Close();
     }
+}
+
+void MenuMouseDrawOverlay() {
+    if (!g_discard.active) {
+        return;
+    }
+    static GameText question;
+    static bool     laid_out = false;
+    if (!laid_out) {
+        question.Set("Throw this item away?");
+        laid_out = true;
+    }
+    MenuTextureReload(BtlMenuReadBlock);
+    MenuHelpWinDraw(0xA0, 0x94, 11.0f, 0.8f, 0x80);
+    MenuTextureReload(CommonMenuMes2.tex_block);
+    question.Draw(0xBE, 0xB0, 0x80);
+    MenuTextureReload(BtlMenuReadBlock);
+    CRect_i_ dst(kDiscardPlateX, kDiscardPlateY, 0x60, 0x20);
+    CRect_i_ src(0, 0, 0x60, 0x20);
+    for (int row = 0; row < 2; ++row) {
+        DrawMenu2DSprite(BtStatus, dst, src, 0x80);
+        dst.y += 0x1C;
+        src.y += 0x20;
+    }
+    DrawMenuWaku(static_cast<float>(kDiscardPlateX - 4), static_cast<float>(kDiscardPlateY - 2 + g_discard.answer * 0x1C), 0x68,
+                 0x26, 0, StayTex, 0x80);
+    DrawMenuObjectVibe(static_cast<int>(SysCur[0]), static_cast<int>(SysCur[1]), 1, 0x40);
 }

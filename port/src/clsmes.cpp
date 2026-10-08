@@ -20,6 +20,7 @@
 #include "platform/ttffont.hpp"
 #include "rect.hpp"
 #include "snd.hpp"
+#include "text_shadow.hpp"
 #include "texture.hpp"
 
 extern float     RandTbl[64];
@@ -249,57 +250,13 @@ bool QueueTtfGlyph(ClsMes &mes, int index, int dark, int offset_x, int offset_y,
             TtfQuad(edges, glyph, x + dx, y + dy * rows, width, height, er, eg, eb, std::min(cap, ea));
         }
     };
-    // Retail's shadow is cast down and to the right and falls off softly, because its bitmaps are soft.
-    // A crisp glyph stacked at two offsets reads as a hard outline instead, so the shadow is laid in
-    // as taps at half-pixel steps along the light's direction, which the texture filter blends.
-    struct Tap {
-        float dx, dy;
-        int   grey, alpha;
-    };
-
-    static const Tap soft[] = {
-        {0.6f, 1.4f, 0, 0x0C},
-        {0.6f, 2.2f, 0, 0x0E},
-        {0.6f, 3.0f, 0, 0x0C},
-        {1.4f, 0.6f, 0, 0x0C},
-        {1.4f, 1.4f, 0, 0x16},
-        {1.4f, 2.2f, 0, 0x1C},
-        {1.4f, 3.0f, 0, 0x16},
-        {1.4f, 3.8f, 0, 0x0C},
-        {2.2f, 0.6f, 0, 0x0E},
-        {2.2f, 1.4f, 0, 0x1C},
-        {2.2f, 2.2f, 0, 0x20},
-        {2.2f, 3.0f, 0, 0x1C},
-        {2.2f, 3.8f, 0, 0x0E},
-        {3.0f, 0.6f, 0, 0x0C},
-        {3.0f, 1.4f, 0, 0x16},
-        {3.0f, 2.2f, 0, 0x1C},
-        {3.0f, 3.0f, 0, 0x16},
-        {3.0f, 3.8f, 0, 0x0C},
-        {3.8f, 1.4f, 0, 0x0C},
-        {3.8f, 2.2f, 0, 0x0E},
-        {3.8f, 3.0f, 0, 0x0C},
-    };
-    static const Tap deep[] = {
-        {0.8f, 0.8f, 0x40, 0x78},
-        {1.4f, 1.4f, 0x10, 0x78},
-        {2.0f, 2.0f, 0,    0x78},
-        {2.6f, 2.6f, 0,    0x78},
-        {3.2f, 3.2f, 0,    0x60},
-        {3.8f, 3.8f, 0,    0x40},
-        {1.6f, 0.8f, 0,    0x50},
-        {0.8f, 1.6f, 0,    0x50},
-        {2.4f, 1.6f, 0,    0x48},
-        {1.6f, 2.4f, 0,    0x48},
-        {3.2f, 2.4f, 0,    0x30},
-        {2.4f, 3.2f, 0,    0x30},
-    };
     auto cast = [&] {
-        const bool deeper = ConfigGet().text_shadow == 1;
-        for (const Tap &tap : deeper ? std::span<const Tap>(deep) : std::span<const Tap>(soft)) {
+        // Retail's shadow falls off softly because its bitmaps are soft. A crisp glyph stacked at two
+        // offsets reads as a hard outline instead, so it is laid in as taps the texture filter blends.
+        TextShadowEach(ConfigGet().text_shadow, [&](const TextShadowTap &tap) {
             TtfQuad(edges, glyph, x + tap.dx, y + tap.dy * rows, width, height, tap.grey, tap.grey, tap.grey,
                     std::min(cap, tap.alpha));
-        }
+        });
     };
     switch (mes.style) {
         case MES_EDGE_WHITE:

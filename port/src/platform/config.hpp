@@ -113,8 +113,12 @@ struct Config {
     // game.language: 0 asks at start-up, as retail does; 2 to 6 is the language to start in
     // (LanguageCode: English, Francais, Deutsch, Italiano, Espanol) and skips the language screen.
     int                           language = 0;
-    // video.text_shadow: 0 is the soft shadow the TrueType message font casts, 1 a deeper one.
-    int                           text_shadow = 0;
+    // video.text_shadow and video.glyph_shadow: how strong the shadow under the TrueType message text and
+    // under the button symbols in it is, in percent in steps of 5. 0 casts none, 50 is the soft shadow
+    // (the letters' default), 100 the deep one. The symbols' is lighter, because a solid shape stacks
+    // the shadow where a thin stroke does not.
+    int                           text_shadow = 50;
+    int                           glyph_shadow = 25;
 
     bool operator==(const Config &) const = default;
 };

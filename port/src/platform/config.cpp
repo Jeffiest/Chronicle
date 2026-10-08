@@ -373,15 +373,22 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
     }
-    if (name == "video.text_shadow") {
-        if (!value.is_string()) {
+    if (name == "video.text_shadow" || name == "video.glyph_shadow") {
+        int &target = name == "video.text_shadow" ? config.text_shadow : config.glyph_shadow;
+        if (value.is_string()) {
+            // the earlier two-choice setting
+            const std::string shadow = Lower(value.get<std::string>());
+            if (shadow != "soft" && shadow != "deep") {
+                return false;
+            }
+            target = shadow == "deep" ? 100 : 50;
+            return true;
+        }
+        double percent = 0.0;
+        if (!ReadNumber(value, percent) || !std::isfinite(percent)) {
             return false;
         }
-        const std::string shadow = Lower(value.get<std::string>());
-        if (shadow != "soft" && shadow != "deep") {
-            return false;
-        }
-        config.text_shadow = shadow == "deep" ? 1 : 0;
+        target = std::clamp(static_cast<int>(std::lround(percent / 5.0)) * 5, 0, 100);
         return true;
     }
     if (name == "game.language") {
@@ -556,7 +563,8 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["player_damage"] = options.player_damage;
     root["game"]["enemy_hp"] = options.enemy_hp;
     root["game"]["names"] = options.names;
-    root["video"]["text_shadow"] = config.text_shadow == 1 ? "deep" : "soft";
+    root["video"]["text_shadow"] = config.text_shadow;
+    root["video"]["glyph_shadow"] = config.glyph_shadow;
     root["video"]["present_mode"] = PresentModeName(config.present_mode);
     root["video"]["interpolation"] = config.interpolation;
     root["video"]["max_fps"] = config.max_fps;

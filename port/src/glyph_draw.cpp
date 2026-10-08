@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "draw2d_port.hpp"
+#include "platform/config.hpp"
+#include "text_shadow.hpp"
 
 namespace {
 
@@ -68,8 +70,8 @@ bool GlyphDrawSlot(glyphs::Button button, const CRect_i_ &slot, int alpha, float
     float x = static_cast<float>(slot.x) - grow + (slot_w - width) * 0.5f;
     float y = static_cast<float>(slot.y) - grow + (slot_h - height) * 0.5f;
     auto a = static_cast<u_char>(alpha);
-    // In text the symbol casts the font's shadow: its own shape, black, half as strong, one pixel down and
-    // right. Painted over art it has none (the art has its own).
+    // In text the symbol casts a shadow (text_shadow.hpp) in its own shape, so it lifts off the
+    // picture like the words beside it; config glyph_shadow sets how strong, apart from the letters'. Painted over art it has none (the art has its own).
     std::vector<gfx::Vertex2D> quad;
     auto                       add = [&](float ox, float oy, u_char r, u_char g, u_char b, u_char alpha_byte) {
         quad.push_back(draw2d::Vertex(x + ox, y + oy, 0.0f, image.u0, image.v0, r, g, b, alpha_byte));
@@ -78,7 +80,11 @@ bool GlyphDrawSlot(glyphs::Button button, const CRect_i_ &slot, int alpha, float
         quad.push_back(draw2d::Vertex(x + ox, y + oy + height, 0.0f, image.u0, image.v1, r, g, b, alpha_byte));
     };
     if (grow <= 0.0f) {
-        add(1.0f, 1.0f, 0, 0, 0, static_cast<u_char>(a / 2));
+        const float rows = draw2d::RowScale();
+        TextShadowEach(ConfigGet().glyph_shadow, [&](const TextShadowTap &tap) {
+            add(tap.dx, tap.dy * rows, static_cast<u_char>(tap.grey), static_cast<u_char>(tap.grey),
+                static_cast<u_char>(tap.grey), static_cast<u_char>(std::min<int>(alpha, tap.alpha)));
+        });
     }
     add(0.0f, 0.0f, 0x80, 0x80, 0x80, a);
     gfx::Draw2D(gfx::Primitive::Quads, quad, image.binding, draw2d::SpriteState());

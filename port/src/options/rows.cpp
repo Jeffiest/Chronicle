@@ -492,6 +492,34 @@ int LanguageCount(const Config &) {
     return 6;
 }
 
+int ShadowCount(const Config &) {
+    return 21;
+}
+
+int TextShadowChoice(const Config &config) {
+    return std::clamp(config.text_shadow / 5, 0, 20);
+}
+
+void SetTextShadow(Config &config, int choice) {
+    config.text_shadow = choice * 5;
+}
+
+std::string TextShadowText(const Config &config) {
+    return std::format("{}%", config.text_shadow);
+}
+
+int GlyphShadowChoice(const Config &config) {
+    return std::clamp(config.glyph_shadow / 5, 0, 20);
+}
+
+void SetGlyphShadow(Config &config, int choice) {
+    config.glyph_shadow = choice * 5;
+}
+
+std::string GlyphShadowText(const Config &config) {
+    return std::format("{}%", config.glyph_shadow);
+}
+
 const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::save_cursor_position, true>("game.save_cursor_position", "Save Cursor Position",
                                                             "On|Off", 0x15E),
@@ -535,13 +563,12 @@ const Row kDisplayRows[] = {
     SettingRow("video.fps_detail", "FPS Info", "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.",
                FpsDetailCount, FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"),
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
-    Row{.key = "video.text_shadow",
-        .label = "Text Shadow",
-        .help = "\"Text Shadow\"\nHow dark the shadow\nunder the text is, when\nthe text is a TrueType\nfont.",
-        .count = Two,
-        .get = [](const Config &config) { return config.text_shadow; },
-        .set = [](Config &config, int choice) { config.text_shadow = choice; },
-        .names = "Soft|Deep"},
+    SettingRow("video.text_shadow", "Text Shadow",
+               "\"Text Shadow\"\nHow dark the shadow\nunder the letters is.\n50% is the soft one.", ShadowCount,
+               TextShadowChoice, SetTextShadow, TextShadowText),
+    SettingRow("video.glyph_shadow", "Symbol Shadow",
+               "\"Symbol Shadow\"\nHow dark the shadow\nunder the button\nsymbols is.", ShadowCount,
+               GlyphShadowChoice, SetGlyphShadow, GlyphShadowText),
 };
 
 const Row kAudioRows[] = {

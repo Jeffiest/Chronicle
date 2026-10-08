@@ -1372,6 +1372,12 @@ mouse to the pad's buttons as before.
 | Georama Parts | the part, one of its chips, or a cell of the board; the arrows turn to the next town's parts | scrolls the list or the board |
 | Leave Dungeon | Yes or No | |
 
+An item picked up rides the hand: click it and click where it goes, or press, drag and let go over the
+target. Let go over empty ground and the game asks "Throw this item away?"; Yes sends it through the
+trash can, as the pad does. The scroll bar beside a board takes clicks on its arrows and can be
+dragged. On the attachment screen the three tabs of the tag board turn its pages and its rows follow
+the pointer.
+
 The hit areas are the places the pages draw their brackets at (`ItemMenuModeDraw`, `WeaponMenuDraw`,
 `DrawCharaSelect`, `DrawAtoraSelect`, `DrawMenuMove`), so they follow the interface size and aspect.
 

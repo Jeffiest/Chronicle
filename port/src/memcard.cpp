@@ -6,6 +6,7 @@
 #include "gamepad.hpp"
 #include "memorycardaccess.hpp"
 #include "menu_draw.hpp"
+#include "menu_pointer.hpp"
 #include "menu_save.hpp"
 #include "menuetc.hpp"
 #include "mglib.hpp"
@@ -465,4 +466,29 @@ PC_OVERRIDE void DrawMenuSave(char *frame_name) {
             DrawMainMenuIcon(0x46, 0x32, 5, 1, 0x80, alpha);
             break;
     }
+}
+
+// The menus' hand follows the mouse while a screen has taken it as a pointer (port/src/menu_mouse.cpp).
+PC_OVERRIDE void DrawMenuObjectVibe(int x, int y, int shadow, int icon_u) {
+    CTexture *texture = TexManager.GetTexture(AtoraVibeTextureName, -1);
+    CRect_i_  src(icon_u, 0x28, 0x20, 0x20);
+    float     pointer_x = 0.0f;
+    float     pointer_y = 0.0f;
+
+    if (MenuPointerHand(pointer_x, pointer_y)) {
+        CRect_i_ dest(static_cast<int>(pointer_x), static_cast<int>(pointer_y), src.width, src.height);
+
+        if (shadow != 0) {
+            DrawMenu2DSprite(texture, CRect_i_(dest.x + 5, dest.y + 3, src.width, src.height), src, 0, 0, 0, 100);
+        }
+
+        DrawMenu2DSprite(texture, dest, src, 0x80, 0x80, 0x80, 0x80);
+        return;
+    }
+
+    if (shadow != 0) {
+        DrawObjectVibe(x + 5, y + 3, texture, src, 0, 100);
+    }
+
+    DrawObjectVibe(x, y, texture, src, 0x80, 0x80);
 }

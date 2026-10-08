@@ -3,7 +3,7 @@
 #include <libpad.h>
 
 #include "mainselect.hpp"
-#include "name_mouse.hpp"
+#include "menu_pointer.hpp"
 #include "platform/input.hpp"
 
 // The pad read and stick replacements tell the host when to latch mouse motion and when movement
@@ -18,7 +18,7 @@ PC_OVERRIDE int pad_button_read(PAD_STATUS *status, int port, int slot) {
     unsigned char data[32];
     InputLatchPad(port);
     if (port == 0) {
-        NameMouseUpdate();
+        MenuMouseUpdate();
         g_debug_menu_pressed = InputHostPressed(InputHostAction::DebugMenu);
     }
     if (!scePadRead(port, slot, data)) {
@@ -64,8 +64,8 @@ PC_OVERRIDE int CGamePad::Down(int mask) {
         return 0;
     }
 
-    // The Register Name screen's pointer presses the buttons its clicks stand for.
-    if ((mask & NameMouseSyntheticDown()) != 0) {
+    // A menu's pointer presses the buttons its clicks stand for.
+    if ((mask & MenuPointerSyntheticDown()) != 0) {
         return 1;
     }
 

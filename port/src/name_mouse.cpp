@@ -1,15 +1,12 @@
 #include "name_mouse.hpp"
 
-#include <algorithm>
 #include <cstddef>
 
-
 #include "gamepad.hpp"
-#include "gfx/gfx.hpp"
 #include "menu_draw.hpp"
+#include "menu_pointer.hpp"
 #include "name_mouse_layout.hpp"
 #include "platform/input.hpp"
-#include "platform/window.hpp"
 #include "rect.hpp"
 
 // NAME_SELECT of ps2/src/battle_globals.cpp, which keeps the struct and its enums to itself.
@@ -36,7 +33,7 @@ static_assert(offsetof(NameSelectView, cursor) == 12 && offsetof(NameSelectView,
 static_assert(offsetof(NameSelectView, cursor_x) == 24 && offsetof(NameSelectView, language) == 36);
 
 extern NameSelectView NameSelect;
-extern CTexture       *NameTemp;
+extern CTexture      *NameTemp;
 extern short          menu_euro_codetbl[5][2][13];
 extern signed char    menu_kigoutbl[40];
 extern signed char    euro_code_linelimmit[5];
@@ -53,58 +50,15 @@ constexpr int kStateHelp = 8;
 
 constexpr int kLanguageBritish = 2;
 
-// Where the game's hand rests against the control it is on: the fingertip, as the Options screen's
-// pointer takes it.
-constexpr float kFingerX = 26.0f;
-constexpr float kFingerY = 14.0f;
-
-// Held pad buttons that hand the screen back to the pad.
-constexpr std::uint16_t kPadButtons = kInputUp | kInputDown | kInputLeft | kInputRight | kInputCross | kInputCircle |
-                                      kInputSquare | kInputTriangle | kInputL1 | kInputR1 | kInputL2 | kInputR2 |
-                                      kInputStart;
-constexpr int kStickThreshold = 120;
-
 struct State {
-    bool          active = false;
-    bool          pointing = false;
-    float         x = 0.0f;
-    float         y = 0.0f;
-    std::uint32_t buttons = 0;
-    int           synthetic = 0;
+    MenuPointer pointer;
     // What the pointer was last over, with the screen it was over it on.
-    Hit           hovered;
-    int           hovered_mode = -1;
-    int           hovered_language = -1;
+    Hit hovered;
+    int hovered_mode = -1;
+    int hovered_language = -1;
 };
 
 State g_state;
-
-bool PadHeld() {
-    const InputPadState &pad = InputGetPad(0);
-    if ((pad.buttons & kPadButtons) != 0) {
-        return true;
-    }
-    int x = AxisCalibration(pad.left_x);
-    int y = AxisCalibration(pad.left_y);
-    return x > kStickThreshold || x < -kStickThreshold || y > kStickThreshold || y < -kStickThreshold;
-}
-
-// 640x480 units per count of mouse motion along each axis, through the mapping the 2D is drawn with.
-void UnitsPerCount(float &across, float &down) {
-    gfx::LogicalMapping mapping = gfx::GetUiMapping(gfx::kMainTarget);
-    int                 width = 0;
-    int                 height = 0;
-    // With no window the counts are target pixels, as a script gives them.
-    if (!WindowSize(width, height)) {
-        width = static_cast<int>(mapping.pixel_width);
-        height = static_cast<int>(mapping.pixel_height);
-    }
-    across = PointerUnitsPerCount(mapping.scale_x, static_cast<float>(mapping.pixel_width), static_cast<float>(width));
-    down = PointerUnitsPerCount(mapping.scale_y, static_cast<float>(mapping.pixel_height), static_cast<float>(height));
-    if (across <= 0.0f || down <= 0.0f) {
-        across = down = 1.0f;
-    }
-}
 
 Screen CurrentScreen() {
     Screen screen;
@@ -132,101 +86,66 @@ bool PutCursorOn(const Hit &hit) {
 
 } // namespace
 
-// The screen is closed: the mouse goes back to pressing the pad's buttons, once no button of it is
-// held, since a held button would otherwise be a press of the next screen.
-static void NameMouseClose() {
-    g_state.synthetic = 0;
-    if (g_state.active) {
-        g_state.pointing = false;
-        if (InputTakeMenuMouse().buttons == 0) {
-            g_state.active = false;
-            InputSetMenuMouse(false);
-        }
-    }
-}
+bool NameMouseOpen() { return NameSelect.loaded != 0 && NameSelect.state != kStateExit; }
 
-int NameMouseSyntheticDown() { return g_state.synthetic; }
+void NameMouseRelease() { g_state.pointer.Close(); }
 
 void NameMouseUpdate() {
-    g_state.synthetic = 0;
+    MenuPointer &pointer = g_state.pointer;
 
-    // Open from the moment its textures are read until the game closes it, which leaves the state EXIT
-    // (and the state stays so until the next InitNameRegist).
-    if (NameSelect.loaded == 0 || NameSelect.state == kStateExit) {
-        NameMouseClose();
-        return;
-    }
-
-    if (!g_state.active) {
+    if (!pointer.IsOpen()) {
         // What is held as the screen opens (the click that ended the book) acts only once let go.
-        g_state.active = true;
-        g_state.pointing = false;
-        InputSetMenuMouse(true);
-        g_state.buttons = InputTakeMenuMouse().buttons;
+        pointer.Open();
     }
+    MenuPointerShow(&pointer);
 
-    InputMenuMouse mouse = InputTakeMenuMouse();
-    std::uint32_t  clicked = mouse.buttons & ~g_state.buttons;
-    bool           moved = mouse.dx != 0.0f || mouse.dy != 0.0f;
-    g_state.buttons = mouse.buttons;
+    MenuPointerTake take = pointer.Take(NameSelect.cursor_x, NameSelect.cursor_y);
 
     // Only while the screen takes input: not fading in or out.
     bool taking = (NameSelect.state == kStateIdle || NameSelect.state == kStateTabFlash || NameSelect.state == kStateHelp);
     if (!taking) {
         return;
     }
-
-    if (PadHeld()) {
-        g_state.pointing = false;
-    }
-    if (moved || clicked != 0 || mouse.wheel != 0.0f) {
-        if (!g_state.pointing) {
-            g_state.pointing = true;
-            g_state.x = NameSelect.cursor_x + kFingerX;
-            g_state.y = NameSelect.cursor_y + kFingerY;
-            g_state.hovered = Hit{};
-            g_state.hovered_mode = -1;
-        }
-        float across = 1.0f;
-        float down = 1.0f;
-        UnitsPerCount(across, down);
-        g_state.x = std::clamp(g_state.x + mouse.dx * across, 0.0f, 639.0f);
-        g_state.y = std::clamp(g_state.y + mouse.dy * down, 0.0f, 479.0f);
-    }
-    if (!g_state.pointing) {
+    if (!take.pointing) {
+        g_state.hovered = Hit{};
+        g_state.hovered_mode = -1;
         return;
     }
 
-    int area = NameSelect.area;
+    float x = pointer.x;
+    float y = pointer.y;
+    int   area = NameSelect.area;
     if (area >= kAreaHelp) {
         // A message is up. The confirm dialog's Yes and No are its Cross and Circle; the others close
         // on a click anywhere in their window.
-        bool inside = DialogRect(area).Contains(g_state.x, g_state.y);
+        bool inside = DialogRect(area).Contains(x, y);
+        int  pressed = 0;
         if (area == kAreaConfirm) {
-            int choice = ConfirmChoice(g_state.x, g_state.y);
-            if ((clicked & 1) != 0 && choice != 0) {
-                g_state.synthetic |= choice > 0 ? kInputCross : kInputCircle;
+            int choice = ConfirmChoice(x, y);
+            if ((take.clicked & 1) != 0 && choice != 0) {
+                pressed = choice > 0 ? kInputCross : kInputCircle;
             }
-        } else if ((clicked & 1) != 0 && inside) {
-            g_state.synthetic |= kInputCross;
+        } else if ((take.clicked & 1) != 0 && inside) {
+            pressed = kInputCross;
         }
-        if ((clicked & 2) != 0 && g_state.synthetic == 0) {
-            g_state.synthetic |= kInputCircle;
+        if (pressed == 0 && (take.clicked & 2) != 0) {
+            pressed = kInputCircle;
         }
+        MenuPointerPress(pressed);
         return;
     }
 
     Screen screen = CurrentScreen();
-    Hit    hit = HitTest(screen, g_state.x, g_state.y);
+    Hit    hit = HitTest(screen, x, y);
 
-    if (mouse.wheel != 0.0f) {
+    if (take.wheel != 0.0f) {
         // Over the name the wheel moves the text cursor, elsewhere it turns the keyboard tabs. Away
         // from the user goes left or back, as the pad's L1 and L2 do.
-        bool forward = mouse.wheel < 0.0f;
+        bool forward = take.wheel < 0.0f;
         if (hit.kind == Kind::Slot) {
-            g_state.synthetic |= forward ? kInputR1 : kInputL1;
+            MenuPointerPress(forward ? kInputR1 : kInputL1);
         } else {
-            g_state.synthetic |= forward ? kInputR2 : kInputL2;
+            MenuPointerPress(forward ? kInputR2 : kInputL2);
         }
         return;
     }
@@ -237,32 +156,33 @@ void NameMouseUpdate() {
     g_state.hovered_mode = screen.input_mode;
     g_state.hovered_language = screen.language;
 
-    if ((hit.kind == Kind::Key || hit.kind == Kind::Tab) && (changed || (clicked & 1) != 0)) {
+    if ((hit.kind == Kind::Key || hit.kind == Kind::Tab) && (changed || (take.clicked & 1) != 0)) {
         if (PutCursorOn(hit)) {
             ComMenuSePlay(MENU_SOUND_CURSOR);
         }
     }
 
-    if ((clicked & 1) != 0) {
+    if ((take.clicked & 1) != 0) {
         if (hit.kind == Kind::Key || hit.kind == Kind::Tab) {
-            g_state.synthetic |= kInputCross;
+            MenuPointerPress(kInputCross);
         } else if (hit.kind == Kind::Slot && NameSelect.name_pos != hit.index) {
             NameSelect.name_pos = static_cast<short>(hit.index);
             ComMenuSePlay(MENU_SOUND_CONFIRM);
         }
-    } else if ((clicked & 2) != 0) {
-        g_state.synthetic |= kInputCircle;
+    } else if ((take.clicked & 2) != 0) {
+        MenuPointerPress(kInputCircle);
     }
 }
 
-
 bool NameMouseHand(CTexture *texture, CRect_i_ &screen, const CRect_i_ &texel, bool shadow) {
+    float x = 0.0f;
+    float y = 0.0f;
     // DrawNameTemplete's hand: 32 by 32 at (0x1C0, 0x128) of nametemp.
-    if (!g_state.active || !g_state.pointing || texture != NameTemp || NameTemp == nullptr || texel.x != 0x1C0 ||
-        texel.y != 0x128 || texel.width != 32 || texel.height != 32) {
+    if (!g_state.pointer.IsOpen() || texture != NameTemp || NameTemp == nullptr || texel.x != 0x1C0 ||
+        texel.y != 0x128 || texel.width != 32 || texel.height != 32 || !MenuPointerHand(x, y)) {
         return false;
     }
-    screen.x = static_cast<int>(g_state.x - kFingerX) + (shadow ? 2 : 0);
-    screen.y = static_cast<int>(g_state.y - kFingerY) + (shadow ? 2 : 0);
+    screen.x = static_cast<int>(x) + (shadow ? 2 : 0);
+    screen.y = static_cast<int>(y) + (shadow ? 2 : 0);
     return true;
 }

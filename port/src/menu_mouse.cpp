@@ -4,6 +4,8 @@
 
 #include "battlemenu.hpp"
 #include "dngstatusdata.hpp"
+#include "editpartsinfo.hpp"
+#include "memcard.hpp"
 #include "gamepad.hpp"
 #include "menu_draw.hpp"
 #include "menu_inventory.hpp"
@@ -339,6 +341,110 @@ void ItemMouse(const MenuPointerTake &take) {
     }
 }
 
+// The Georama Parts page: the list of parts on the left, with a cell for the part and one for each
+// of its six chips, and the board of chips the player holds on the right.
+EDITPARTS_INFO *AtlaPartsInfo(int index) {
+    int parts = CommonMenuAtoraInfo->GetNextParts(-1);
+    int count = -1;
+    while (parts != -1) {
+        count++;
+        if (index == count) {
+            return CommonMenuAtoraInfo->GetPartsInfo(parts);
+        }
+        parts = CommonMenuAtoraInfo->GetNextParts(parts);
+    }
+    return nullptr;
+}
+
+// Where the game's brackets stand for the part (cursor 0) and each chip (1 to 6).
+Rect AtlaPartCell(int cursor) {
+    if (cursor == 0) {
+        return Rect{79, 147, 165, 233};
+    }
+    int x = ((cursor + 2) % 3) * 0x2C + 0x92 + 24;
+    int y = (cursor < 4 ? 167 : 210) - 19;
+    return Rect{x - 4, y - 4, x + 40, y + 40};
+}
+
+void AtlaMouse(const MenuPointerTake &take) {
+    if (MenuAtoraSel.step != ATORA_STEP_RUN) {
+        return;
+    }
+    if (!take.pointing) {
+        return;
+    }
+    float x = g_battle.x;
+    float y = g_battle.y;
+    bool  clicked = (take.clicked & 1) != 0;
+    MENU_ATORA_SEL &sel = MenuAtoraSel;
+    int             mode = -1;
+    int             cursor = -1;
+
+    if (kItemBoard.Contains(x, y)) {
+        int column = static_cast<int>((x - kItemBoard.left) / 40);
+        int row = static_cast<int>((y - kItemBoard.top) / 40);
+        mode = ATORA_SIDE_CHIP_LIST;
+        cursor = (sel.board.top_row + row) * 5 + column;
+        if (cursor >= PersonalRetMax(sel.board.page)) {
+            mode = -1;
+        }
+    } else {
+        EDITPARTS_INFO *info = AtlaPartsInfo(sel.board_pos);
+        if (info != nullptr) {
+            for (int c = 0; c <= 6; ++c) {
+                // A chip's cell answers only where the part has a chip for it.
+                if (c > 0 && info->elements[c - 1].id < 0) {
+                    continue;
+                }
+                if (AtlaPartCell(c).Contains(x, y)) {
+                    mode = ATORA_SIDE_BOARD;
+                    cursor = c;
+                }
+            }
+        }
+    }
+
+    if (take.wheel != 0.0f) {
+        bool forward = take.wheel < 0.0f;
+        if (kItemBoard.Contains(x, y)) {
+            if (sel.mode != ATORA_SIDE_CHIP_LIST) {
+                sel.mode = ATORA_SIDE_CHIP_LIST;
+                sel.board.cursor_area = PERSONAL_BOARD_AREA_CELLS;
+                sel.board.cursor = sel.board.top_row * 5;
+            }
+        } else if (sel.mode == ATORA_SIDE_BOARD) {
+            sel.board.cursor = 0;
+        }
+        MenuPointerPress(forward ? kInputDown : kInputUp);
+        return;
+    }
+
+    if (mode >= 0 && (take.moved || clicked)) {
+        if (sel.mode != mode || sel.board.cursor != cursor) {
+            sel.mode = mode;
+            sel.board.cursor = cursor;
+            sel.board.cursor_area = PERSONAL_BOARD_AREA_CELLS;
+            ComMenuSePlay(MENU_SOUND_CURSOR);
+        }
+    }
+    if (clicked) {
+        if (mode >= 0) {
+            MenuPointerPress(kInputCross);
+        } else if (GetAtoraMaxVillage() - 3 > 0) {
+            // The arrows over the board turn to the next town's parts.
+            Rect left = {0x146 - 4, 62, 0x146 + 30, 94};
+            Rect right = {0x20C - 4, 62, 0x20C + 30, 94};
+            if (left.Contains(x, y)) {
+                MenuPointerPress(kInputL1);
+            } else if (right.Contains(x, y)) {
+                MenuPointerPress(kInputR1);
+            }
+        }
+    } else if ((take.clicked & 2) != 0) {
+        MenuPointerPress(kInputCircle);
+    }
+}
+
 void BattleMouse() {
     if (!g_battle.IsOpen()) {
         g_battle.Open();
@@ -353,6 +459,15 @@ void BattleMouse() {
         case BTLMENU_STATE_ITEM:
             ItemMouse(take);
             break;
+        case BTLMENU_STATE_ATLA:
+            AtlaMouse(take);
+            break;
+        case BTLMENU_STATE_ATLA_OPEN:
+            // The Georama page never leaves its opening state; it runs once the page has slid in.
+            if (BtlEffectFlag == BTLEFFECT_NONE) {
+                AtlaMouse(take);
+            }
+            break;
         case BTLMENU_STATE_CHARA:
             AlliesMouse(take);
             break;
@@ -360,7 +475,8 @@ void BattleMouse() {
             MoveMouse(take);
             break;
         default:
-            if (BattleMenuFlag >= BTLMENU_STATE_ITEM_OPEN && BattleMenuFlag <= BTLMENU_STATE_MANUAL_CLOSE) {
+            if (BattleMenuFlag >= BTLMENU_STATE_ITEM_OPEN && BattleMenuFlag <= BTLMENU_STATE_MANUAL_CLOSE &&
+                BattleMenuFlag != BTLMENU_STATE_ATLA_OPEN) {
                 // A page sliding in or out: the pointer stays where it is, and clicks wait for the page.
                 break;
             }

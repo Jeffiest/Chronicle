@@ -54,6 +54,7 @@ struct Options {
     int          height = 0;
     int          display_per_tick = 0;
     const char  *jump = nullptr;
+    const char  *give = nullptr;
     bool         fast_load = false;
     bool         show_fps = false;
     bool         screenshot_fps = false;
@@ -66,6 +67,7 @@ Options g_options;
                  "usage: %s [--data DIR] [--save DIR] [--headless] [--frames N] [--screenshot PATH]\n"
                  "          [--input FILE] [--width W] [--height H] [--offscreen]\n"
                  "          [--display-per-tick N] [--show-fps] [--jump MODE[:MAP]] [--fast-load]\n"
+                 "          [--give ITEM,...]\n"
                  "  --data DIR         the extracted game data (default: DC_DATA, then ./data, then data/\n"
                  "                     beside the executable)\n"
                  "  --save DIR         saves, config.json and the pipeline cache (default: DC_SAVE, then\n"
@@ -85,7 +87,9 @@ Options g_options;
                  "test hooks:\n"
                  "  --jump MODE[:MAP]  start in edit:<map>, dungeon:<0-6>, title, rush, opening or menu,\n"
                  "                     skipping the warm-up (DC_JUMP); see docs/PC.md\n"
-                 "  --fast-load        loading-screen holds and fades of a few ticks (DC_FAST_LOAD=1)\n",
+                 "  --fast-load        loading-screen holds and fades of a few ticks (DC_FAST_LOAD=1)\n"
+                 "  --give ITEM,...    give the party these item and weapon numbers when a town or dungeon\n"
+                 "                     starts, unless it holds them (DC_GIVE); see docs/PC.md\n",
                  program);
     std::exit(kExitUsage);
 }
@@ -125,6 +129,8 @@ Options ParseOptions(int argc, const char **argv) {
             options.height = static_cast<int>(number());
         } else if (arg == "--jump") {
             options.jump = value();
+        } else if (arg == "--give") {
+            options.give = value();
         } else if (arg == "--fast-load") {
             options.fast_load = true;
         } else if (arg == "--show-fps") {
@@ -352,6 +358,13 @@ int Run(int argc, const char **argv) {
     FirstRunIfNoData(options.headless);
     if (options.jump == nullptr) {
         options.jump = std::getenv("DC_JUMP");
+    }
+    if (options.give == nullptr) {
+        options.give = std::getenv("DC_GIVE");
+    }
+    if (options.give != nullptr && *options.give != '\0' && !GameSetGive(options.give)) {
+        std::fprintf(stderr, "bad --give: %s\n", options.give);
+        std::exit(kExitUsage);
     }
     if (options.jump != nullptr && *options.jump != '\0' && !GameSetJump(options.jump)) {
         std::fprintf(stderr, "bad --jump: %s\n", options.jump);

@@ -3,16 +3,19 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #include "battle_globals.hpp"
 #include "btsysscript.hpp"
 #include "dataread.hpp"
 #include "dataset.hpp"
 #include "draw2d_port.hpp"
+#include "dngstatusdata.hpp"
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
 #include "exitcodes.hpp"
@@ -98,6 +101,37 @@ FpsOverlay g_fps;
 void PollFpsToggle() {
     if (InputHostPressed(InputHostAction::FpsToggle)) {
         g_fps.on = !g_fps.on;
+    }
+}
+
+std::vector<int> g_give;
+
+bool Holds(CDngStatusData &status, int item) {
+    if (item >= ITEM_WEAPON_START) {
+        for (const auto &weapons : status.chara_weapons) {
+            for (const WEAPON_HAVE &weapon : weapons) {
+                if (weapon.item_no == item) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    return status.SearchItemIndexNo(item) >= 0;
+}
+
+void GiveOnArrival() {
+    static int last_mode = -1;
+    bool       arrived = mode != last_mode && (mode == GAME_MODE_EDIT || mode == GAME_MODE_DUNGEON);
+    last_mode = mode;
+    if (!arrived || g_give.empty() || SaveData == nullptr) {
+        return;
+    }
+    CDngStatusData &status = *SaveData->GetDngStatus();
+    for (int item : g_give) {
+        if (!Holds(status, item)) {
+            status.GetItem(item, 0);
+        }
     }
 }
 
@@ -557,6 +591,24 @@ void GameApplyLoopResult(int loop_mode, int result) {
     }
 }
 
+bool GameSetGive(const char *list) {
+    std::vector<int> items;
+    std::string_view rest = list;
+    for (bool more = true; more;) {
+        std::string_view token = rest.substr(0, rest.find(','));
+        more = token.size() < rest.size();
+        rest.remove_prefix(std::min(rest.size(), token.size() + 1));
+        int  item = 0;
+        auto [end, error] = std::from_chars(token.data(), token.data() + token.size(), item);
+        if (error != std::errc{} || end != token.data() + token.size() || item < 1 || item > ITEM_WEAPON_END) {
+            return false;
+        }
+        items.push_back(item);
+    }
+    g_give = std::move(items);
+    return !g_give.empty();
+}
+
 bool GameSetJump(const char *spec) {
     std::string_view text = spec;
     std::string_view name = text.substr(0, text.find(':'));
@@ -894,6 +946,7 @@ int RunGame(int argc, char **argv) {
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
 
+            GiveOnArrival();
             InputSetLookOnLeftStick((mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA) ||
                                     (mode == GAME_MODE_EDIT && viewMode != 0 && EdInteriorFlag == 0));
             GamePad.UpDate();

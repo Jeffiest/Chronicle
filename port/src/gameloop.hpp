@@ -34,6 +34,11 @@ void ResetSaveKeepingConfig(CSaveData &save);
 // few ticks.
 bool GameSetJump(const char *spec);
 void GameSetFastLoad(bool fast);
+
+// Test hook: the item and weapon numbers (ps2/include/itemdata.hpp's ITEM_*) the party is given,
+// those it lacks, whenever a town or dungeon starts. Takes them comma-separated; false for anything
+// that is not a list of numbers from 1 to ITEM_WEAPON_END.
+bool GameSetGive(const char *list);
 bool GameFastLoad();
 
 // DebugMode starts as the config file's game.debug_mode. GameCheckDebugToggle runs after every frame

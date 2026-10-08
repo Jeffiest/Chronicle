@@ -290,6 +290,9 @@ bool Prepare(PipelineFamily family, VkPrimitiveTopology topology, const TextureB
     // Index textures are looked up texel by texel in the shader, so their sampler never filters.
     Filter filter = mode == kTexturePalette ? Filter::Nearest : binding.filter;
     push.sampler_slot = SamplerIndex(filter, binding.wrap_u, binding.wrap_v);
+    if (family == kFamilyMesh && filter == Filter::Linear && g.anisotropy_level > 0) {
+        push.sampler_slot = kBaseSamplerCount + (g.anisotropy_level - 1) * 4 + (push.sampler_slot & 3);
+    }
     push.flags = static_cast<uint32_t>(blend.transform) << kPushTransformShift;
     if (state.fog) {
         push.flags |= kPushFog;

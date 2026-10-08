@@ -75,6 +75,7 @@ struct Config {
     ConfigFpsDetail               fps_detail = ConfigFpsDetail::All;
     float                         detail_distance = 0.0f;
     float                         shadow_distance = 0.0f;
+    int                           anisotropy = 0;
     float                         master_volume = 1.0f;
     bool                          surround = false;
     // audio.soundtrack "custom": play recordings from soundtrack/ beside save/ and data/.

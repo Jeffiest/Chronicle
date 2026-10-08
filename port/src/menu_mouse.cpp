@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "battlemenu.hpp"
+#include "itemdata.hpp"
 #include "dngstatusdata.hpp"
 #include "editpartsinfo.hpp"
 #include "memcard.hpp"
@@ -10,6 +11,7 @@
 #include "menu_draw.hpp"
 #include "menu_inventory.hpp"
 #include "menu_manual.hpp"
+#include "weapon_buildup.hpp"
 #include "menu_misc.hpp"
 #include "menu_option.hpp"
 #include "menu_mouse.hpp"
@@ -100,14 +102,15 @@ int YesNoHit(int x, int y, float px, float py) {
 }
 
 // Hover and click on a yes-or-no plate whose answer the game keeps in *answer (0 is Yes).
-void YesNoMouse(const MenuPointerTake &take, int x, int y, short *answer) {
+template <typename T>
+void YesNoMouse(const MenuPointerTake &take, int x, int y, T *answer) {
     int hit = take.pointing ? YesNoHit(x, y, g_battle.x, g_battle.y) : -1;
     if (hit >= 0 && hit != *answer && take.moved) {
-        *answer = static_cast<short>(hit);
+        *answer = static_cast<T>(hit);
         ComMenuSePlay(MENU_SOUND_CURSOR);
     }
     if ((take.clicked & 1) != 0 && hit >= 0) {
-        *answer = static_cast<short>(hit);
+        *answer = static_cast<T>(hit);
         MenuPointerPress(kInputCross);
     } else if ((take.clicked & 2) != 0) {
         MenuPointerPress(kInputCircle);
@@ -124,10 +127,7 @@ void MoveMouse(const MenuPointerTake &take) {
         case MENU_MOVE_FIRST_DUNGEON:
         case MENU_MOVE_INTERIOR_OUT: {
             int y = MenuMove.mode == MENU_MOVE_DUNGEON_ESCAPE ? 0xDC : 0xD8;
-            int cursor = MenuMove.cursor;
-            short answer = static_cast<short>(cursor);
-            YesNoMouse(take, 0x118, y, &answer);
-            MenuMove.cursor = answer;
+            YesNoMouse(take, 0x118, y, &MenuMove.cursor);
             break;
         }
         default:
@@ -445,6 +445,237 @@ void AtlaMouse(const MenuPointerTake &take) {
     }
 }
 
+// The weapon page. WeaponMouse returns false in the modes the mouse does not handle, which leave it
+// to the pad.
+int g_weapon_chara_target = -1;
+
+// The rows of the action dialog the cursor can be on, top to bottom: Equip, Attach, Element and Repair,
+// then Level up, Break down and Build up where the weapon allows them. Gives how many.
+int WeaponActionRows(int *cursors) {
+    int count = 0;
+    for (int i = 0; i < 4; ++i) {
+        cursors[count++] = i;
+    }
+    // The game's NowWeaponStatusValue: bit 1 is Level up, bit 2 Break down, bit 3 Build up.
+    WEAPON_HAVE *weapon = &DngWepHavePt[WepMenu.weapon_slot];
+    int          options = 0;
+    if (weapon->experience >= GetWeaponMaxExp(weapon) || GetNowItemNum(ITEM_POWERUP_POWDER, MenuItemPackPt) > 0) {
+        options |= 2;
+    }
+    if (WeaponStatusBreakEnable(weapon) != 0) {
+        options |= 4;
+    }
+    options |= 8;
+    int build_up = 0;
+    if (WeaponStatusBuildUp(weapon, build_up) <= 0 || GetNowWeaponAttachNum(weapon) != 0 || build_up <= 0) {
+        // Build up is on offer only for a weapon with something to build up to.
+        options &= ~0x10;
+    }
+    if (IsNotBuildUpWeapon(weapon->item_no) != 0) {
+        options &= ~8;
+    }
+    for (int i = 1; i <= 3; ++i) {
+        if ((options & (1 << i)) != 0) {
+            cursors[count++] = i + 3;
+        }
+    }
+    return count;
+}
+
+bool WeaponMouse(const MenuPointerTake &take) {
+    bool clicked = (take.clicked & 1) != 0;
+    switch (WepMenu.state) {
+        case WEP_STATE_WARNING:
+        case WEP_STATE_SCRAP_REFUSED:
+        case WEP_STATE_LEVELUP_EFFECT:
+        case WEP_STATE_STATUS_BREAK_EFFECT:
+        case WEP_STATE_BUILDUP_EFFECT:
+        case WEP_STATE_REPAIR_EFFECT:
+            // A message or an effect that waits for a button.
+            if (take.clicked != 0) {
+                MenuPointerPress((take.clicked & 2) != 0 ? kInputCircle : kInputCross);
+            }
+            return true;
+        case WEP_STATE_OPEN:
+        case WEP_STATE_CLOSE:
+        case WEP_STATE_CHARA_CHANGE:
+        case WEP_STATE_EQUIP:
+            return true;
+        case WEP_STATE_IDLE:
+            break;
+        default:
+            return false;
+    }
+    if (WepMenu.mode != WEP_MENU_LIST) {
+        g_weapon_chara_target = -1;
+    }
+    float x = g_battle.x;
+    float y = g_battle.y;
+
+    switch (WepMenu.mode) {
+        case WEP_MENU_LIST: {
+            // Walking to the party member clicked on: one L1 or R1 a tick.
+            if (g_weapon_chara_target >= 0) {
+                if (WepMenu.chara == g_weapon_chara_target) {
+                    g_weapon_chara_target = -1;
+                } else {
+                    int forward = (g_weapon_chara_target - WepMenu.chara + 6) % 6;
+                    MenuPointerPress(forward <= 3 ? kInputR1 : kInputL1);
+                    return true;
+                }
+            }
+            if (!take.pointing) {
+                return true;
+            }
+            if (take.wheel != 0.0f) {
+                MenuPointerPress(take.wheel < 0.0f ? kInputRight : kInputLeft);
+                return true;
+            }
+            if (clicked) {
+                if (y < 120.0f && BtlMenuStatusPt->party_size > 1) {
+                    // The row of faces: the one clicked comes to the front.
+                    for (int i = 0; i < 6; ++i) {
+                        int left = static_cast<int>(SysChara[i].x);
+                        if (SysChara[i].chara != WepMenu.chara && x >= left && x < left + 100 && y >= 14.0f) {
+                            g_weapon_chara_target = SysChara[i].chara;
+                        }
+                    }
+                } else if (y >= 130.0f && y < 280.0f) {
+                    if (x >= 228.0f && x < 408.0f) {
+                        MenuPointerPress(kInputCross);
+                    } else if (x < 228.0f) {
+                        MenuPointerPress(kInputLeft);
+                    } else {
+                        MenuPointerPress(kInputRight);
+                    }
+                }
+            } else if ((take.clicked & 2) != 0) {
+                MenuPointerPress(kInputCircle);
+            }
+            return true;
+        }
+        case WEP_MENU_ACTION: {
+            if (!take.pointing) {
+                return true;
+            }
+            int cursors[7];
+            int count = WeaponActionRows(cursors);
+            int hit = -1;
+            for (int k = 0; k < count; ++k) {
+                Rect row = {114, 115 + 26 * k, 210, 115 + 26 * k + 26};
+                if (row.Contains(x, y)) {
+                    hit = cursors[k];
+                }
+            }
+            if (hit >= 0 && hit != WepMenu.board.cursor && (take.moved || clicked)) {
+                WepMenu.board.cursor = hit;
+                ComMenuSePlay(MENU_SOUND_CURSOR);
+            }
+            if (take.wheel != 0.0f) {
+                MenuPointerPress(take.wheel < 0.0f ? kInputDown : kInputUp);
+            } else if (clicked) {
+                if (hit >= 0) {
+                    MenuPointerPress(kInputCross);
+                }
+            } else if ((take.clicked & 2) != 0) {
+                MenuPointerPress(kInputCircle);
+            }
+            return true;
+        }
+        case WEP_MENU_ELEMENT: {
+            if (!take.pointing) {
+                return true;
+            }
+            int hit = -1;
+            for (int e = 0; e < 5; ++e) {
+                Rect row = {392, 128 + 24 * e, 588, 152 + 24 * e};
+                if (row.Contains(x, y)) {
+                    hit = e;
+                }
+            }
+            if (hit >= 0 && hit != WepMenu.element && (take.moved || clicked)) {
+                WepMenu.element = static_cast<char>(hit);
+                ComMenuSePlay(MENU_SOUND_CURSOR);
+            }
+            if (clicked) {
+                if (hit >= 0) {
+                    MenuPointerPress(kInputCross);
+                }
+            } else if ((take.clicked & 2) != 0) {
+                MenuPointerPress(kInputCircle);
+            }
+            return true;
+        }
+        case WEP_MENU_LEVELUP_CONFIRM:
+        case WEP_MENU_BUILDUP_CONFIRM:
+            YesNoMouse(take, 0x88, 0xDD, &WepMenu.board.cursor);
+            return true;
+        case WEP_MENU_STATUS_BREAK_CONFIRM:
+            YesNoMouse(take, 0x88, 0xF3, &WepMenu.board.cursor);
+            return true;
+        case WEP_MENU_ATTACH_WEAPON:
+        case WEP_MENU_ATTACH_SOCKETS:
+        case WEP_MENU_ATTACH_BOARD: {
+            // The attachment screen: the weapon's sockets on the left, the board of attachments on the right.
+            if (!take.pointing) {
+                return true;
+            }
+            PERSONAL_BOARD &board = WepMenu.board;
+            int             holes = GetWeaponHoleNum(DngWepHavePt[WepMenu.weapon_slot].item_no);
+            int             mode = -1;
+            int             cursor = board.cursor;
+            int             area = board.cursor_area;
+            if (kItemBoard.Contains(x, y)) {
+                int column = static_cast<int>((x - kItemBoard.left) / 40);
+                int row = static_cast<int>((y - kItemBoard.top) / 40);
+                int index = (board.top_row + row) * 5 + column;
+                if (index < PersonalRetMax(BOARD_PAGE_ATTACH)) {
+                    mode = WEP_MENU_ATTACH_BOARD;
+                    area = PERSONAL_BOARD_AREA_CELLS;
+                    cursor = index;
+                }
+            } else if (kItemTrash.Contains(x, y)) {
+                mode = WEP_MENU_ATTACH_BOARD;
+                area = PERSONAL_BOARD_AREA_TRASH;
+            } else if (WepMenu.sockets_enabled != 0) {
+                for (int i = 0; i < holes; ++i) {
+                    int left = 0x90 - holes * 0x12 + i * 0x2A + 0xC;
+                    if (Rect{left + 6, 184, left + 46, 226}.Contains(x, y)) {
+                        mode = WEP_MENU_ATTACH_SOCKETS;
+                        cursor = i;
+                    }
+                }
+            }
+            if (take.wheel != 0.0f) {
+                if (WepMenu.mode == WEP_MENU_ATTACH_BOARD && kItemBoard.Contains(x, y)) {
+                    MenuPointerPress(take.wheel < 0.0f ? kInputDown : kInputUp);
+                }
+                return true;
+            }
+            if (mode >= 0 && (take.moved || clicked)) {
+                bool moved = mode != WepMenu.mode || cursor != board.cursor ||
+                             (mode == WEP_MENU_ATTACH_BOARD && area != board.cursor_area);
+                if (moved) {
+                    WepMenu.mode = static_cast<short>(mode);
+                    board.cursor = cursor;
+                    board.cursor_area = area;
+                    ComMenuSePlay(MENU_SOUND_CURSOR);
+                }
+            }
+            if (clicked) {
+                if (mode >= 0) {
+                    MenuPointerPress(kInputCross);
+                }
+            } else if ((take.clicked & 2) != 0) {
+                MenuPointerPress(kInputCircle);
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
 void BattleMouse() {
     if (!g_battle.IsOpen()) {
         g_battle.Open();
@@ -455,6 +686,12 @@ void BattleMouse() {
     switch (BattleMenuFlag) {
         case BTLMENU_STATE_MAIN:
             RingMouse(take);
+            break;
+        case BTLMENU_STATE_WEAPON:
+            if (!WeaponMouse(take)) {
+                MenuPointerShow(nullptr);
+                g_battle.Close();
+            }
             break;
         case BTLMENU_STATE_ITEM:
             ItemMouse(take);

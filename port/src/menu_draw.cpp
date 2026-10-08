@@ -1,8 +1,11 @@
 #include "menu_draw.hpp"
 
+#include <cmath>
 #include <cstdint>
 
+#include "gfx/gfx.hpp"
 #include "menu_inventory.hpp"
+#include "menuetc.hpp"
 #include "rect.hpp"
 
 // Retail rounds up to 64 bytes through int, which only holds an address below 2 GiB.
@@ -21,4 +24,21 @@ PC_OVERRIDE void PersonalBoardDrawWaku(int x, int y, CTexture *texture, int alph
     DrawMenu2DSprite(texture, CRect_i_(x + 0x14, y + 1, 0xC8, 0x14), CRect_i_(0x14, 0, 0xC8, 0x14), alpha);
     DrawMenu2DSprite(texture, CRect_i_(x + 0xDC, y + 1, 0x24, 0xBF), CRect_i_(0xDC, 0, 0x24, 0xC0), alpha);
     DrawMenu2DSprite(texture, CRect_i_(x + 0x14, y + 0xA1, 0xC8, 0x1F), CRect_i_(0x14, 0xA0, 0xC8, 0x20), alpha);
+}
+
+// Retail draws the picture across the 640x480 frame. With video.aspect auto on a window the frame
+// does not fill, that leaves the bars down the sides; the picture is meant as the screen, so it is
+// stretched across what the target shows instead (the dungeon entrance's backdrop, the opening
+// book, the escape card, the east king's picture). At 4:3 the visible rect is the frame itself and
+// the picture lands exactly where it did, byte for byte.
+PC_OVERRIDE void DrawFullSizePicture(CTexture *texture, int x, int y, int alpha) {
+    if (texture == nullptr) {
+        return;
+    }
+    gfx::LogicalRect visible = gfx::VisibleLogicalRect(gfx::kMainTarget);
+    int               left = x + static_cast<int>(std::floor(visible.x));
+    int               top = y + static_cast<int>(std::floor(visible.y));
+    int               right = x + static_cast<int>(std::ceil(visible.x + visible.w));
+    int               bottom = y + static_cast<int>(std::ceil(visible.y + visible.h));
+    DrawMenu2DSprite(texture, CRect_i_(left, top, right - left, bottom - top), MenuDispRc, alpha);
 }

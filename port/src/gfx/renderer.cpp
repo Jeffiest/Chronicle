@@ -108,6 +108,9 @@ void CreateInstance() {
     std::vector<const char *> layers;
 
     bool wanted = g.config.validation || SDL_getenv("DC_VULKAN_VALIDATION") != nullptr;
+#ifdef NDEBUG
+    wanted = false;
+#endif
     bool validation = wanted && ValidationAvailable();
     if (wanted && !validation) {
         Error("validation requested but VK_LAYER_KHRONOS_validation is not installed");

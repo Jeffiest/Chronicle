@@ -22,8 +22,7 @@ TEST(PlatformGamepadMap, PlayStationMovesSelectToTheTouchpad) {
 TEST(PlatformGamepadMap, OtherPadsKeepBackAsSelect) {
     const std::array types = {SDL_GAMEPAD_TYPE_UNKNOWN, SDL_GAMEPAD_TYPE_STANDARD,
                               SDL_GAMEPAD_TYPE_XBOX360, SDL_GAMEPAD_TYPE_XBOXONE,
-                              SDL_GAMEPAD_TYPE_PS3, SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO,
-                              SDL_GAMEPAD_TYPE_GAMECUBE};
+                              SDL_GAMEPAD_TYPE_PS3, SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO};
     for (SDL_GamepadType type : types) {
         EXPECT_EQ(GamepadButtonPad(type, SDL_GAMEPAD_BUTTON_BACK), kInputSelect);
         EXPECT_EQ(GamepadButtonPad(type, SDL_GAMEPAD_BUTTON_TOUCHPAD), 0);

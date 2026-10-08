@@ -10,6 +10,7 @@
 #   ./build.sh              build what has changed since the last run
 #   ./build.sh ps2          explicitly select the default PS2 build
 #   ./build.sh linux-x64    build the native Linux port in port/build/pc
+#   ./build.sh linux-x64-release  build the optimized Linux port in port/build/pc-release
 #   ./build.sh macos        build the Apple Silicon port in port/build/macos-arm64
 #   CLEAN=1 ./build.sh      throw ps2/build/ntsc away first, so everything is rebuilt
 #   JOBS=8 ./build.sh       run 8 jobs rather than one per CPU
@@ -23,7 +24,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-    echo "Usage: ./build.sh [ps2|linux-x64|macos]"
+    echo "Usage: ./build.sh [ps2|linux-x64|linux-x64-release|macos]"
     echo "Defaults to ps2. Set CLEAN=1 to rebuild, JOBS=N to limit parallelism."
     echo "REGION=NTSC|PAL selects the PS2 release (default: NTSC)."
 }
@@ -35,7 +36,7 @@ fi
 
 case "${1-ps2}" in
     ps2) ;;
-    linux-x64) ;;
+    linux-x64|linux-x64-release) ;;
     macos)
         # Mach-O cannot be built in the Linux container, so this one stays on
         # the host.
@@ -59,6 +60,8 @@ esac
 # below.
 if [ "${1-ps2}" = linux-x64 ]; then
     BUILD='exec scripts/build/port.sh linux-x64 port/build/pc'
+elif [ "${1-ps2}" = linux-x64-release ]; then
+    BUILD='exec scripts/build/port.sh linux-x64-release port/build/pc-release'
 else
     # CLEAN discards the region's build directory -- and nothing else under
     # ps2/build/ -- under the lock every build of the tree takes (see

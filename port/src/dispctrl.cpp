@@ -1,6 +1,7 @@
 #include "dispctrl.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 #include "debugfont.hpp"
@@ -16,6 +17,14 @@ namespace {
 
 constexpr int kCellWidth = 8;
 constexpr int kCellHeight = 16;
+
+// The boot/loading screen the port starts on in debug builds is MenuInit's developer menu, which
+// draws into "frame_buff". It gets a dark panel, a light border and a bar behind the selected row
+// so it reads as a menu instead of blue debug text on a blue field. Every other CDebugFont user
+// (the town editor's "font_buff", a dungeon's "dbgwork", the item preview) keeps retail's look.
+bool IsDeveloperMenu(const char *texture_name) {
+    return texture_name != nullptr && std::strcmp(texture_name, "frame_buff") == 0;
+}
 
 } // namespace
 
@@ -54,7 +63,43 @@ PC_OVERRIDE void CDebugFont::Draw() {
     const float scale_y = static_cast<float>(height - 1) / static_cast<float>(height);
     const float rows = draw2d::RowScale();
     auto        screen_x = [&](int texel_x) { return static_cast<float>(this->x) + texel_x * scale_x; };
-    auto screen_y = [&](int texel_y) { return (static_cast<float>(this->y) + texel_y * scale_y) * rows; };
+    auto        screen_y = [&](int texel_y) { return (static_cast<float>(this->y) + texel_y * scale_y) * rows; };
+
+    const bool menu = IsDeveloperMenu(this->texture_name);
+    // The panel, its border, the divider under the version line and the bar behind the cursor row,
+    // all as untextured quads drawn before the glyphs.
+    std::vector<gfx::Vertex2D> skin;
+    auto skin_rect = [&](int left, int top, int right, int bottom, std::uint8_t r, std::uint8_t g, std::uint8_t b,
+                         std::uint8_t a) {
+        const float x0 = screen_x(left);
+        const float x1 = screen_x(right);
+        const float y0 = screen_y(top);
+        const float y1 = screen_y(bottom);
+        skin.push_back(draw2d::Vertex(x0, y0, 0.0f, 0.0f, 0.0f, r, g, b, a));
+        skin.push_back(draw2d::Vertex(x1, y0, 0.0f, 0.0f, 0.0f, r, g, b, a));
+        skin.push_back(draw2d::Vertex(x1, y1, 0.0f, 0.0f, 0.0f, r, g, b, a));
+        skin.push_back(draw2d::Vertex(x0, y1, 0.0f, 0.0f, 0.0f, r, g, b, a));
+    };
+    if (menu) {
+        skin_rect(0, 0, width, height, 0x10, 0x12, 0x1c, 0xd0);
+        int line = 0;
+        for (const char *text = this->text;; text++) {
+            if ((text == this->text || text[-1] == '\n') && *text == '>') {
+                skin_rect(0, line * kCellHeight, width, (line + 1) * kCellHeight, 0xe8, 0xb0, 0x4a, 0x28);
+            }
+            if (*text == '\0') {
+                break;
+            }
+            if (*text == '\n') {
+                line++;
+            }
+        }
+        skin_rect(0, 0, width, 1, 0x54, 0x5e, 0x78, 0xff);
+        skin_rect(0, height - 1, width, height, 0x54, 0x5e, 0x78, 0xff);
+        skin_rect(0, 0, 1, height, 0x54, 0x5e, 0x78, 0xff);
+        skin_rect(width - 1, 0, width, height, 0x54, 0x5e, 0x78, 0xff);
+        skin_rect(1, kCellHeight, width - 1, kCellHeight + 1, 0x54, 0x5e, 0x78, 0x80);
+    }
 
     const int         columns = (width + kCellWidth - 1) / kCellWidth;
     const int         lines = (height + kCellHeight - 1) / kCellHeight;
@@ -95,16 +140,18 @@ PC_OVERRIDE void CDebugFont::Draw() {
         const float right = screen_x(x0 + cell_width);
         const float top = screen_y(y0);
         const float bottom = screen_y(y0 + cell_height);
-        glyph_quads.push_back(draw2d::Vertex(left, top, 0.0f, u0, v0, 0x80, 0x80, 0x80, 0x40));
-        glyph_quads.push_back(draw2d::Vertex(right, top, 0.0f, u1, v0, 0x80, 0x80, 0x80, 0x40));
-        glyph_quads.push_back(draw2d::Vertex(right, bottom, 0.0f, u1, v1, 0x80, 0x80, 0x80, 0x40));
-        glyph_quads.push_back(draw2d::Vertex(left, bottom, 0.0f, u0, v1, 0x80, 0x80, 0x80, 0x40));
+        const std::uint8_t grey = menu ? 0xff : 0x80;
+        const std::uint8_t glyph_alpha = menu ? 0x80 : 0x40;
+        glyph_quads.push_back(draw2d::Vertex(left, top, 0.0f, u0, v0, grey, grey, grey, glyph_alpha));
+        glyph_quads.push_back(draw2d::Vertex(right, top, 0.0f, u1, v0, grey, grey, grey, glyph_alpha));
+        glyph_quads.push_back(draw2d::Vertex(right, bottom, 0.0f, u1, v1, grey, grey, grey, glyph_alpha));
+        glyph_quads.push_back(draw2d::Vertex(left, bottom, 0.0f, u0, v1, grey, grey, grey, glyph_alpha));
     }
 
-    // MODULATE of the backdrop's TA0 by the sprite's 0x40.
+    // MODULATE of the backdrop's TA0 by the sprite's 0x40. The menu's dark panel replaces it.
     const u_char               alpha = static_cast<u_char>((state.texa_ta0 * 0x40) >> 7);
     std::vector<gfx::Vertex2D> backdrop;
-    for (int line = 0; line < lines; line++) {
+    for (int line = 0; !menu && line < lines; line++) {
         const float top = screen_y(line * kCellHeight);
         const float bottom = screen_y(std::min((line + 1) * kCellHeight, height));
         for (int column = 0; column < columns;) {
@@ -128,6 +175,9 @@ PC_OVERRIDE void CDebugFont::Draw() {
         }
     }
 
+    if (!skin.empty()) {
+        gfx::Draw2D(gfx::Primitive::Quads, skin, {}, state);
+    }
     if (!backdrop.empty()) {
         gfx::Draw2D(gfx::Primitive::Quads, backdrop, {}, state);
     }

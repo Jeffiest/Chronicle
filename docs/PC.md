@@ -851,8 +851,11 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   `MGFillBox`, the previous-frame feedback, frame grabs drawn back; the loading
   screen clears the whole window) reaches the window's edges by the rule in
   `port/src/gfx/README.md`, "Aspect": an untextured or frame-image rectangle that
-  reaches an edge of the frame from inside is carried to the window's edge;
-  textured HUD pieces and 4:3 pictures (the floor select's backdrop) are not.
+  reaches an edge of the frame from inside is carried to the window's edge. A
+  4:3 picture that covers the whole frame (the cutscenes' stills over the 3D
+  scene) is stretched to the window's edges instead, so it no longer leaves the
+  frame's sides bare; textured HUD pieces and 4:3 pictures that do not cover the
+  whole frame (the floor select's backdrop, 640x448 at y 16) are not.
   `video.ui_scale` scales the depthless 2D about the window's centre.
 - **HUD.** The pieces that sit by an edge of the frame keep their distance to
   that edge of the window instead, at their own size (`gfx::UiAnchor`,

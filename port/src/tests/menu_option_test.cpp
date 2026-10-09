@@ -86,17 +86,22 @@ TEST(MenuOption, AudioPageKeepsCustomSoundtrackAndSurround) {
     ASSERT_NE(page, pages.end());
     const auto soundtrack = std::find_if(page->rows.begin(), page->rows.end(),
                                          [](const options::Row &row) { return std::string_view(row.key) == "audio.soundtrack"; });
-    const auto surround = std::find_if(page->rows.begin(), page->rows.end(),
-                                       [](const options::Row &row) { return std::string_view(row.key) == "audio.surround"; });
+    const auto sound = std::find_if(page->rows.begin(), page->rows.end(),
+                                    [](const options::Row &row) { return std::string_view(row.key) == "audio.sound"; });
     ASSERT_NE(soundtrack, page->rows.end());
-    ASSERT_NE(surround, page->rows.end());
+    ASSERT_NE(sound, page->rows.end());
     Config config;
     EXPECT_EQ(options::RowValue(*soundtrack, config), "PS2");
     EXPECT_TRUE(options::StepRow(*soundtrack, config, 1, false));
     EXPECT_TRUE(config.soundtrack);
     EXPECT_EQ(options::RowValue(*soundtrack, config), "Custom");
-    EXPECT_TRUE(options::StepRow(*surround, config, -1, false));
-    EXPECT_TRUE(config.surround);
+    EXPECT_EQ(options::RowValue(*sound, config), "Stereo");
+    EXPECT_TRUE(options::StepRow(*sound, config, 1, false));
+    EXPECT_TRUE(config.surround && config.options.stereo);
+    EXPECT_EQ(options::RowValue(*sound, config), "Surround");
+    EXPECT_TRUE(options::StepRow(*sound, config, 1, true));
+    EXPECT_TRUE(!config.surround && !config.options.stereo);
+    EXPECT_EQ(options::RowValue(*sound, config), "Mono");
 }
 
 namespace {

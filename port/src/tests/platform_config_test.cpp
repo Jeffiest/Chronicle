@@ -195,7 +195,11 @@ TEST(PlatformConfig, ShowFpsAndTheHostKeys) {
 
 TEST(PlatformConfig, SurroundIsOffUntilAsked) {
     ASSERT_TRUE(!ConfigParse("").surround);
-    ASSERT_TRUE(ConfigParse(R"({"audio": {"surround": true}})").surround);
+    Config surround = ConfigParse(R"({"audio": {"sound": "surround"}})");
+    ASSERT_TRUE(surround.surround && surround.options.stereo);
+    ASSERT_NE(ConfigSerialize(surround).find("\"sound\": \"surround\""), std::string::npos);
+    ASSERT_EQ(ConfigSerialize(surround).find("\"surround\": "), std::string::npos);
+    ASSERT_TRUE(ConfigParse(R"({"audio": {"sound": "stereo", "surround": true}})").surround);
     ASSERT_TRUE(!ConfigParse(R"({"audio": {"surround": "yes"}})").surround);
 }
 

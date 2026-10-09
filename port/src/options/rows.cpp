@@ -536,6 +536,19 @@ std::string GlyphShadowText(const Config &config) {
     return std::format("{}%", config.glyph_shadow);
 }
 
+int Three(const Config &) {
+    return 3;
+}
+
+int SoundChoice(const Config &config) {
+    return config.surround ? 2 : config.options.stereo ? 1 : 0;
+}
+
+void SetSound(Config &config, int choice) {
+    config.options.stereo = choice != 0;
+    config.surround = choice == 2;
+}
+
 template <int Config::*Member>
 int PictureShadowChoice(const Config &config) {
     return std::clamp(config.*Member / 5, 0, 20);
@@ -603,12 +616,11 @@ const Row kDisplayRows[] = {
 const Row kAudioRows[] = {
     SettingRow("audio.master_volume", "Volume", "\"Volume\"\nHow loud the game is.", VolumeCount, VolumeChoice,
                SetVolume, VolumeText),
-    GameRow<&ConfigGameOptions::stereo, true>("audio.sound", "Sound", "Stereo|Mono", 0x161),
+    SettingRow("audio.sound", "Sound", "\"Sound\"\nMono, stereo, or\nsurround for 5.1\nspeakers.", Three, SoundChoice,
+               SetSound, nullptr, "Mono|Stereo|Surround"),
     NamedRow<&Config::soundtrack>("audio.soundtrack", "Soundtrack",
                                   "\"Soundtrack\"\nPS2: the game's music.\nCustom: your own\nrecordings, from the\nnext song.",
                                   "PS2|Custom"),
-    OnOffRow<&Config::surround>("audio.surround", "Surround",
-                                "\"Surround\"\nSpreads the sound to\n5.1 speakers."),
 };
 
 const Row kControlRows[] = {

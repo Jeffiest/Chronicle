@@ -284,6 +284,11 @@ bool ApplyGameOption(ConfigGameOptions &options, std::string_view name, const Js
 }
 
 bool Apply(Config &config, std::string_view name, const Json &value) {
+    if (name == "audio.sound" && value == "surround") {
+        config.options.stereo = true;
+        config.surround = true;
+        return true;
+    }
     if (ApplyGameOption(config.options, name, value)) {
         return true;
     }
@@ -507,6 +512,7 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "audio.soundtrack") {
         return ReadChoice(value, "ps2", "custom", config.soundtrack);
     }
+    // Written before audio.sound took "surround".
     if (name == "audio.surround") {
         return ReadBool(value, config.surround);
     }
@@ -625,8 +631,7 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["anisotropy"] = config.anisotropy;
     root["video"]["soft_focus"] = options.soft_focus;
     root["audio"]["master_volume"] = Shortest(config.master_volume);
-    root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
-    root["audio"]["surround"] = config.surround;
+    root["audio"]["sound"] = config.surround ? "surround" : options.stereo ? "stereo" : "mono";
     root["audio"]["soundtrack"] = config.soundtrack ? "custom" : "ps2";
     root["input"]["mouse_sensitivity"] = Shortest(config.mouse_sensitivity);
     root["input"]["stick_sensitivity"] = Shortest(config.stick_sensitivity);

@@ -203,7 +203,6 @@ void Draw() {
     DrawSprite(kExitX, kExitY, 452, 224, kExitWidth, kExitHeight, alpha);
 
     if (g_screen.step == OPTION_STEP_RUN) {
-        DrawSelection(alpha);
         g_screen.step_count = 0;
     } else {
         g_screen.step_count++;
@@ -217,6 +216,12 @@ void Draw() {
     GetTexts().shortcuts.Draw(kExitX, kHelpY, alpha);
     DrawTabs(alpha);
     DrawRows(alpha);
+
+    // The pointer and its bracket are the topmost layer: draw them after the menu text so the
+    // item the mouse is over cannot cover the cursor.
+    if (g_screen.step == OPTION_STEP_RUN) {
+        DrawSelection(alpha);
+    }
 
     setbilinear(1);
 }

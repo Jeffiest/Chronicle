@@ -497,7 +497,7 @@ void CActionSeq::Play() {
             MOTION_INFO *motion_info = character->GetMotionInfo(motion_head->arguments.animation.id);
 
             if (motion_info != NULL && motion_head->arguments.animation.mode == 7) {
-#ifdef PAL
+#ifdef PAL_TIMING
                 // The last step is the one the character plays at, once its speed is set.
                 float step = motion_info->speed;
 

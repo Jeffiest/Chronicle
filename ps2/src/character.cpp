@@ -489,7 +489,7 @@ void CCharacter::Step() {
     int             set_no;
     tagMOTION_TYPE *motion;
     float           old_time;
-#ifdef PAL
+#ifdef PAL_TIMING
     float step;
 #endif
     float             new_time;
@@ -524,7 +524,7 @@ void CCharacter::Step() {
     this->motion_state = 2;
     motion_info = &motion->motion_info[index];
 
-#ifdef PAL
+#ifdef PAL_TIMING
     // The step the motion advances by this frame, once the character's own speed overrides it.
     step = motion_info->speed;
 
@@ -570,7 +570,7 @@ void CCharacter::Step() {
     }
 
     if (this->motion_flags & 2) {
-#ifdef PAL
+#ifdef PAL_TIMING
         if (!(motion->state.time + step < (float) motion->motion_info[index].end)) {
 #else
         if (!(motion->state.time + saved_speed + 0.01f < (float) motion->motion_info[index].end)) {

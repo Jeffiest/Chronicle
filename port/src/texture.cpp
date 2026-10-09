@@ -23,9 +23,11 @@ struct HiresStats {
     size_t seen = 0;
     size_t matched = 0;
     size_t replaced = 0;
+    uint64_t replacement_bytes = 0;
     ~HiresStats() {
         if (std::getenv("DC_HIRES_STATS") != nullptr) {
-            std::fprintf(stderr, "hires: textures seen=%zu matched=%zu replaced=%zu\n", seen, matched, replaced);
+            std::fprintf(stderr, "hires: textures seen=%zu matched=%zu replaced=%zu replacement_bytes=%llu\n", seen,
+                         matched, replaced, static_cast<unsigned long long>(replacement_bytes));
         }
     }
 };
@@ -75,11 +77,16 @@ gfx::TextureHandle LoadHires(const PortDecodedTexture &original) {
     desc.mip_levels = static_cast<uint32_t>(decoded->levels.size());
     desc.has_alpha = original.has_alpha;
     auto handle = gfx::CreateTexture(desc);
+    uint64_t uploaded_bytes = 0;
     for (size_t i = 0; handle != gfx::kNullTexture && i < decoded->levels.size(); ++i) {
         uint32_t w = std::max(1, decoded->width >> i), h = std::max(1, decoded->height >> i);
         gfx::UpdateTexture(handle, static_cast<uint32_t>(i), 0, 0, w, h, decoded->levels[i].data());
+        uploaded_bytes += decoded->levels[i].size();
     }
-    if (handle != gfx::kNullTexture) ++g_hires_stats.replaced;
+    if (handle != gfx::kNullTexture) {
+        ++g_hires_stats.replaced;
+        g_hires_stats.replacement_bytes += uploaded_bytes;
+    }
     return handle;
 }
 

@@ -147,6 +147,8 @@
     "options.page.display.help": "\"Anzeige\"\nFenster und Bild.",
     "options.page.audio.help": "\"Audio\"\nTon und Musik.",
     "options.page.controls.help": "\"Steuerung\"\nMaus, Gamepad und Gyro.",
+    "options.page.text": "Text",
+    "options.page.text.help": "\"Text\"\nSprache, Schrift und\nSymbole.",
     "options.page.accessibility": "Bedienhilfen",
     "options.page.accessibility.help": "\"Bedienhilfen\"\nHilfe bei den schwereren\nStellen des Spiels.",
     "options.audio.soundtrack.label": "Soundtrack",

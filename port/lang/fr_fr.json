@@ -147,6 +147,8 @@
     "options.page.display.help": "\"Affichage\"\nLa fenêtre et l'image.",
     "options.page.audio.help": "\"Audio\"\nSon et musique.",
     "options.page.controls.help": "\"Commandes\"\nSouris, manette et gyro.",
+    "options.page.text": "Texte",
+    "options.page.text.help": "\"Texte\"\nLangue, lettrage et\nsymboles.",
     "options.page.accessibility": "Accessibilité",
     "options.page.accessibility.help": "\"Accessibilité\"\nAide pour les passages\nles plus difficiles.",
     "options.audio.soundtrack.label": "Bande-son",

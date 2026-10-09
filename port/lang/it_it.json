@@ -147,6 +147,8 @@
     "options.page.display.help": "\"Schermo\"\nLa finestra e l'immagine.",
     "options.page.audio.help": "\"Audio\"\nSuono e musica.",
     "options.page.controls.help": "\"Comandi\"\nMouse, gamepad e giroscopio.",
+    "options.page.text": "Testo",
+    "options.page.text.help": "\"Testo\"\nLingua, scritte e\nsimboli.",
     "options.page.accessibility": "Accessibilità",
     "options.page.accessibility.help": "\"Accessibilità\"\nAiuto per le parti più\ndifficili del gioco.",
     "options.audio.soundtrack.label": "Colonna sonora",

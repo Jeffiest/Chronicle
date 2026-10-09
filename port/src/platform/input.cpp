@@ -758,8 +758,14 @@ void InputShutdown() {
     }
 }
 
-static InputGlyphFamily GamepadFamily(SDL_Gamepad *gamepad) {
-    switch (SDL_GetGamepadType(gamepad)) {
+InputGlyphFamily InputGlyphFamilyForGamepad(int sdl_gamepad_type, unsigned vendor, unsigned product) {
+    constexpr unsigned kValve = 0x28DE;
+    constexpr unsigned kSteamDeck = 0x1205;
+    switch (sdl_gamepad_type) {
+        case SDL_GAMEPAD_TYPE_PS3:
+            return InputGlyphFamily::Ps3;
+        case SDL_GAMEPAD_TYPE_PS4:
+            return InputGlyphFamily::Ps4;
         case SDL_GAMEPAD_TYPE_PS5:
             return InputGlyphFamily::Ps5;
         case SDL_GAMEPAD_TYPE_XBOX360:
@@ -771,8 +777,17 @@ static InputGlyphFamily GamepadFamily(SDL_Gamepad *gamepad) {
         case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
             return InputGlyphFamily::Switch;
         default:
-            return InputGlyphFamily::Ps4;
+            break;
     }
+    if (vendor == kValve) {
+        return product == kSteamDeck ? InputGlyphFamily::SteamDeck : InputGlyphFamily::SteamController;
+    }
+    return InputGlyphFamily::Xbox;
+}
+
+static InputGlyphFamily GamepadFamily(SDL_Gamepad *gamepad) {
+    return InputGlyphFamilyForGamepad(SDL_GetGamepadType(gamepad), SDL_GetGamepadVendor(gamepad),
+                                      SDL_GetGamepadProduct(gamepad));
 }
 
 void InputPoll() {

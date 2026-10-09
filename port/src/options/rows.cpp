@@ -463,7 +463,7 @@ void SetGyro(Config &config, int choice) {
 }
 
 int GlyphDeviceCount(const Config &) {
-    return 6;
+    return 9;
 }
 
 int GlyphDeviceChoice(const Config &config) {
@@ -637,7 +637,7 @@ const Row kControlRows[] = {
                                   "Original|New"),
     SettingRow("input.glyph_device", "Symbols Shown",
                "\"Symbols Shown\"\nAuto: the device you\nuse. Or always show one\nof the others.", GlyphDeviceCount,
-               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS4|PS5|Xbox|Switch|Keyboard"),
+               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS3|PS4|PS5|Xbox|Switch|Steam Deck|Steam Controller|Keyboard"),
     SettingRow("input.mouse_sensitivity", "Mouse Sensitivity", "\"Mouse Sensitivity\"\nHow fast the mouse\nturns the camera.",
                MouseSensitivityCount, MouseSensitivityChoice, SetMouseSensitivity, MouseSensitivityText, nullptr,
                RestoreMouseSensitivity),

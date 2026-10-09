@@ -202,7 +202,7 @@ TEST(MenuOption, PagesInOrder) {
     for (const options::Page &page : pages) {
         names.push_back(page.name);
     }
-    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility",
+    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Graphics", "Audio", "Controls", "Accessibility",
                                                         "Bindings"}));
     ASSERT_TRUE(std::string_view(pages[4].rows[0].key) == "game.qte_always_win");
 }

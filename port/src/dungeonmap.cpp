@@ -551,15 +551,22 @@ PC_OVERRIDE void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player) 
     }
 }
 
-PC_OVERRIDE void CDungeonMap::DrawDummyModel(CCamera *) {
+PC_OVERRIDE void CDungeonMap::DrawDummyModel(CCamera *camera) {
+    float pos[4];
+
     if (this->dummy_num == 0) {
         return;
     }
 
+    // A dummy model only draws while the camera is near enough to it.
+    camera->GetPos(pos);
+
     for (int i = 0; i < this->dummy_num; i++) {
         if (this->dummy_frame[this->dummy_model[i]] != NULL) {
-            this->dummy_frame[this->dummy_model[i]]->SetPosition(this->dummy_pos[i]);
-            MGDraw(this->dummy_frame[this->dummy_model[i]]);
+            if (DistVector(this->dummy_pos[i], pos) < 160.0f * (1.0f + this->draw_dist_scale)) {
+                this->dummy_frame[this->dummy_model[i]]->SetPosition(this->dummy_pos[i]);
+                MGDraw(this->dummy_frame[this->dummy_model[i]]);
+            }
         }
     }
 }

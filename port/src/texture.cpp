@@ -19,6 +19,19 @@
 
 namespace {
 
+struct HiresStats {
+    size_t seen = 0;
+    size_t matched = 0;
+    size_t replaced = 0;
+    ~HiresStats() {
+        if (std::getenv("DC_HIRES_STATS") != nullptr) {
+            std::fprintf(stderr, "hires: textures seen=%zu matched=%zu replaced=%zu\n", seen, matched, replaced);
+        }
+    }
+};
+
+HiresStats g_hires_stats;
+
 std::string HiresKey(const PortDecodedTexture &decoded) {
     if (decoded.levels.empty()) return {};
     std::vector<uint8_t> rgba(static_cast<size_t>(decoded.width) * decoded.height * 4);
@@ -35,13 +48,27 @@ std::string HiresKey(const PortDecodedTexture &decoded) {
 
 gfx::TextureHandle LoadHires(const PortDecodedTexture &original) {
     if (!ConfigGet().hires_textures || original.levels.empty()) return gfx::kNullTexture;
+    ++g_hires_stats.seen;
     std::string key = HiresKey(original);
     auto &pack = platform::HiresActivePack();
     const auto *item = pack.FindEntry(key);
-    if (!item || item->width != original.width * item->scale || item->height != original.height * item->scale) return gfx::kNullTexture;
+    if (item != nullptr) ++g_hires_stats.matched;
+    if (std::getenv("DC_HIRES_STATS") != nullptr && g_hires_stats.seen <= 24) {
+        std::fprintf(stderr, "hires: candidate %ux%u key=%s match=%s\n", original.width, original.height,
+                     key.c_str(), item == nullptr ? "no" : "yes");
+    }
+    if (!item || item->width != original.width || item->height != original.height || item->scale < 2) {
+        return gfx::kNullTexture;
+    }
     const uint32_t mip_levels = static_cast<uint32_t>(original.levels.size() + (original.levels.size() > 1 ? 1 : 0));
     auto decoded = pack.LoadTexture(key, original.levels.size() > 1, mip_levels);
-    if (!decoded || decoded->width != item->width || decoded->height != item->height) return gfx::kNullTexture;
+    if (!decoded || decoded->width != original.width * item->scale || decoded->height != original.height * item->scale) {
+        if (std::getenv("DC_HIRES_STATS") != nullptr && g_hires_stats.matched <= 3) {
+            std::fprintf(stderr, "hires: decode mismatch key=%s expected=%ux%u actual=%ux%u\n", key.c_str(),
+                         item->width, item->height, decoded ? decoded->width : 0, decoded ? decoded->height : 0);
+        }
+        return gfx::kNullTexture;
+    }
     gfx::TextureDesc desc;
     desc.width = decoded->width; desc.height = decoded->height;
     desc.logical_width = original.width; desc.logical_height = original.height;
@@ -52,6 +79,7 @@ gfx::TextureHandle LoadHires(const PortDecodedTexture &original) {
         uint32_t w = std::max(1, decoded->width >> i), h = std::max(1, decoded->height >> i);
         gfx::UpdateTexture(handle, static_cast<uint32_t>(i), 0, 0, w, h, decoded->levels[i].data());
     }
+    if (handle != gfx::kNullTexture) ++g_hires_stats.replaced;
     return handle;
 }
 

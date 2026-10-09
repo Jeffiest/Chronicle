@@ -62,7 +62,12 @@ bool HiresPack::Load(const std::filesystem::path &pack_dir) {
         }
 
         m_version = root.value("version", 1);
-        m_scale = root.value("scale", 1);
+        // Packs may describe scale per entry. Their top-level scale is then a label
+        // (for example "per-texture"), not a number.
+        m_scale = root.contains("scale") && root["scale"].is_number_integer() ? root["scale"].get<int>() : 1;
+        std::string scale_label = root.contains("scale") && root["scale"].is_string()
+                                      ? root["scale"].get<std::string>()
+                                      : std::to_string(m_scale) + "x";
 
         if (root.contains("textures") && root["textures"].is_object()) {
             for (const auto &[key, val] : root["textures"].items()) {
@@ -79,8 +84,8 @@ bool HiresPack::Load(const std::filesystem::path &pack_dir) {
             }
         }
         m_loaded = true;
-        std::fprintf(stderr, "hires: loaded pack from %s (%zu textures, scale %dx)\n",
-                     PathsDisplay(pack_dir).c_str(), m_textures.size(), m_scale);
+        std::fprintf(stderr, "hires: loaded pack from %s (%zu textures, scale %s)\n",
+                     PathsDisplay(pack_dir).c_str(), m_textures.size(), scale_label.c_str());
         return true;
     } catch (const std::exception &e) {
         std::fprintf(stderr, "hires: failed to parse %s: %s\n", PathsDisplay(index_file).c_str(), e.what());

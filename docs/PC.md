@@ -151,7 +151,7 @@ key is optional; these are the defaults:
     },
     "audio": {
         "master_volume": 1.0,       // 0 to 1
-        "sound": "stereo"           // stereo or mono
+        "sound": "stereo"           // mono, stereo or surround (the stereo mix spread to 5.1 speakers)
     },
     "input": {
         "mouse_sensitivity": 0.1,   // degrees the camera turns per count of mouse motion
@@ -1311,7 +1311,7 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 |---|---|
 | Game | save cursor position, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select |
 | Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
-| Audio | volume, sound (stereo or mono), soundtrack (PS2 or custom), surround |
+| Audio | volume, sound (mono, stereo or surround), soundtrack (PS2 or custom) |
 | Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, vertical return, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
 | Text | language, message speed, button symbols (original or new), symbols shown (glyph device), text shadow, symbol shadow, area name shadow, floor label shadow, boss name shadow |
 | Accessibility | always win QTEs |

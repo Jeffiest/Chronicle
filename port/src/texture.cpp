@@ -9,6 +9,7 @@
 
 #include "dataalloc.hpp"
 #include "mglib.hpp"
+#include "localize_texture.hpp"
 #include "texture_port.hpp"
 #include "tim2.hpp"
 
@@ -348,6 +349,7 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
                                indexed && swizzled != 0, decoded)) {
             return;
         }
+        LocalizeTexture(name, decoded);
         MakeGroundPeriodic(name, decoded);
         DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
@@ -450,6 +452,7 @@ PC_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
     unsigned           tbp = 0;
     unsigned           cbp = 0;
     if (PortDecodeTexture(1, width, height, levels, 1, clut, 256, false, decoded)) {
+        LocalizeTexture(name, decoded);
         DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
     }

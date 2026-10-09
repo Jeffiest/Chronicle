@@ -398,8 +398,13 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
     }
-    if (name == "video.text_shadow" || name == "video.glyph_shadow") {
-        int &target = name == "video.text_shadow" ? config.text_shadow : config.glyph_shadow;
+    if (name == "video.text_shadow" || name == "video.glyph_shadow" || name == "video.name_shadow" ||
+        name == "video.floor_shadow" || name == "video.boss_shadow") {
+        int &target = name == "video.text_shadow"    ? config.text_shadow
+                      : name == "video.glyph_shadow" ? config.glyph_shadow
+                      : name == "video.name_shadow"  ? config.name_shadow
+                      : name == "video.floor_shadow" ? config.floor_shadow
+                                                     : config.boss_shadow;
         if (value.is_string()) {
             // the earlier two-choice setting
             const std::string shadow = Lower(value.get<std::string>());
@@ -602,6 +607,9 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["names"] = options.names;
     root["video"]["text_shadow"] = config.text_shadow;
     root["video"]["glyph_shadow"] = config.glyph_shadow;
+    root["video"]["name_shadow"] = config.name_shadow;
+    root["video"]["floor_shadow"] = config.floor_shadow;
+    root["video"]["boss_shadow"] = config.boss_shadow;
     root["video"]["present_mode"] = PresentModeName(config.present_mode);
     root["video"]["interpolation"] = config.interpolation;
     root["video"]["max_fps"] = config.max_fps;

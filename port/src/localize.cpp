@@ -674,6 +674,11 @@ std::filesystem::path LocalizeFindFile(std::string_view name) {
     return {};
 }
 
+std::string LocalizeLanguageFile() {
+    const char *file = LanguageFile(LanguageCode);
+    return file != nullptr ? file : "";
+}
+
 namespace {
 
 // 0: none waiting.

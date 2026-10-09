@@ -536,6 +536,21 @@ std::string GlyphShadowText(const Config &config) {
     return std::format("{}%", config.glyph_shadow);
 }
 
+template <int Config::*Member>
+int PictureShadowChoice(const Config &config) {
+    return std::clamp(config.*Member / 5, 0, 20);
+}
+
+template <int Config::*Member>
+void SetPictureShadow(Config &config, int choice) {
+    config.*Member = choice * 5;
+}
+
+template <int Config::*Member>
+std::string PictureShadowText(const Config &config) {
+    return std::format("{}%", config.*Member);
+}
+
 const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::save_cursor_position, true>("game.save_cursor_position", "Save Cursor Position",
                                                             "On|Off", 0x15E),
@@ -590,6 +605,18 @@ const Row kDisplayRows[] = {
     SettingRow("video.glyph_shadow", "Symbol Shadow",
                "\"Symbol Shadow\"\nHow dark the shadow\nunder the button\nsymbols is.", ShadowCount,
                GlyphShadowChoice, SetGlyphShadow, GlyphShadowText),
+    SettingRow("video.name_shadow", "Area Name Shadow",
+               "\"Area Name Shadow\"\nHow dark the shadow\nunder the area names\nis, from the next area.", ShadowCount,
+               PictureShadowChoice<&Config::name_shadow>, SetPictureShadow<&Config::name_shadow>,
+               PictureShadowText<&Config::name_shadow>),
+    SettingRow("video.floor_shadow", "Floor Label Shadow",
+               "\"Floor Label Shadow\"\nHow dark the shadow\nunder the dungeon floor\nlabels is.", ShadowCount,
+               PictureShadowChoice<&Config::floor_shadow>, SetPictureShadow<&Config::floor_shadow>,
+               PictureShadowText<&Config::floor_shadow>),
+    SettingRow("video.boss_shadow", "Boss Name Shadow",
+               "\"Boss Name Shadow\"\nHow dark the shadow\nunder the bosses'\nnames is.", ShadowCount,
+               PictureShadowChoice<&Config::boss_shadow>, SetPictureShadow<&Config::boss_shadow>,
+               PictureShadowText<&Config::boss_shadow>),
 };
 
 const Row kAudioRows[] = {

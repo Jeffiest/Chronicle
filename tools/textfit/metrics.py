@@ -92,6 +92,7 @@ class FontMetrics:
         self.char_width = char_width
         self.font_path = font_path
         self._font = None
+        self._font_em = None
 
         if font_path is None:
             # Locate tools/font/DarkCloudCompendium.ttf relative to this file
@@ -101,9 +102,14 @@ class FontMetrics:
 
         if HAS_PIL and self.font_path and self.font_path.exists():
             try:
-                # Size 18 in DarkCloudCompendium.ttf matches 11.0 advance width exactly
-                font_pt = 18 if round(char_width) == 11 else int(round(char_width * 1.64))
-                self._font = ImageFont.truetype(str(self.font_path), font_pt)
+                # The port scales glyphs to each game's text cell, then advances
+                # within words by raster glyph width plus a 0.1-em gap.  Measure
+                # at that rendered em size rather than using the font's nominal
+                # 18px advance as if it were the screen-space width.
+                reference = ImageFont.truetype(str(self.font_path), 18)
+                advance = reference.getlength("0") / 18.0
+                self._font_em = min(DEFAULT_CHAR_HEIGHT * 0.82, char_width * 0.95 / advance)
+                self._font = ImageFont.truetype(str(self.font_path), max(1, int(round(self._font_em))))
             except Exception:
                 self._font = None
 
@@ -146,6 +152,11 @@ class FontMetrics:
         # Numeric escape {-253} etc.
         try:
             num = int(lower)
+            # The retail decoder preserves unmapped PAL glyph codes as numeric
+            # escapes (for example {338}).  ClsMes draws each such code as one
+            # game-font cell; the braces and digits are only our display form.
+            if num >= 0:
+                return self.char_width
             if -0x300 <= num < -0x2DF:
                 return 2.0 * self.char_width
             if -0x400 <= num <= -0x301 or -0x200 <= num <= -0x101:
@@ -166,11 +177,12 @@ class FontMetrics:
             return self.char_width
         if self._font is not None:
             try:
-                # In DarkCloudCompendium.ttf, accented letters (e.g. é) have blank contours
-                # but valid cell advances, or fall back to base letter advance
-                adv = self._font.getlength(ch)
+                # TtfLayoutRows advances by the rasterized glyph width plus
+                # 0.1 em, capped to the game's cell. Spaces remain full cells.
+                box = self._font.getbbox(ch)
+                adv = max(0, box[2] - box[0]) + (self._font_em * 0.1)
                 if adv > 0:
-                    return adv
+                    return min(adv, self.char_width)
             except Exception:
                 pass
         return self.char_width
@@ -211,12 +223,19 @@ class FontMetrics:
         if not text:
             return 0.0, [0.0], 1
 
-        # Replace {page} with newline so page-delimited lines are evaluated
-        normalized = text.replace("{page}", "\n")
-        lines = normalized.split("\n")
-        line_widths = [self.measure_line(line) for line in lines]
+        # MES_CODE_PAGE restarts the layout at row zero.  Keep the widest
+        # rendered row and the largest row count on any page, not the sum of
+        # rows across every page in a multi-page message.
+        pages = re.split(r"\{page\}", text, flags=re.IGNORECASE)
+        line_widths: List[float] = []
+        max_lines = 1
+        for page in pages:
+            lines = page.replace("\r", "").split("\n")
+            widths = [self.measure_line(line) for line in lines]
+            line_widths.extend(widths)
+            max_lines = max(max_lines, len(lines))
         max_width = max(line_widths) if line_widths else 0.0
-        return max_width, line_widths, len(lines)
+        return max_width, line_widths, max_lines
 
 
 # Known box dimension rules derived from:
@@ -239,8 +258,9 @@ KNOWN_BOX_RULES: List[Tuple[re.Pattern, float, int, str]] = [
     (re.compile(r"^dun\.message\.old_data\.steeb\w*"), 180.0, 4, "Steve Message Box (180px, 4 lines)"),
     (re.compile(r"^dun\.message\.old_data\.dungeon"), 165.0, 3, "Dungeon Notice Box (165px, 3 lines)"),
 
-    # Common Menus (CommonMenuMes3: 29 columns x 4 rows x 11px = 319px)
-    (re.compile(r"^commenu\..*allmenu\.\d+$"), 319.0, 4, "Menu Help Box (319px, 4 lines)"),
+    # Message 422 is rendered by MenuClsMes with rows=9 (battlemenu.cpp:
+    # MenuClsMes::SetBuffInfo/NowWeaponStatus), not by the generic menu windows.
+    (re.compile(r"^commenu\..*allmenu\.422$"), 574.0, 9, "Weapon Ability List (574px, 9 lines)"),
     (re.compile(r"^commenu\..*itemshop\.\d+$"), 360.0, 3, "Item Shop Dialog (360px, 3 lines)"),
     (re.compile(r"^commenu\..*manual\.\d+$"), 319.0, 4, "Game Manual Box (319px, 4 lines)"),
     (re.compile(r"^commenu\..*nameregi\.\d+$"), 250.0, 3, "Name Entry Box (250px, 3 lines)"),
@@ -255,8 +275,9 @@ def resolve_box_limits(
     """Determines the (width_limit, line_limit, box_type) for a message key.
 
     If a specific UI box rule matches the key, returns its fixed dimensions.
-    Otherwise, uses the reference English string's measured width and line count
-    as the constraint where the original text fit.
+    Otherwise, uses a screen-safe upper bound. PAL bubbles resize to the current
+    message, while shared menu resources are used by several window types, so
+    their file name alone does not define one fixed box.
     """
     for pattern, width, lines, box_type in KNOWN_BOX_RULES:
         if pattern.match(key):
@@ -265,13 +286,13 @@ def resolve_box_limits(
     if metrics is None:
         metrics = FontMetrics()
 
-    # Dynamic speech bubble / script message:
-    # Limit is the reference English string's layout footprint
-    if ref_text:
-        ref_max_w, _, ref_lines = metrics.measure_text(ref_text)
-        width_limit = max(ref_max_w, 40.0)
-        line_limit = max(ref_lines, 1)
-        return width_limit, line_limit, f"Original English Box ({int(width_limit)}px, {line_limit} lines)"
+    # The frame adds six character cells horizontally and three rows vertically.
+    # Use the available 640x480 canvas instead of an unrelated English footprint
+    # when the caller's exact menu window cannot be recovered from the key.
+    if ref_text is not None:
+        width_limit = 640.0 - (6.0 * metrics.char_width)
+        line_limit = max(1, int(480.0 / DEFAULT_CHAR_HEIGHT) - 3)
+        return width_limit, line_limit, f"PAL Canvas Limit (max {int(width_limit)}px, {line_limit} lines)"
 
     # Default fallback when no reference exists
     return 320.0, 4, "Standard Dialogue Bubble (320px, 4 lines)"

@@ -20,7 +20,8 @@ from tools.textfit.report import generate_csv_report, generate_html_report
 
 class TestFontMetrics(unittest.TestCase):
     def setUp(self):
-        self.metrics = FontMetrics(char_width=11.0)
+        # Exercise the retail gaiji-cell fallback unless a test opts into TTF.
+        self.metrics = FontMetrics(char_width=11.0, font_path=Path("missing-font.ttf"))
 
     def test_plain_characters(self):
         # 3 characters at 11px each = 33px
@@ -72,11 +73,21 @@ class TestFontMetrics(unittest.TestCase):
     def test_multiline_and_pages(self):
         text = "Line 1\nLine 2 is longer{page}Page 2"
         max_w, line_widths, count = self.metrics.measure_text(text)
-        self.assertEqual(count, 3)
+        self.assertEqual(count, 2)  # {page} resets the game's row counter
         self.assertEqual(line_widths[0], 66.0)   # 6 chars * 11 = 66
         self.assertEqual(line_widths[1], 176.0)  # 16 chars * 11 = 176
         self.assertEqual(line_widths[2], 66.0)   # 6 chars * 11 = 66
         self.assertEqual(max_w, 176.0)
+
+    def test_numeric_retail_glyph_code_is_one_cell(self):
+        self.assertEqual(self.metrics.get_token_advance("338"), 11.0)
+        self.assertEqual(self.metrics.measure_line("{338}"), 11.0)
+
+    def test_ttf_uses_scaled_raster_glyphs(self):
+        ttf = FontMetrics(char_width=11.0)
+        if ttf._font is not None:
+            self.assertLessEqual(ttf.get_char_advance("i"), 11.0)
+            self.assertGreater(ttf.get_char_advance("i"), 0.0)
 
 
 class TestBoxLimits(unittest.TestCase):
@@ -102,12 +113,12 @@ class TestBoxLimits(unittest.TestCase):
         self.assertEqual(w, 165.0)
         self.assertEqual(l, 3)
 
-    def test_fallback_reference_box(self):
-        # Reference string has 2 lines, max line length 10 chars = 110px
+    def test_dynamic_pal_bubble_uses_canvas_bounds(self):
         ref = "Short\n0123456789"
         w, l, desc = resolve_box_limits("custom.dialogue.01", ref_text=ref)
-        self.assertEqual(w, 110.0)
-        self.assertEqual(l, 2)
+        self.assertEqual(w, 574.0)
+        self.assertEqual(l, 21)
+        self.assertIn("PAL Canvas Limit", desc)
 
 
 class TestComparator(unittest.TestCase):
@@ -141,15 +152,15 @@ class TestComparator(unittest.TestCase):
 
     def test_sorting_by_severity(self):
         pairs = {
-            "fit": {"ref": "Yes", "trans": "Si"},
-            "small_over": {"ref": "Clock", "trans": "Reloj de la pared y mesa"},  # width overflow on label
-            "line_over": {"ref": "Clock", "trans": "Reloj\nDos"},  # line overflow on label
+            "options.game.clock.label": {"ref": "Yes", "trans": "Si"},
+            "options.game.clock.choice.0": {"ref": "Yes", "trans": "Una elección demasiado larga"},
+            "options.game.save.label": {"ref": "Clock", "trans": "Reloj\nDos"},
         }
         res = compare_all(pairs, self.metrics)
         # line_over has severity > 1000, should be first
-        self.assertEqual(res[0].key, "line_over")
-        self.assertEqual(res[1].key, "small_over")
-        self.assertEqual(res[2].key, "fit")
+        self.assertEqual(res[0].key, "options.game.save.label")
+        self.assertEqual(res[1].key, "options.game.clock.choice.0")
+        self.assertEqual(res[2].key, "options.game.clock.label")
 
 
 class TestLoader(unittest.TestCase):

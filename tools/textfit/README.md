@@ -114,6 +114,7 @@ For general story dialogues (`gedit.*`, `rmdat.*`, etc.):
   - Space (`MES_CODE_SPACE`) advances by $1\text{ cell}$.
   - `{gap N}` advances by $N\text{ pixels}$.
   - Formatting codes (`{white}`, `{cyan}`, `{/color}`, `{wait N}`, etc.) advance by $0\text{ px}$.
+  - Numeric glyph escapes such as `{338}` are display notation for one unmapped PAL glyph code and advance by one game-font cell. The braces and digits are not rendered.
 
 ### 3.2 Button & Symbol Glyph Widths
 Button tokens from `GAIJI_CELL_COUNTS` (`ps2/src/gameutil.cpp`):
@@ -125,8 +126,13 @@ Button tokens from `GAIJI_CELL_COUNTS` (`ps2/src/gameutil.cpp`):
 - Special icons: `{hand}` ($3\text{ cells} = 33.0\text{ px}$), `{monster}` ($4\text{ cells} = 44.0\text{ px}$), `{bait}` ($5\text{ cells} = 55.0\text{ px}$).
 
 ### 3.3 TrueType Font Rendering
-- When Pillow is available, glyph metrics are measured directly with `tools/font/DarkCloudCompendium.ttf` at size 18 (matching the $11.0\text{ px}$ cell advance).
+- When Pillow is available, glyph widths use the scaled raster bounds and 0.1-em inter-glyph gap used by `port/src/clsmes.cpp`'s `TtfLayoutRows`. The port caps each glyph to its game cell; spaces and gaiji retain their cell advances.
 - In HTML reports, `DarkCloudCompendium.ttf` is embedded inline via base64 `@font-face`, allowing any browser to render authentic game font previews.
+
+### 3.4 PAL Page and Window Layout
+- `{page}` starts a new rendered page and resets its line counter. Line-limit checks use the greatest number of rows on any one page, not the total across pages.
+- PAL speech bubbles resize from their current text (`NeedMesWinWH` / `MakeMesTexture` in `ps2/src/clsmes.cpp`). When an exact fixed window cannot be identified, the fallback is the available 640x480 canvas after the six-cell horizontal and three-row vertical frame margins, rather than the unrelated English sentence's previous width and line count.
+- `CommonMenuMes3` can be 29 columns by four rows (`ps2/src/menu_draw.cpp`), but `allmenu.mes` is a shared resource used by multiple menu windows, so its filename alone does not prove that every message uses those dimensions. Message 422 is the weapon ability list, displayed by `MenuClsMes` with nine rows (`ps2/src/battlemenu.cpp`), and has its own rule.
 
 ---
 

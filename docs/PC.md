@@ -152,7 +152,7 @@ key is optional; these are the defaults:
     },
     "audio": {
         "master_volume": 1.0,       // 0 to 1
-        "sound": "stereo"           // stereo or mono
+        "sound": "stereo"           // mono, stereo or surround (the stereo mix spread to 5.1 speakers)
     },
     "input": {
         "mouse_sensitivity": 0.1,   // degrees the camera turns per count of mouse motion
@@ -1293,7 +1293,7 @@ is the port's settings screen (`port/src/menu_option.cpp` replaces
 `OptionMenuFadeOutStart` and hands them to `port/src/options/`: `rows` defines
 the pages and their rows, `screen` runs input and help, `draw` lays it out). It keeps the game's frame, cursor, sounds, EXIT
 button and help window, and draws its rows in the game's message font ("Game
-text"). Five pages, Game, Display, Audio, Controls and Accessibility,
+text"). Seven pages, Game, Display, Audio, Controls, Text, Accessibility and Bindings,
 are named on a help window's plate with L1 and R1 at its ends; the names
 scroll along it, with `<` and `>` where more lie past an end. L1 and L2, R1
 and R2 turn the page, and so do left and right on the page names. Each row is a label and a value:
@@ -1310,11 +1310,13 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 
 | Page | Rows |
 |---|---|
-| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select, smooth fish sizes |
+| Game | save cursor position, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select, smooth fish sizes |
 | Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
-| Audio | volume, sound (stereo or mono) |
-| Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
+| Audio | volume, sound (mono, stereo or surround), soundtrack (PS2 or custom) |
+| Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, vertical return, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
+| Text | language, message speed, button symbols (original or new), symbols shown (glyph device), text shadow, symbol shadow, area name shadow, floor label shadow, boss name shadow |
 | Accessibility | always win QTEs |
+| Bindings | keyboard and mouse button bindings for game actions |
 
 Resolution choices are the sizes that fit the display (its usable area less
 the window's borders when windowed) and follow changes of mode. Desktop is

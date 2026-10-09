@@ -86,17 +86,22 @@ TEST(MenuOption, AudioPageKeepsCustomSoundtrackAndSurround) {
     ASSERT_NE(page, pages.end());
     const auto soundtrack = std::find_if(page->rows.begin(), page->rows.end(),
                                          [](const options::Row &row) { return std::string_view(row.key) == "audio.soundtrack"; });
-    const auto surround = std::find_if(page->rows.begin(), page->rows.end(),
-                                       [](const options::Row &row) { return std::string_view(row.key) == "audio.surround"; });
+    const auto sound = std::find_if(page->rows.begin(), page->rows.end(),
+                                    [](const options::Row &row) { return std::string_view(row.key) == "audio.sound"; });
     ASSERT_NE(soundtrack, page->rows.end());
-    ASSERT_NE(surround, page->rows.end());
+    ASSERT_NE(sound, page->rows.end());
     Config config;
     EXPECT_EQ(options::RowValue(*soundtrack, config), "PS2");
     EXPECT_TRUE(options::StepRow(*soundtrack, config, 1, false));
     EXPECT_TRUE(config.soundtrack);
     EXPECT_EQ(options::RowValue(*soundtrack, config), "Custom");
-    EXPECT_TRUE(options::StepRow(*surround, config, -1, false));
-    EXPECT_TRUE(config.surround);
+    EXPECT_EQ(options::RowValue(*sound, config), "Stereo");
+    EXPECT_TRUE(options::StepRow(*sound, config, 1, false));
+    EXPECT_TRUE(config.surround && config.options.stereo);
+    EXPECT_EQ(options::RowValue(*sound, config), "Surround");
+    EXPECT_TRUE(options::StepRow(*sound, config, 1, true));
+    EXPECT_TRUE(!config.surround && !config.options.stereo);
+    EXPECT_EQ(options::RowValue(*sound, config), "Mono");
 }
 
 namespace {
@@ -202,13 +207,13 @@ TEST(MenuOption, PagesInOrder) {
     for (const options::Page &page : pages) {
         names.push_back(page.name);
     }
-    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Accessibility",
+    ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Text", "Accessibility",
                                                         "Bindings"}));
-    ASSERT_TRUE(std::string_view(pages[4].rows[0].key) == "game.qte_always_win");
+    ASSERT_TRUE(std::string_view(pages[5].rows[0].key) == "game.qte_always_win");
 }
 
 TEST(MenuOption, BindingRowsSetAndReset) {
-    std::span<const options::Row> bindings = options::Pages()[5].rows;
+    std::span<const options::Row> bindings = options::Pages()[6].rows;
     ASSERT_FALSE(bindings.empty());
     auto found = std::ranges::find_if(bindings, [](const options::Row &row) {
         return row.action != nullptr && std::string_view(row.action) == "triangle";
@@ -219,7 +224,7 @@ TEST(MenuOption, BindingRowsSetAndReset) {
     ASSERT_EQ(config.key_bindings.size(), 1u);
     ASSERT_EQ(config.key_bindings.front().action, "triangle");
     ASSERT_EQ(config.key_bindings.front().keys, (std::vector<std::string>{"P"}));
-    options::ResetPage(options::Pages()[5], config);
+    options::ResetPage(options::Pages()[6], config);
     ASSERT_TRUE(config.key_bindings.empty());
 }
 

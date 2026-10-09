@@ -21,7 +21,7 @@ The files are laid out as Minecraft's language files are: one flat JSON file per
    `tools/font/`, and the build copies it to `lang/font.ttf` beside the executable, so it works as built. To use another font, put it at `<save folder>/lang/font.ttf` (that wins), or start with
    `--font <file>`; delete `lang/font.ttf` to go back to the game's bitmaps. The port says
    `font: message text from ...` when it found one, and `font: no font.ttf ...` when it did not.
-3. **The language.** Options, Game page, Language row (or `game.language` in `config.json`).
+3. **The language.** Options, Text page, Language row (or `game.language` in `config.json`).
 
 ## Where the files go
 
@@ -110,7 +110,7 @@ any other change:
 
 | Key | Is |
 |---|---|
-| `options.page.game` (`display`, `audio`, `controls`) | a page's name |
+| `options.page.game` (`display`, `audio`, `controls`, `text`...) | a page's name |
 | `options.<setting>.label` | the row's name; `<setting>` is the name in `config.json`, `game.map`, `video.aspect`... |
 | `options.<setting>.help` | the help window's text for a setting the port describes itself |
 | `options.<setting>.choice.<n>` | the n-th choice of the setting, counting from 0 (`On`, `Off`...) |
@@ -134,7 +134,7 @@ at them.
 ## Choosing the language
 
 The language screen at the start of the game sets the language, as retail does. To skip it, and to change
-the language at any time, set it in `config.json` or on the Options screen (Game page, Language row):
+the language at any time, set it in `config.json` or on the Options screen (Text page, Language row):
 
 ```json
 {"game": {"language": "francais"}}

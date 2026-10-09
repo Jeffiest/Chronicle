@@ -84,6 +84,9 @@ bool LocalizeMessages(const s16 *retail, size_t words, const std::map<int, std::
 // language's text for key if its JSON has one, else english. A "%1", "%2"... in a text stands for what
 // LocalizeFormat is given.
 std::string LocalizeText(std::string_view key, std::string_view english);
+
+// The file stem of the current language (`fr_fr`), or an empty string for one with no language file.
+std::string LocalizeLanguageFile();
 std::string LocalizeFormat(std::string text, std::initializer_list<std::string> arguments);
 
 // Host hooks, called from the data loaders. LocalizeLoaded notes where a pack came from (only

@@ -119,6 +119,12 @@ struct Config {
     // the shadow where a thin stroke does not.
     int                           text_shadow = 50;
     int                           glyph_shadow = 25;
+    // video.name_shadow, video.floor_shadow and video.boss_shadow: the same shadow under the pictures of text the
+    // localization draws in place of the disc's (localize_texture.hpp): the area name cards, the dungeon floor
+    // labels and the bosses' names. Same scale as text_shadow; they take effect from the next area loaded.
+    int                           name_shadow = 50;
+    int                           floor_shadow = 50;
+    int                           boss_shadow = 50;
 
     bool operator==(const Config &) const = default;
 };

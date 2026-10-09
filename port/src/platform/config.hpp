@@ -77,7 +77,6 @@ struct Config {
     bool              debug_mode = false;
     bool              qte_always_win = false;
     bool              element_quick_select = false;
-    bool              smooth_fish_sizes = false;
     ConfigPresentMode present_mode = ConfigPresentMode::Fifo;
     bool              interpolation = true;
     double            max_fps = 0.0;

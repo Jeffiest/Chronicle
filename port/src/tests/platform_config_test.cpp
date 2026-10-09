@@ -657,10 +657,3 @@ TEST(PlatformConfig, ElementPicker) {
     ASSERT_TRUE(!ConfigParse(R"({"game": {"element_quick_select": "yes"}})").element_quick_select);
 }
 
-TEST(PlatformConfig, SmoothFishSizes) {
-    ASSERT_TRUE(!ConfigParse("").smooth_fish_sizes);
-    Config config = ConfigParse(R"({"game": {"smooth_fish_sizes": true}})");
-    ASSERT_TRUE(config.smooth_fish_sizes);
-    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).smooth_fish_sizes);
-    ASSERT_TRUE(!ConfigParse(R"({"game": {"smooth_fish_sizes": "yes"}})").smooth_fish_sizes);
-}

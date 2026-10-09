@@ -584,8 +584,6 @@ const Row kGameRows[] = {
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
     OnOffRow<&Config::element_quick_select>("game.element_quick_select", "Element Quick Select",
                                             "\"Element Quick Select\"\nD-pad Up in a dungeon\npicks the element."),
-    OnOffRow<&Config::smooth_fish_sizes>("game.smooth_fish_sizes", "Smooth Fish Sizes",
-                                         "\"Smooth Fish Sizes\"\nFish bigger than usual\ncome nearer the\nlargest size."),
 };
 
 const Row kDisplayRows[] = {

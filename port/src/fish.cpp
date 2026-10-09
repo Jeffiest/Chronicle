@@ -4,7 +4,6 @@
 
 #include "fish_port.hpp"
 #include "mathutil.hpp"
-#include "platform/config.hpp"
 
 namespace {
 
@@ -41,8 +40,8 @@ float SmoothFishSize(float size, float base_size, float max_size) {
     return std::fmax(size, std::fmin(lifted, max_size - 0.001f));
 }
 
-// Retail's roll (info.min_size is the kind's usual size, the roll's centre), with
-// game.smooth_fish_sizes lifting the sizes above it before the model scales are taken.
+// Retail's roll (info.min_size is the kind's usual size, the roll's centre), with the sizes above it
+// ramped into the largest (fish_port.hpp) before the model scales are taken.
 PC_OVERRIDE void CFish::SetScale() {
     float deviation = nrnd();
     size = info.min_size;
@@ -61,9 +60,7 @@ PC_OVERRIDE void CFish::SetScale() {
         size = info.max_size;
     }
 
-    if (ConfigGet().smooth_fish_sizes) {
-        size = SmoothFishSize(size, info.min_size, info.max_size);
-    }
+    size = SmoothFishSize(size, info.min_size, info.max_size);
 
     angle_model_scale = size / info.model_size;
     model_scale = size / 25.0f;

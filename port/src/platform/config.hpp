@@ -31,13 +31,16 @@ enum class ConfigGyro {
 };
 
 // input.glyph_device: whose button symbols the game draws. Auto follows the device in use (the
-// last of keyboard/mouse or gamepad to be touched; a gamepad's own family), PS4 until one is.
+// last of keyboard/mouse or gamepad to be touched; a gamepad's own family; Xbox for a pad of unknown make), PS4 until one is.
 enum class ConfigGlyphDevice {
     Auto,
+    Ps3,
     Ps4,
     Ps5,
     Xbox,
     Switch,
+    SteamDeck,
+    SteamController,
     Keyboard,
 };
 
@@ -73,6 +76,7 @@ struct Config {
     double            tick_rate = 60.0;
     bool              debug_mode = false;
     bool              qte_always_win = false;
+    bool              element_quick_select = false;
     ConfigPresentMode present_mode = ConfigPresentMode::Fifo;
     bool              interpolation = true;
     double            max_fps = 0.0;
@@ -86,6 +90,7 @@ struct Config {
     ConfigFpsDetail               fps_detail = ConfigFpsDetail::All;
     float                         detail_distance = 0.0f;
     float                         shadow_distance = 0.0f;
+    int                           anisotropy = 0;
     float                         master_volume = 1.0f;
     bool                          surround = false;
     // audio.soundtrack "custom": play recordings from soundtrack/ beside save/ and data/.
@@ -102,6 +107,13 @@ struct Config {
     bool                          mouse_invert_y = false;
     bool                          mouse_capture = true;
     bool                          mouse_zoom = false;
+    // A DualSense's touchpad as the menus' mouse, at this speed (1 is a swipe across the pad for 1500
+    // window pixels), and its lightbar showing the active character's life.
+    bool                          touchpad = true;
+    float                         touchpad_sensitivity = 1.0f;
+    bool                          lightbar = true;
+    // Scales a gamepad's rumble motors, 0 to 1.
+    float                         rumble_strength = 1.0f;
     // input.glyphs "new": the button symbols of glyphs/ (see glyphs.hpp); "original": the game's own.
     bool                          glyphs_new = true;
     ConfigGlyphDevice             glyph_device = ConfigGlyphDevice::Auto;
@@ -113,8 +125,18 @@ struct Config {
     // game.language: 0 asks at start-up, as retail does; 2 to 6 is the language to start in
     // (LanguageCode: English, Francais, Deutsch, Italiano, Espanol) and skips the language screen.
     int                           language = 0;
-    // video.text_shadow: 0 is the soft shadow the TrueType message font casts, 1 a deeper one.
-    int                           text_shadow = 0;
+    // video.text_shadow and video.glyph_shadow: how strong the shadow under the TrueType message text and
+    // under the button symbols in it is, in percent in steps of 5. 0 casts none, 50 is the soft shadow
+    // (the letters' default), 100 the deep one. The symbols' is lighter, because a solid shape stacks
+    // the shadow where a thin stroke does not.
+    int                           text_shadow = 50;
+    int                           glyph_shadow = 25;
+    // video.name_shadow, video.floor_shadow and video.boss_shadow: the same shadow under the pictures of text the
+    // localization draws in place of the disc's (localize_texture.hpp): the area name cards, the dungeon floor
+    // labels and the bosses' names. Same scale as text_shadow; they take effect from the next area loaded.
+    int                           name_shadow = 50;
+    int                           floor_shadow = 50;
+    int                           boss_shadow = 50;
 
     bool operator==(const Config &) const = default;
 };

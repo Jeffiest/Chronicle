@@ -235,7 +235,8 @@ struct PipelineDesc {
 
 void CreatePipelineLayout() {
     for (uint32_t i = 0; i < kSamplerCount; i++) {
-        bool                linear = i & 4;
+        bool                anisotropic = i >= kBaseSamplerCount;
+        bool                linear = anisotropic || (i & 4);
         VkSamplerCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         info.magFilter = linear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
@@ -243,6 +244,11 @@ void CreatePipelineLayout() {
         info.mipmapMode = linear ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
         info.addressModeU = (i & 2) ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         info.addressModeV = (i & 1) ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        if (anisotropic && g.sampler_anisotropy) {
+            float samples = static_cast<float>(2u << ((i - kBaseSamplerCount) / 4));
+            info.anisotropyEnable = VK_TRUE;
+            info.maxAnisotropy = std::min(samples, g.properties.limits.maxSamplerAnisotropy);
+        }
         info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         info.maxLod = VK_LOD_CLAMP_NONE;
         Check(vkCreateSampler(g.device, &info, nullptr, &g.samplers[i]), "vkCreateSampler");

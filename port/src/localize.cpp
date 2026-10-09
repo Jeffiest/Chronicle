@@ -645,7 +645,24 @@ std::string LocalizeFormat(std::string text, std::initializer_list<std::string> 
     return text;
 }
 
+namespace {
+
+fs::path g_font_path;
+
+} // namespace
+
+void LocalizeSetFontPath(const std::filesystem::path &file) {
+    g_font_path = file;
+}
+
 std::filesystem::path LocalizeFindFile(std::string_view name) {
+    if (name == "font.ttf" && !g_font_path.empty()) {
+        std::error_code error;
+        if (fs::is_regular_file(g_font_path, error)) {
+            return g_font_path;
+        }
+        std::fprintf(stderr, "font: --font %s is not a file\n", PathsDisplay(g_font_path).c_str());
+    }
     std::vector<fs::path> directories = Directories();
     for (auto directory = directories.rbegin(); directory != directories.rend(); ++directory) {
         fs::path        file = *directory / std::string(name);
@@ -655,6 +672,11 @@ std::filesystem::path LocalizeFindFile(std::string_view name) {
         }
     }
     return {};
+}
+
+std::string LocalizeLanguageFile() {
+    const char *file = LanguageFile(LanguageCode);
+    return file != nullptr ? file : "";
 }
 
 namespace {

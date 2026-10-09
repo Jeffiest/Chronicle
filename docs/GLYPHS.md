@@ -7,7 +7,7 @@ Options > Controls has both settings.
 | config.json | values | meaning |
 |---|---|---|
 | `input.glyphs` | `new`, `original` | the redrawn symbols, or the game's own |
-| `input.glyph_device` | `auto`, `ps4`, `ps5`, `xbox`, `switch`, `keyboard` | whose symbols: `auto` follows the device touched last (keyboard or mouse, otherwise the first gamepad's make; PS4 until something is touched); the others force one |
+| `input.glyph_device` | `auto`, `ps3`, `ps4`, `ps5`, `xbox`, `switch`, `steamdeck`, `steamcontroller`, `keyboard` | whose symbols: `auto` follows the device touched last (keyboard or mouse, otherwise the first gamepad's make, Xbox for a pad SDL does not know; PS4 until something is touched); the others force one |
 
 The keyboard style shows the key or mouse button the player bound to the action (`input.bindings`), the PS4 symbol
 where the art has none for that key. Face buttons follow their position on the pad (the game's Cross is the bottom
@@ -33,3 +33,12 @@ drawn scaled so a round button fills the height of its slot. `tools/glyphs/build
 them from the source art (P4Gamepad/Retro, P5Gamepad/Retro, XGamepad/Alt 2, SGamepad/Retro, Keyboard_Mouse/Dark);
 Xbox's Menu button and the keyboard style's cursor-key clusters are composed by the tool. The atlases are read with
 stb_image (a pinned download, as stb_truetype is).
+
+The PS3, Steam Deck and Steam Controller styles (and PS5, below) are drawn from flat packs, one 64 px PNG per button;
+the Steam Controller style is used for both of Valve's pads, the 2015 one and the 2026 one. A Valve pad is told from
+its USB vendor (0x28DE), the Deck by its product (0x1205).
+
+The PS5 style is drawn from a flat pack of 64 px buttons (`ps5_a_butt.png`, `ps5_lstick_all.png`...):
+`tools/glyphs/build_glyphs.py --ps5-pack <folder>` rebuilds only `ps5.png` and its entry in `glyphs.json`, leaving the
+other styles; `--ps3-pack` (`ps3_*.png`), `--steamdeck-pack` (`sd_*.png`) and `--steamcontroller-pack` (`sc_*.png`)
+do the same for theirs. The pack's A, B, X and Y are Cross, Circle, Square and Triangle; L3 and R3 are its plain stick icons.

@@ -637,3 +637,18 @@ TEST(PlatformConfig, QteAlwaysWin) {
     ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).qte_always_win);
     ASSERT_TRUE(!ConfigParse(R"({"game": {"qte_always_win": "yes"}})").qte_always_win);
 }
+
+TEST(PlatformConfig, Anisotropy) {
+    ASSERT_TRUE(ConfigParse("").anisotropy == 0);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"anisotropy": 16}})").anisotropy == 16);
+    ASSERT_TRUE(ConfigParse(R"({"video": {"anisotropy": 3}})").anisotropy == 0);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(ConfigParse(R"({"video": {"anisotropy": 8}})"))).anisotropy == 8);
+}
+
+TEST(PlatformConfig, ElementPicker) {
+    ASSERT_TRUE(!ConfigParse("").element_quick_select);
+    Config config = ConfigParse(R"({"game": {"element_quick_select": true}})");
+    ASSERT_TRUE(config.element_quick_select);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).element_quick_select);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"element_quick_select": "yes"}})").element_quick_select);
+}

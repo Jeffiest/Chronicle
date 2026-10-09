@@ -55,10 +55,12 @@ struct Options {
     int          height = 0;
     int          display_per_tick = 0;
     const char  *jump = nullptr;
+    const char  *give = nullptr;
     bool         fast_load = false;
     bool         show_fps = false;
     bool         screenshot_fps = false;
     const char  *export_text = nullptr;
+    const char  *font = nullptr;
 };
 
 Options g_options;
@@ -68,6 +70,7 @@ Options g_options;
                  "usage: %s [--data DIR] [--save DIR] [--headless] [--frames N] [--screenshot PATH]\n"
                  "          [--input FILE] [--width W] [--height H] [--offscreen]\n"
                  "          [--display-per-tick N] [--show-fps] [--jump MODE[:MAP]] [--fast-load]\n"
+                 "          [--give ITEM,...]\n"
                  "  --data DIR         the extracted game data (default: DC_DATA, then ./data, then data/\n"
                  "                     beside the executable)\n"
                  "  --save DIR         saves, config.json and the pipeline cache (default: DC_SAVE, then\n"
@@ -84,11 +87,14 @@ Options g_options;
                  "                     FPS counter over it\n"
                  "  --display-per-tick N  headless: also render N interpolated display frames per tick\n"
                  "  --export-text DIR  write the game's message files to DIR as language JSON (docs/LOCALIZATION.md)\n"
+                 "  --font FILE        draw message text from this TrueType font (else lang/font.ttf)\n"
                  "  --show-fps         draw the FPS counter on presented frames when headless too\n"
                  "test hooks:\n"
                  "  --jump MODE[:MAP]  start in edit:<map>, dungeon:<0-6>, title, rush, opening or menu,\n"
                  "                     skipping the warm-up (DC_JUMP); see docs/PC.md\n"
-                 "  --fast-load        loading-screen holds and fades of a few ticks (DC_FAST_LOAD=1)\n",
+                 "  --fast-load        loading-screen holds and fades of a few ticks (DC_FAST_LOAD=1)\n"
+                 "  --give ITEM,...    give the party these item and weapon numbers when a town or dungeon\n"
+                 "                     starts, unless it holds them (DC_GIVE); see docs/PC.md\n",
                  program);
     std::exit(kExitUsage);
 }
@@ -128,10 +134,14 @@ Options ParseOptions(int argc, const char **argv) {
             options.height = static_cast<int>(number());
         } else if (arg == "--jump") {
             options.jump = value();
+        } else if (arg == "--give") {
+            options.give = value();
         } else if (arg == "--fast-load") {
             options.fast_load = true;
         } else if (arg == "--export-text") {
             options.export_text = value();
+        } else if (arg == "--font") {
+            options.font = value();
         } else if (arg == "--show-fps") {
             options.show_fps = true;
         } else if (arg == "--screenshot-fps") {
@@ -307,6 +317,7 @@ void ApplyConfigChange(const Config &before, const Config &after) {
         GameSetPresentSettings(PresentSettings(after));
     }
     gfx::SetPresentMode(PresentMode(after.present_mode));
+    gfx::SetAnisotropy(after.anisotropy);
     if (after.discord_rich_presence != before.discord_rich_presence) {
         ApplyDiscord(after);
     }
@@ -358,6 +369,13 @@ int Run(int argc, const char **argv) {
     if (options.jump == nullptr) {
         options.jump = std::getenv("DC_JUMP");
     }
+    if (options.give == nullptr) {
+        options.give = std::getenv("DC_GIVE");
+    }
+    if (options.give != nullptr && *options.give != '\0' && !GameSetGive(options.give)) {
+        std::fprintf(stderr, "bad --give: %s\n", options.give);
+        std::exit(kExitUsage);
+    }
     if (options.jump != nullptr && *options.jump != '\0' && !GameSetJump(options.jump)) {
         std::fprintf(stderr, "bad --jump: %s\n", options.jump);
         std::exit(kExitUsage);
@@ -365,6 +383,9 @@ int Run(int argc, const char **argv) {
     const char *fast_load = std::getenv("DC_FAST_LOAD");
     GameSetFastLoad(options.fast_load || (fast_load != nullptr && *fast_load != '\0' && *fast_load != '0'));
     RequireData();
+    if (options.font != nullptr) {
+        LocalizeSetFontPath(PathsFromUtf8(options.font));
+    }
     if (options.export_text == nullptr) {
         // Once per save folder: the extracted data's text as JSON for translators (docs/LOCALIZATION.md).
         std::filesystem::path seed = PathsSaveRoot() / "lang-export";
@@ -400,6 +421,7 @@ int Run(int argc, const char **argv) {
     renderer.offscreen = offscreen;
     renderer.layout = Layout(config);
     gfx::RendererInit(WindowHandle(), renderer);
+    gfx::SetAnisotropy(config.anisotropy);
 
     audio::DefaultMixer().SetMasterGain(config.master_volume);
     AudioSetSurround(config.surround);

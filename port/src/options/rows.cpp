@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <format>
 #include <iterator>
 #include <string>
@@ -10,6 +11,7 @@
 
 #include "localize.hpp"
 #include "menu_option.hpp"
+#include "platform/input.hpp"
 #include "platform/window.hpp"
 
 namespace options {
@@ -247,6 +249,20 @@ std::string MaxFpsText(const Config &config) {
     return config.max_fps > 0.0 ? std::format("{}", config.max_fps) : "Unlimited";
 }
 
+constexpr int kAnisotropy[] = {0, 2, 4, 8, 16};
+
+int AnisotropyCount(const Config &) {
+    return static_cast<int>(std::size(kAnisotropy));
+}
+
+int AnisotropyChoice(const Config &config) {
+    return std::max(0, static_cast<int>(std::ranges::find(kAnisotropy, config.anisotropy) - std::begin(kAnisotropy)));
+}
+
+void SetAnisotropy(Config &config, int choice) {
+    config.anisotropy = kAnisotropy[choice];
+}
+
 int Aspect(const Config &config) {
     return config.aspect == ConfigAspect::FourThree ? 1 : 0;
 }
@@ -447,7 +463,7 @@ void SetGyro(Config &config, int choice) {
 }
 
 int GlyphDeviceCount(const Config &) {
-    return 6;
+    return 9;
 }
 
 int GlyphDeviceChoice(const Config &config) {
@@ -492,6 +508,49 @@ int LanguageCount(const Config &) {
     return 6;
 }
 
+int ShadowCount(const Config &) {
+    return 21;
+}
+
+int TextShadowChoice(const Config &config) {
+    return std::clamp(config.text_shadow / 5, 0, 20);
+}
+
+void SetTextShadow(Config &config, int choice) {
+    config.text_shadow = choice * 5;
+}
+
+std::string TextShadowText(const Config &config) {
+    return std::format("{}%", config.text_shadow);
+}
+
+int GlyphShadowChoice(const Config &config) {
+    return std::clamp(config.glyph_shadow / 5, 0, 20);
+}
+
+void SetGlyphShadow(Config &config, int choice) {
+    config.glyph_shadow = choice * 5;
+}
+
+std::string GlyphShadowText(const Config &config) {
+    return std::format("{}%", config.glyph_shadow);
+}
+
+template <int Config::*Member>
+int PictureShadowChoice(const Config &config) {
+    return std::clamp(config.*Member / 5, 0, 20);
+}
+
+template <int Config::*Member>
+void SetPictureShadow(Config &config, int choice) {
+    config.*Member = choice * 5;
+}
+
+template <int Config::*Member>
+std::string PictureShadowText(const Config &config) {
+    return std::format("{}%", config.*Member);
+}
+
 const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::save_cursor_position, true>("game.save_cursor_position", "Save Cursor Position",
                                                             "On|Off", 0x15E),
@@ -511,6 +570,8 @@ const Row kGameRows[] = {
     GameRow<&ConfigGameOptions::names, true>("game.names", "Names", "On|Off", 0x168),
     OnOffRow<&Config::discord_rich_presence>("discord.rich_presence", "Enable Discord",
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
+    OnOffRow<&Config::element_quick_select>("game.element_quick_select", "Element Quick Select",
+                                            "\"Element Quick Select\"\nD-pad Up in a dungeon\npicks the element."),
 };
 
 const Row kDisplayRows[] = {
@@ -534,14 +595,28 @@ const Row kDisplayRows[] = {
     OnOffRow<&Config::show_fps>("video.show_fps", "FPS Counter", "\"FPS Counter\"\nShows the frame rate\nin the corner."),
     SettingRow("video.fps_detail", "FPS Info", "\"FPS Info\"\nWhat the counter shows:\nthe frame rate alone,\nwith ticks, or all.",
                FpsDetailCount, FpsDetailChoice, SetFpsDetail, nullptr, "FPS|FPS+Ticks|All"),
+    SettingRow("video.anisotropy", "Anisotropic Filter",
+               "\"Anisotropic Filter\"\nSharper textures on\nsurfaces seen at a\nslant.", AnisotropyCount,
+               AnisotropyChoice, SetAnisotropy, nullptr, "Off|2x|4x|8x|16x"),
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
-    Row{.key = "video.text_shadow",
-        .label = "Text Shadow",
-        .help = "\"Text Shadow\"\nHow dark the shadow\nunder the text is, when\nthe text is a TrueType\nfont.",
-        .count = Two,
-        .get = [](const Config &config) { return config.text_shadow; },
-        .set = [](Config &config, int choice) { config.text_shadow = choice; },
-        .names = "Soft|Deep"},
+    SettingRow("video.text_shadow", "Text Shadow",
+               "\"Text Shadow\"\nHow dark the shadow\nunder the letters is.\n50% is the soft one.", ShadowCount,
+               TextShadowChoice, SetTextShadow, TextShadowText),
+    SettingRow("video.glyph_shadow", "Symbol Shadow",
+               "\"Symbol Shadow\"\nHow dark the shadow\nunder the button\nsymbols is.", ShadowCount,
+               GlyphShadowChoice, SetGlyphShadow, GlyphShadowText),
+    SettingRow("video.name_shadow", "Area Name Shadow",
+               "\"Area Name Shadow\"\nHow dark the shadow\nunder the area names\nis, from the next area.", ShadowCount,
+               PictureShadowChoice<&Config::name_shadow>, SetPictureShadow<&Config::name_shadow>,
+               PictureShadowText<&Config::name_shadow>),
+    SettingRow("video.floor_shadow", "Floor Label Shadow",
+               "\"Floor Label Shadow\"\nHow dark the shadow\nunder the dungeon floor\nlabels is.", ShadowCount,
+               PictureShadowChoice<&Config::floor_shadow>, SetPictureShadow<&Config::floor_shadow>,
+               PictureShadowText<&Config::floor_shadow>),
+    SettingRow("video.boss_shadow", "Boss Name Shadow",
+               "\"Boss Name Shadow\"\nHow dark the shadow\nunder the bosses'\nnames is.", ShadowCount,
+               PictureShadowChoice<&Config::boss_shadow>, SetPictureShadow<&Config::boss_shadow>,
+               PictureShadowText<&Config::boss_shadow>),
 };
 
 const Row kAudioRows[] = {
@@ -562,7 +637,7 @@ const Row kControlRows[] = {
                                   "Original|New"),
     SettingRow("input.glyph_device", "Symbols Shown",
                "\"Symbols Shown\"\nAuto: the device you\nuse. Or always show one\nof the others.", GlyphDeviceCount,
-               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS4|PS5|Xbox|Switch|Keyboard"),
+               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS3|PS4|PS5|Xbox|Switch|Steam Deck|Steam Controller|Keyboard"),
     SettingRow("input.mouse_sensitivity", "Mouse Sensitivity", "\"Mouse Sensitivity\"\nHow fast the mouse\nturns the camera.",
                MouseSensitivityCount, MouseSensitivityChoice, SetMouseSensitivity, MouseSensitivityText, nullptr,
                RestoreMouseSensitivity),
@@ -605,6 +680,96 @@ const Row kAccessibilityRows[] = {
         .names = "Ask|English|Francais|Deutsch|Italiano|Espanol"},
 };
 
+// Strings the binding rows point at. A deque never moves what it holds, so the c_str pointers the
+// rows keep stay valid as more are added.
+const char *Keep(std::string text) {
+    static std::deque<std::string> store;
+    return store.emplace_back(std::move(text)).c_str();
+}
+
+std::string ActionName(std::string_view action) {
+    static constexpr struct {
+        std::string_view action;
+        const char      *name;
+    } kNames[] = {
+        {"up",             "Up"              },
+        {"down",           "Down"            },
+        {"left",           "Left"            },
+        {"right",          "Right"           },
+        {"cross",          "Cross"           },
+        {"circle",         "Circle"          },
+        {"square",         "Square"          },
+        {"triangle",       "Triangle"        },
+        {"l1",             "L1"              },
+        {"r1",             "R1"              },
+        {"l2",             "L2"              },
+        {"r2",             "R2"              },
+        {"l3",             "L3"              },
+        {"r3",             "R3"              },
+        {"start",          "Start"           },
+        {"select",         "Select"          },
+        {"lx-",            "Left Stick Left" },
+        {"lx+",            "Left Stick Right"},
+        {"ly-",            "Left Stick Up"   },
+        {"ly+",            "Left Stick Down" },
+        {"rx-",            "Right Stick Left"},
+        {"rx+",            "Right Stick Right"},
+        {"ry-",            "Right Stick Up"  },
+        {"ry+",            "Right Stick Down"},
+        {"fps_toggle",     "Toggle FPS"      },
+        {"developer_menu", "Developer Menu"  },
+        {"debug_menu",     "Debug Menu"      },
+        {"gyro_hold",      "Gyro Hold"       },
+        {"zoom_reset",     "Reset Zoom"      },
+    };
+    for (const auto &entry : kNames) {
+        if (entry.action == action) {
+            return entry.name;
+        }
+    }
+    return std::string(action);
+}
+
+int One(const Config &) {
+    return 1;
+}
+
+int Zero(const Config &) {
+    return 0;
+}
+
+void NoopSet(Config &, int) {}
+
+void RemoveBinding(Config &config, std::string_view action) {
+    std::erase_if(config.key_bindings, [&](const ConfigKeyBinding &binding) {
+        return std::string_view(binding.action) == action;
+    });
+}
+
+// One row per action, in the order the game reads them. The whole-axis actions (lx ly rx ry) only
+// take MouseX/MouseY, so a key cannot go on them, and Reset Zoom is edited by its own Controls row.
+std::span<const Row> BindingRows() {
+    static const std::vector<Row> rows = [] {
+        std::vector<Row> list;
+        for (const InputActionInfo &info : InputActions()) {
+            if (info.whole_axis || info.action == "zoom_reset") {
+                continue;
+            }
+            Row row;
+            row.key = Keep("input.bindings." + std::string(info.action));
+            row.label = Keep(ActionName(info.action));
+            row.help = Keep("\"" + ActionName(info.action) + "\"\nPress confirm, then a\nkey or mouse button, to\nrebind it.");
+            row.count = One;
+            row.get = Zero;
+            row.set = NoopSet;
+            row.action = Keep(std::string(info.action));
+            list.push_back(row);
+        }
+        return list;
+    }();
+    return rows;
+}
+
 } // namespace
 
 std::span<const Page> Pages() {
@@ -614,6 +779,7 @@ std::span<const Page> Pages() {
         {"Audio",         "\"Audio\"\nSound and music.",                             kAudioRows        },
         {"Controls",      "\"Controls\"\nMouse, gamepad and gyro.",                  kControlRows      },
         {"Accessibility", "\"Accessibility\"\nHelp with harder parts\nof the game.", kAccessibilityRows},
+        {"Bindings",      "\"Bindings\"\nWhat each key and\nmouse button does.",       BindingRows()     },
     };
     return pages;
 }
@@ -678,6 +844,9 @@ std::vector<std::pair<std::string, std::string>> RowStrings() {
 }
 
 std::string RowValue(const Row &row, const Config &config) {
+    if (row.action != nullptr) {
+        return InputBindingLabel(row.action);
+    }
     std::string value = row.text != nullptr ? ValueText(row, row.text(config)) : ChoiceText(row, row.get(config));
     if (ConfigAppliesOnRestart(row.key)) {
         value += " *";
@@ -699,7 +868,9 @@ bool StepRow(const Row &row, Config &config, int direction, bool wrap) {
 void ResetPage(const Page &page, Config &config) {
     const Config defaults;
     for (const Row &row : page.rows) {
-        if (row.restore != nullptr) {
+        if (row.action != nullptr) {
+            RemoveBinding(config, row.action);
+        } else if (row.restore != nullptr) {
             row.restore(config, defaults);
         } else {
             row.set(config, row.get(defaults));
@@ -757,3 +928,18 @@ void OptionSetCameraReturn(Config &config, int choice) {
 void OptionRestoreCameraReturn(Config &config, const Config &defaults) {
     options::RestoreCameraReturn(config, defaults);
 }
+
+namespace options {
+
+void SetBinding(Config &config, std::string_view action, std::string_view key) {
+    auto binding = std::ranges::find(config.key_bindings, std::string(action), &ConfigKeyBinding::action);
+    std::vector<std::string> keys;
+    keys.emplace_back(key);
+    if (binding == config.key_bindings.end()) {
+        config.key_bindings.push_back({std::string(action), std::move(keys)});
+    } else {
+        binding->keys = std::move(keys);
+    }
+}
+
+} // namespace options

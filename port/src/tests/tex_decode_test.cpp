@@ -140,6 +140,38 @@ TEST(TexDecode, Rgb32Alpha) {
     ASSERT_TRUE(env.gfx.PixelNear(150, 150, 255, 255, 255));
 }
 
+// A town block can overlap a fixed texture's simulated PS2 address while both native images remain valid.
+TEST(TexDecode, FixedAndBlockTexturesSurviveLegacyVramOverlap) {
+    TexEnv env;
+    char fixed_name[] = "fixed";
+    Bytes fixed(8 * 8 * 4, 0);
+    Bytes menu(8 * 8 * 4, 0);
+    for (size_t i = 0; i < fixed.size(); i += 4) {
+        fixed[i] = 255;
+        fixed[i + 3] = 0x80;
+        menu[i + 1] = 255;
+        menu[i + 3] = 0x80;
+    }
+    TexManager.EnterFixTexture(fixed_name, fixed.data(), 8, 8, 4, nullptr, 0, 0,
+                              nullptr, nullptr, nullptr, 0, 0);
+
+    TexManager.blocks[16].vram_top = 16320;
+    TexManager.blocks[16].vram_end = 16320;
+    Bytes img = Img({{"menu", Tim2({TIM2_RGB32, 8, 8, {menu}, {}, 0})}});
+    Enter(img, 16);
+
+    PortTextureRef fixed_ref = Resolve("fixed");
+    PortTextureRef menu_ref = Resolve("menu");
+    ASSERT_TRUE(fixed_ref.valid && menu_ref.valid);
+    ASSERT_GT(TexManager.blocks[16].vram_end, TexManager.vram_fix);
+    env.gfx.Frame(kWhite, [&] {
+        env.Draw(fixed_ref, 0, 0, 100, 100, 0, 0, 8, 8);
+        env.Draw(menu_ref, 100, 0, 100, 100, 0, 0, 8, 8);
+    });
+    ASSERT_TRUE(env.gfx.PixelNear(50, 50, 255, 0, 0));
+    ASSERT_TRUE(env.gfx.PixelNear(150, 50, 0, 255, 0));
+}
+
 TEST(TexDecode, Rgb24TakesAlphaFromTexa) {
     TexEnv env;
     Bytes  img = Img({

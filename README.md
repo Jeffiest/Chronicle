@@ -39,6 +39,12 @@ and `JOBS=N` controls parallelism on every platform.
 `chronicle.flatpak`; `docs/FLATPAK.md` covers installing it. It needs your own PAL disc: the first
 start asks for the disc image and extracts the game's files from it.
 
+### Translations and the message font
+
+Game text can come from JSON language files (one per language, laid out as Minecraft's are) and be drawn from a
+TrueType font so it stays sharp at any window size. The first start writes the language files from your own
+game data; the Dark Cloud community font is bundled. See `docs/LOCALIZATION.md`.
+
 ## Repository layout
 
 - `ps2/src`, `ps2/include`: matching game sources and headers.

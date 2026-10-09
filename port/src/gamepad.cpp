@@ -2,7 +2,9 @@
 
 #include <libpad.h>
 
+#include "dualsense.hpp"
 #include "mainselect.hpp"
+#include "menu_pointer.hpp"
 #include "platform/input.hpp"
 
 // The pad read and stick replacements tell the host when to latch mouse motion and when movement
@@ -17,6 +19,8 @@ PC_OVERRIDE int pad_button_read(PAD_STATUS *status, int port, int slot) {
     unsigned char data[32];
     InputLatchPad(port);
     if (port == 0) {
+        DualSenseUpdate();
+        MenuMouseUpdate();
         g_debug_menu_pressed = InputHostPressed(InputHostAction::DebugMenu);
     }
     if (!scePadRead(port, slot, data)) {
@@ -50,6 +54,11 @@ PC_OVERRIDE int CGamePad::On(int mask) {
         return 0;
     }
 
+    // The pointer holds a button for the tick (the Allies turntable turns on held buttons).
+    if ((mask & MenuPointerSyntheticDown()) != 0) {
+        return 1;
+    }
+
     return (pad[0].input.status.button & mask) != 0;
 }
 
@@ -60,6 +69,11 @@ PC_OVERRIDE int CGamePad::On2(int mask) {
 PC_OVERRIDE int CGamePad::Down(int mask) {
     if (key_lock) {
         return 0;
+    }
+
+    // A menu's pointer presses the buttons its clicks stand for.
+    if ((mask & MenuPointerSyntheticDown()) != 0) {
+        return 1;
     }
 
     if (InputDeveloperMenu()) {

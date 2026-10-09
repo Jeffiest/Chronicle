@@ -16,7 +16,9 @@
 
 #include "clock.hpp"
 #include "config.hpp"
+#include "gamepad_map.hpp"
 #include "mouse.hpp"
+#include "touchpad.hpp"
 #include "window.hpp"
 
 namespace {
@@ -82,26 +84,25 @@ constexpr Action kActions[] = {
     {"zoom_reset",   ActionKind::Host,     0,              kAxisLeftX,  0,  "Mouse3"},
 };
 
-struct ButtonMap {
-    SDL_GamepadButton button;
-    std::uint16_t     pad;
-};
-
-const ButtonMap kGamepadButtons[] = {
-    {SDL_GAMEPAD_BUTTON_SOUTH,          kInputCross},
-    {SDL_GAMEPAD_BUTTON_EAST,           kInputCircle},
-    {SDL_GAMEPAD_BUTTON_WEST,           kInputSquare},
-    {SDL_GAMEPAD_BUTTON_NORTH,          kInputTriangle},
-    {SDL_GAMEPAD_BUTTON_BACK,           kInputSelect},
-    {SDL_GAMEPAD_BUTTON_START,          kInputStart},
-    {SDL_GAMEPAD_BUTTON_LEFT_STICK,     kInputL3},
-    {SDL_GAMEPAD_BUTTON_RIGHT_STICK,    kInputR3},
-    {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,  kInputL1},
-    {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, kInputR1},
-    {SDL_GAMEPAD_BUTTON_DPAD_UP,        kInputUp},
-    {SDL_GAMEPAD_BUTTON_DPAD_DOWN,      kInputDown},
-    {SDL_GAMEPAD_BUTTON_DPAD_LEFT,      kInputLeft},
-    {SDL_GAMEPAD_BUTTON_DPAD_RIGHT,     kInputRight},
+// Every gamepad button the game reads; GamepadButtonPad (gamepad_map.hpp) says which DualShock 2
+// button each one presses, which depends on the pad's type for Back and the touchpad click.
+// clang-format off
+constexpr SDL_GamepadButton kGamepadButtons[] = {
+    SDL_GAMEPAD_BUTTON_SOUTH,
+    SDL_GAMEPAD_BUTTON_EAST,
+    SDL_GAMEPAD_BUTTON_WEST,
+    SDL_GAMEPAD_BUTTON_NORTH,
+    SDL_GAMEPAD_BUTTON_BACK,
+    SDL_GAMEPAD_BUTTON_TOUCHPAD,
+    SDL_GAMEPAD_BUTTON_START,
+    SDL_GAMEPAD_BUTTON_LEFT_STICK,
+    SDL_GAMEPAD_BUTTON_RIGHT_STICK,
+    SDL_GAMEPAD_BUTTON_LEFT_SHOULDER,
+    SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
+    SDL_GAMEPAD_BUTTON_DPAD_UP,
+    SDL_GAMEPAD_BUTTON_DPAD_DOWN,
+    SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+    SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
 };
 // clang-format on
 
@@ -156,6 +157,9 @@ struct PadSlot {
     InputRumble  rumble;
     bool         rumble_sent = false;
     Uint64       rumble_time = 0;
+    // The lightbar colour the game asked for, kept to restore when the pad reconnects.
+    bool         led_wanted = false;
+    Uint8        led[3] = {};
 };
 
 // Which device the player touched last (InputActiveGlyphFamily): false until a key or the mouse is
@@ -189,6 +193,18 @@ bool  g_menu_navigation = false;
 bool  g_developer_menu = false;
 float g_menu_dx = 0.0f;
 float g_menu_dy = 0.0f;
+// A DualSense's touchpad as a menu pointer (platform/touchpad.hpp): its motion and scroll since the
+// last take, the buttons it holds, and the taps still to show as a click, for two takes.
+TouchpadGestures g_touchpad;
+bool             g_touchpad_on = true;
+bool             g_lightbar_on = true;
+float            g_rumble_strength = 1.0f;
+float            g_touch_dx = 0.0f;
+float            g_touch_dy = 0.0f;
+float            g_touch_wheel = 0.0f;
+std::uint32_t    g_touch_held = 0;
+std::uint32_t    g_touch_tap = 0;
+bool             g_touch_tap_shown = false;
 // Per host action: presses not yet consumed, and whether its non-key sources (mouse and gamepad
 // buttons, the script's keys) were held at the last poll, for their press edges.
 std::array<int, kHostActionCount>  g_host_presses{};
@@ -366,9 +382,10 @@ bool GyroActive() {
 }
 
 void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
-    for (const ButtonMap &map : kGamepadButtons) {
-        if (SDL_GetGamepadButton(gamepad, map.button)) {
-            state.buttons |= map.pad;
+    SDL_GamepadType type = SDL_GetGamepadType(gamepad);
+    for (SDL_GamepadButton button : kGamepadButtons) {
+        if (SDL_GetGamepadButton(gamepad, button)) {
+            state.buttons |= GamepadButtonPad(type, button);
         }
     }
     if (SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > kTriggerThreshold) {
@@ -404,6 +421,53 @@ void ReadGamepad(SDL_Gamepad *gamepad, InputPadState &state) {
     float pitch = std::fabs(rate[0]) > kGyroDeadband ? -rate[0] * g_gyro_sensitivity : 0.0f;
     state.right_x = InputStickByte(g_gyro_invert_x ? -yaw : yaw);
     state.right_y = InputStickByte(g_gyro_invert_y ? -pitch : pitch);
+}
+
+// Sets a pad's lightbar if it has one.
+void ApplyLightbar(const PadSlot &slot) {
+    if (slot.gamepad == nullptr || !slot.led_wanted || !g_lightbar_on) {
+        return;
+    }
+    SDL_PropertiesID properties = SDL_GetGamepadProperties(slot.gamepad);
+    if (SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false)) {
+        SDL_SetGamepadLED(slot.gamepad, slot.led[0], slot.led[1], slot.led[2]);
+    }
+}
+
+// Folds pad 0's touchpad, if it has one, into the menu pointer's inputs.
+void ReadTouchpad(SDL_Gamepad *gamepad) {
+    if (gamepad == nullptr || !g_touchpad_on || SDL_GetNumGamepadTouchpads(gamepad) < 1) {
+        g_touchpad.Reset();
+        g_touch_held = 0;
+        return;
+    }
+    TouchpadFrame frame;
+    int           fingers = std::min(2, SDL_GetNumGamepadTouchpadFingers(gamepad, 0));
+    for (int i = 0; i < fingers; ++i) {
+        bool  down = false;
+        float x = 0.0f;
+        float y = 0.0f;
+        if (SDL_GetGamepadTouchpadFinger(gamepad, 0, i, &down, &x, &y, nullptr)) {
+            frame.finger[i] = {down, x, y};
+        }
+    }
+    frame.click = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_TOUCHPAD);
+    frame.create = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1);
+    TouchpadStep step = g_touchpad.Update(frame, SDL_GetTicks());
+    g_touch_held = step.held;
+    if (!g_menu_mouse) {
+        // Not a pointer's screen: the pad's gestures mean nothing and must not wait for the next.
+        g_touch_dx = g_touch_dy = g_touch_wheel = 0.0f;
+        g_touch_tap = 0;
+        return;
+    }
+    g_touch_dx += step.dx;
+    g_touch_dy += step.dy;
+    g_touch_wheel += step.wheel;
+    if (step.tapped != 0) {
+        g_touch_tap |= step.tapped;
+        g_touch_tap_shown = false;
+    }
 }
 
 void EnableGyro(SDL_Gamepad *gamepad) {
@@ -462,6 +526,8 @@ void SyncGamepads() {
                     std::fprintf(stderr, "input: SDL_OpenGamepad: %s\n", SDL_GetError());
                 } else {
                     EnableGyro(slot.gamepad);
+                    SDL_SetGamepadPlayerIndex(slot.gamepad, static_cast<int>(&slot - g_slots.data()));
+                    ApplyLightbar(slot);
                 }
                 break;
             }
@@ -475,8 +541,8 @@ void SendRumble(int pad) {
     if (slot.gamepad == nullptr) {
         return;
     }
-    Uint16 low = static_cast<Uint16>(slot.rumble.large_motor * 257);
-    Uint16 high = slot.rumble.small_motor ? 0xFFFF : 0;
+    Uint16 low = static_cast<Uint16>(slot.rumble.large_motor * 257 * g_rumble_strength);
+    Uint16 high = slot.rumble.small_motor ? static_cast<Uint16>(0xFFFF * g_rumble_strength) : 0;
     SDL_RumbleGamepad(slot.gamepad, low, high, kRumbleMilliseconds);
     slot.rumble_sent = true;
     slot.rumble_time = SDL_GetTicks();
@@ -564,6 +630,39 @@ void PollHostActions() {
     }
 }
 
+// A rebind capture in progress: the keys, mouse buttons and gamepad buttons that were already held
+// at the last call, so the next call reports only what has gone down since.
+bool                                 g_bind_capture = false;
+std::array<bool, SDL_SCANCODE_COUNT> g_bind_keys{};
+std::uint32_t                        g_bind_mouse = 0;
+std::uint16_t                        g_bind_pad = 0;
+
+bool BindKeyHeld(int scancode) {
+    return g_keys[scancode] || std::ranges::find(g_scripted.keys, scancode) != g_scripted.keys.end();
+}
+
+// The gamepad buttons held now, one bit per entry of kGamepadButtons.
+std::uint16_t BindGamepadHeld() {
+    std::uint16_t held = 0;
+    for (std::size_t i = 0; i < std::size(kGamepadButtons); ++i) {
+        bool down = std::ranges::any_of(g_slots, [&](const PadSlot &slot) {
+            return slot.gamepad != nullptr && SDL_GetGamepadButton(slot.gamepad, kGamepadButtons[i]);
+        });
+        if (down) {
+            held |= static_cast<std::uint16_t>(1u << i);
+        }
+    }
+    return held;
+}
+
+void SnapshotBind() {
+    for (int scancode = 0; scancode < SDL_SCANCODE_COUNT; ++scancode) {
+        g_bind_keys[scancode] = BindKeyHeld(scancode);
+    }
+    g_bind_mouse = MouseButtons() | g_scripted.mouse_buttons;
+    g_bind_pad = BindGamepadHeld();
+}
+
 } // namespace
 
 void InputInit() {
@@ -588,6 +687,13 @@ void InputApplyConfig(const Config &config) {
     }
     g_stick_sensitivity = config.stick_sensitivity;
     g_gyro_sensitivity = config.gyro_sensitivity;
+    g_touchpad_on = config.touchpad;
+    g_touchpad.SetSensitivity(config.touchpad_sensitivity);
+    g_lightbar_on = config.lightbar;
+    g_rumble_strength = config.rumble_strength;
+    for (const PadSlot &slot : g_slots) {
+        ApplyLightbar(slot);
+    }
     g_gyro_invert_x = config.gyro_invert_x;
     g_gyro_invert_y = config.gyro_invert_y;
     g_stick_invert_x = config.stick_invert_x;
@@ -630,6 +736,9 @@ void InputShutdown() {
     g_developer_menu = false;
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
+    g_touchpad.Reset();
+    g_touch_dx = g_touch_dy = g_touch_wheel = 0.0f;
+    g_touch_held = g_touch_tap = 0;
     g_mouse_look = {0.0f, 0.0f, g_mouse_look.read};
     g_keys.fill(false);
     g_scripted = {};
@@ -649,8 +758,14 @@ void InputShutdown() {
     }
 }
 
-static InputGlyphFamily GamepadFamily(SDL_Gamepad *gamepad) {
-    switch (SDL_GetGamepadType(gamepad)) {
+InputGlyphFamily InputGlyphFamilyForGamepad(int sdl_gamepad_type, unsigned vendor, unsigned product) {
+    constexpr unsigned kValve = 0x28DE;
+    constexpr unsigned kSteamDeck = 0x1205;
+    switch (sdl_gamepad_type) {
+        case SDL_GAMEPAD_TYPE_PS3:
+            return InputGlyphFamily::Ps3;
+        case SDL_GAMEPAD_TYPE_PS4:
+            return InputGlyphFamily::Ps4;
         case SDL_GAMEPAD_TYPE_PS5:
             return InputGlyphFamily::Ps5;
         case SDL_GAMEPAD_TYPE_XBOX360:
@@ -662,8 +777,17 @@ static InputGlyphFamily GamepadFamily(SDL_Gamepad *gamepad) {
         case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
             return InputGlyphFamily::Switch;
         default:
-            return InputGlyphFamily::Ps4;
+            break;
     }
+    if (vendor == kValve) {
+        return product == kSteamDeck ? InputGlyphFamily::SteamDeck : InputGlyphFamily::SteamController;
+    }
+    return InputGlyphFamily::Xbox;
+}
+
+static InputGlyphFamily GamepadFamily(SDL_Gamepad *gamepad) {
+    return InputGlyphFamilyForGamepad(SDL_GetGamepadType(gamepad), SDL_GetGamepadVendor(gamepad),
+                                      SDL_GetGamepadProduct(gamepad));
 }
 
 void InputPoll() {
@@ -687,6 +811,7 @@ void InputPoll() {
         }
         Compose(pad);
     }
+    ReadTouchpad(g_slots[0].gamepad);
     PollHostActions();
 }
 
@@ -800,6 +925,8 @@ void InputSetMenuMouse(bool on) {
     g_menu_mouse = on;
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
+    g_touch_dx = g_touch_dy = g_touch_wheel = 0.0f;
+    g_touch_tap = 0;
     float dx = 0.0f;
     float dy = 0.0f;
     MouseTakeMotion(dx, dy);
@@ -833,10 +960,19 @@ InputMenuMouse InputTakeMenuMouse() {
     MouseTakeMotion(dx, dy);
     InputMenuMouse mouse;
     // A script's motion is per tick, and a menu takes once a tick.
-    mouse.dx = g_menu_dx + dx + g_scripted.mouse_dx;
-    mouse.dy = g_menu_dy + dy + g_scripted.mouse_dy;
-    mouse.wheel = MouseTakeWheel() + std::exchange(g_scripted_wheel, 0.0f);
-    mouse.buttons = MouseButtons() | g_scripted.mouse_buttons;
+    mouse.dx = g_menu_dx + dx + g_scripted.mouse_dx + std::exchange(g_touch_dx, 0.0f);
+    mouse.dy = g_menu_dy + dy + g_scripted.mouse_dy + std::exchange(g_touch_dy, 0.0f);
+    mouse.wheel = MouseTakeWheel() + std::exchange(g_scripted_wheel, 0.0f) + std::exchange(g_touch_wheel, 0.0f);
+    mouse.buttons = MouseButtons() | g_scripted.mouse_buttons | g_touch_held;
+    // A tap is a click the pointer sees pressed on one take and let go on the next.
+    if (g_touch_tap != 0) {
+        if (g_touch_tap_shown) {
+            g_touch_tap = 0;
+        } else {
+            mouse.buttons |= g_touch_tap;
+            g_touch_tap_shown = true;
+        }
+    }
     g_menu_dx = 0.0f;
     g_menu_dy = 0.0f;
     return mouse;
@@ -871,6 +1007,21 @@ void InputSetRumble(int pad, InputRumble rumble) {
     if (changed || (active && SDL_GetTicks() - slot.rumble_time >= kRumbleMilliseconds / 2)) {
         SendRumble(pad);
     }
+}
+
+void InputSetLightbar(int pad, std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+    if (pad < 0 || pad >= kInputPadCount) {
+        return;
+    }
+    PadSlot &slot = g_slots[pad];
+    if (slot.led_wanted && slot.led[0] == red && slot.led[1] == green && slot.led[2] == blue) {
+        return;
+    }
+    slot.led_wanted = true;
+    slot.led[0] = red;
+    slot.led[1] = green;
+    slot.led[2] = blue;
+    ApplyLightbar(slot);
 }
 
 InputRumble InputGetRumble(int pad) {
@@ -994,6 +1145,133 @@ bool InputBindKeys(std::string_view action, std::span<const std::string_view> ke
         return true;
     }
     return false;
+}
+
+std::span<const InputActionInfo> InputActions() {
+    static const std::vector<InputActionInfo> actions = [] {
+        std::vector<InputActionInfo> list;
+        list.reserve(kActionCount);
+        for (std::size_t i = 0; i < kActionCount; ++i) {
+            list.push_back({kActions[i].name, i >= kFirstHostAction, kActions[i].kind == ActionKind::Axis});
+        }
+        return list;
+    }();
+    return actions;
+}
+
+bool InputActionTakesGamepad(std::string_view action) {
+    for (std::size_t i = 0; i < kActionCount; ++i) {
+        if (kActions[i].name == action) {
+            return i >= kFirstHostAction;
+        }
+    }
+    return false;
+}
+
+std::string InputBindingLabel(std::string_view action) {
+    EnsureBindings();
+    std::string text;
+    bool        known = false;
+    for (std::size_t i = 0; i < kActionCount; ++i) {
+        if (kActions[i].name != action) {
+            continue;
+        }
+        known = true;
+        for (const Source &source : g_bindings[i]) {
+            std::string one;
+            switch (source.kind) {
+                case Source::Key: {
+                    const char *name = SDL_GetScancodeName(static_cast<SDL_Scancode>(source.code));
+                    one = name != nullptr ? name : "";
+                    break;
+                }
+                case Source::MouseButton:
+                    one = "Mouse" + std::to_string(source.code);
+                    break;
+                case Source::MouseAxis:
+                    one = std::string(source.scale < 0.0f ? "-" : "") + (source.code == 0 ? "MouseX" : "MouseY");
+                    break;
+                case Source::GamepadButton: {
+                    const char *name = SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(source.code));
+                    one = name != nullptr ? std::string("Gamepad:") + name : "";
+                    break;
+                }
+            }
+            if (!one.empty()) {
+                if (!text.empty()) {
+                    text += ", ";
+                }
+                text += one;
+            }
+        }
+    }
+    if (!known) {
+        return {};
+    }
+    return text.empty() ? "None" : text;
+}
+
+void InputBeginBindCapture() {
+    EnsureBindings();
+    g_bind_capture = true;
+    SnapshotBind();
+}
+
+std::string InputTakeBindKey(bool allow_gamepad) {
+    if (!g_bind_capture) {
+        return {};
+    }
+    std::string found;
+    for (int scancode = 0; scancode < SDL_SCANCODE_COUNT && found.empty(); ++scancode) {
+        if (!BindKeyHeld(scancode) || g_bind_keys[scancode]) {
+            continue;
+        }
+        const char *name = SDL_GetScancodeName(static_cast<SDL_Scancode>(scancode));
+        if (name != nullptr && *name != '\0') {
+            found = name;
+        }
+    }
+    std::uint32_t mouse = MouseButtons() | g_scripted.mouse_buttons;
+    for (int bit = 0; bit < kMouseButtonCount && found.empty(); ++bit) {
+        if ((mouse & (1u << bit)) != 0 && (g_bind_mouse & (1u << bit)) == 0) {
+            found = "Mouse" + std::to_string(bit + 1);
+        }
+    }
+    if (allow_gamepad && found.empty()) {
+        std::uint16_t pad = BindGamepadHeld();
+        for (std::size_t i = 0; i < std::size(kGamepadButtons) && found.empty(); ++i) {
+            if ((pad & (1u << i)) != 0 && (g_bind_pad & (1u << i)) == 0) {
+                const char *name = SDL_GetGamepadStringForButton(kGamepadButtons[i]);
+                if (name != nullptr && *name != '\0') {
+                    found = std::string("Gamepad:") + name;
+                }
+            }
+        }
+    }
+    SnapshotBind();
+    return found;
+}
+
+bool InputBindSourceHeld(std::string_view name) {
+    std::string lower = Lower(name);
+    if (lower.size() == 6 && lower.starts_with("mouse") && lower[5] >= '1' && lower[5] < '1' + kMouseButtonCount) {
+        return ((MouseButtons() | g_scripted.mouse_buttons) & (1u << (lower[5] - '1'))) != 0;
+    }
+    if (lower.starts_with("gamepad:")) {
+        SDL_GamepadButton button = SDL_GetGamepadButtonFromString(lower.substr(8).c_str());
+        if (button == SDL_GAMEPAD_BUTTON_INVALID) {
+            return false;
+        }
+        std::uint16_t held = BindGamepadHeld();
+        for (std::size_t i = 0; i < std::size(kGamepadButtons); ++i) {
+            if (kGamepadButtons[i] == button) {
+                return (held & (1u << i)) != 0;
+            }
+        }
+        return false;
+    }
+    int scancode = InputScancodeFromName(name);
+    return scancode >= 0 && BindKeyHeld(scancode);
 }
 
 InputGlyphFamily InputActiveGlyphFamily() {

@@ -9,6 +9,7 @@
 
 #include "dataalloc.hpp"
 #include "mglib.hpp"
+#include "localize_texture.hpp"
 #include "texture_port.hpp"
 #include "tim2.hpp"
 
@@ -231,7 +232,7 @@ void MakeGroundPeriodic(const char *name, PortDecodedTexture &texture) {
 // Retail's EnterTexture, EnterTextureEX and EnterFixTexture share everything but where pixels
 // are staged and which VRAM end moves. The staging buffer and the VRAM arithmetic are kept as
 // retail does them: the game sizes later allocations from buffer_used (editloop's LoadTexture),
-// and the overflow checks stop the same loads retail stopped. The image goes to the renderer, and
+// and staging/per-block bounds still guard those allocations. The image goes to the renderer, and
 // TBP0/CBP become registry keys, not VRAM addresses.
 void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_char *image, int width, int height,
            int bpp, u_char *clut, int clut_colors, int mipmap, u_char *mip1, u_char *mip2, u_long tex1,
@@ -348,6 +349,7 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
                                indexed && swizzled != 0, decoded)) {
             return;
         }
+        LocalizeTexture(name, decoded);
         MakeGroundPeriodic(name, decoded);
         DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
@@ -450,10 +452,28 @@ PC_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
     unsigned           tbp = 0;
     unsigned           cbp = 0;
     if (PortDecodeTexture(1, width, height, levels, 1, clut, 256, false, decoded)) {
+        LocalizeTexture(name, decoded);
         DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
     }
     tex->tex0 = SCE_GS_SET_TEX0(tbp, 10, kPsmT8H, 10, 8, 1, 0, cbp, 0, 0, 0, 1);
+}
+
+// Native textures occupy independent storage, so simulated PS2 VRAM overlap does not overwrite
+// either image. Keep the staging bounds and block finalization without retail's overlap loop.
+PC_OVERRIDE void CTextureManager::EndEnterTextureBlock(int block) {
+    if (block < 0 || block >= 72) {
+        return;
+    }
+    if (buffer_used > buffer_size) {
+        Stop("texture buffer over", "quadwords", buffer_used);
+    }
+    CTextureBlock &entry = blocks[block];
+    entry.buffer_end = buffer + buffer_used;
+    if (entry.buffer_end == entry.buffer) {
+        entry.buffer = nullptr;
+        entry.buffer_end = nullptr;
+    }
 }
 
 // Every texture is resident on the renderer from the moment it is entered, so a block never needs

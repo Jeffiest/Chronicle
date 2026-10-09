@@ -1059,9 +1059,10 @@ static void MainDraw() {
     }
 
     if (EdDebugParamDrawOff == 0) {
-        char pause_texture[] = "pause";
+        char      pause_texture[] = "pause";
+        CTexture *pause = TexManager.GetTexture(pause_texture, -1);
 
-        if (GameMode == ED_IN_MODE_PAUSE || EdPauseFlag != 0) {
+        if (pause != NULL && (GameMode == ED_IN_MODE_PAUSE || EdPauseFlag != 0)) {
             TexManager.ReloadTexture(GetVif1Packet(), 0x14);
             CRect_i_ fade;
             fade.x = 0;
@@ -1081,7 +1082,7 @@ static void MainDraw() {
             place.width = 0x80;
             place.height = 0x28;
             sceVif1Packet *packet = GetVif1Packet();
-            set2DSprite(packet, TexManager.GetTexture(pause_texture, -1), place, texel, 0x80);
+            set2DSprite(packet, pause, place, texel, 0x80);
         }
     }
 

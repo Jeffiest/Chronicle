@@ -288,9 +288,12 @@ install(TARGETS darkcloud RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 # game reads its language files.
 add_custom_target(dc_lang
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/lang $<TARGET_FILE_DIR:darkcloud>/lang
-    COMMENT "Copying the port's translated strings")
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tools/font/DarkCloudCompendium.ttf
+            $<TARGET_FILE_DIR:darkcloud>/lang/font.ttf
+    COMMENT "Copying the port's translated strings and message font")
 add_dependencies(darkcloud dc_lang)
 install(DIRECTORY lang/ DESTINATION ${CMAKE_INSTALL_BINDIR}/lang)
+install(FILES ${CMAKE_SOURCE_DIR}/tools/font/DarkCloudCompendium.ttf DESTINATION ${CMAKE_INSTALL_BINDIR}/lang RENAME font.ttf)
 
 # The button symbols (docs/GLYPHS.md): glyphs/ beside the executable. Rebuilt from art by tools/glyphs/build_glyphs.py.
 add_custom_target(dc_glyphs

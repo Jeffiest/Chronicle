@@ -61,6 +61,18 @@ PAD_STYLES = {
         "lstick": "T_S_L_Retro", "rstick": "T_S_R_Retro"}),
 }
 
+# The PS5 style from a flat folder of one 64 px PNG per button ("ps5_a_butt.png"): the pack's A, B, X and Y
+# are the pad's bottom, right, left and top buttons (Cross, Circle, Square, Triangle). It has no L3/R3 click
+# art but the stick icons, so L3 and R3 are the plain stick icons and the stick symbols the all-directions ones.
+PS5_PACK_REFERENCE = 60  # source pixels of its round face button
+PS5_PACK = {
+    "cross": "a_butt", "circle": "b_butt", "square": "x_butt", "triangle": "y_butt",
+    "l1": "lb_butt", "r1": "rb_butt", "l2": "lt_butt", "r2": "rt_butt",
+    "start": "start_butt", "select": "back_butt",
+    "dpad": "dpad_all", "dpad_ud": "dpad_updown", "dpad_lr": "dpad_leftright",
+    "up": "dpad_up", "down": "dpad_down", "left": "dpad_left", "right": "dpad_right",
+    "l3": "lstick_none", "r3": "rstick_none", "lstick": "lstick_all", "rstick": "rstick_all"}
+
 # Keyboard file stem (between T_ and _Key_Dark) -> the names the game looks keys up by: SDL's scancode
 # name, lower-case, spaces dropped (input.hpp, InputPrimaryBindingName), or mouse1..mouse5.
 KEY_ALIASES = {
@@ -95,10 +107,10 @@ def make_xbox_menu(src_dir):
     return out
 
 
-def pack(images):
-    """Shelf-packs {name: RGBA image}, each cropped to its pixels and scaled by CELL/REFERENCE.
+def pack(images, reference=REFERENCE):
+    """Shelf-packs {name: RGBA image}, each cropped to its pixels and scaled by CELL/reference.
     Returns (atlas, {name: [x, y, w, h]})."""
-    scale = CELL / REFERENCE
+    scale = CELL / reference
     crops = {}
     for name, im in images.items():
         box = im.getchannel("A").getbbox()
@@ -134,12 +146,53 @@ def pack(images):
     return atlas, rects
 
 
+# The other flat packs (same layout and button names as the PS5 one): style name -> file prefix.
+EXTRA_PACKS = {"ps3": "ps3_", "steamdeck": "sd_", "steamcontroller": "sc_"}
+
+
+def build_ps5_pack(folder, out, style="ps5", prefix="ps5_"):
+    images = {}
+    missing = []
+    for name, stem in PS5_PACK.items():
+        path = os.path.join(folder, prefix + stem + ".png")
+        if os.path.exists(path):
+            images[name] = load(path)
+        else:
+            missing.append(path)
+    atlas, rects = pack(images, PS5_PACK_REFERENCE)
+    atlas.save(os.path.join(out, style + ".png"), optimize=True)
+    index_path = os.path.join(out, "glyphs.json")
+    with open(index_path, encoding="utf-8") as f:
+        index = json.load(f)
+    index["styles"][style] = {"atlas": style + ".png", "glyphs": rects}
+    with open(index_path, "w", encoding="utf-8") as f:
+        json.dump(index, f, indent=1, sort_keys=True)
+        f.write("\n")
+    for m in missing:
+        print("missing:", m, file=sys.stderr)
+    print(style, len(rects), "glyphs")
+    return 1 if missing else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--src", required=True)
+    ap.add_argument("--src")
+    ap.add_argument("--ps5-pack", help="folder of ps5_*.png buttons: rebuilds only the ps5 atlas from it, "
+                    "keeping the other styles in the existing glyphs.json")
+    for style in EXTRA_PACKS:
+        ap.add_argument("--%s-pack" % style, help="folder of %s*.png buttons: rebuilds only the %s atlas, as --ps5-pack "
+                        "does for ps5" % (EXTRA_PACKS[style], style))
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "..", "port", "glyphs"))
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
+    if args.ps5_pack:
+        return build_ps5_pack(args.ps5_pack, args.out)
+    for style, prefix in EXTRA_PACKS.items():
+        folder = getattr(args, style + "_pack")
+        if folder:
+            return build_ps5_pack(folder, args.out, style, prefix)
+    if not args.src:
+        ap.error("--src or one of the --*-pack folders is required")
     index = {"reference": CELL, "styles": {}}
     missing = []
 

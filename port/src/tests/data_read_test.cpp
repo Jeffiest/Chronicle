@@ -4,10 +4,12 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "../platform/paths.hpp"
 #include "data_fixture.hpp"
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 #include "exitcodes.hpp"
 #include "platform_fixture.hpp"
 
@@ -92,6 +94,22 @@ TEST(DataRead, Loadfile2ReadsExactSizeAndZeroFills) {
     Clear();
     ASSERT_TRUE(LoadFile(Mutable("meswin/systeme.bin"), buffer, &size) == 1);
     ASSERT_TRUE(size == 2047 && Equals(buffer, disc.files[4].data) && buffer[2047] == 0);
+    fs::remove_all(dir);
+}
+
+TEST(DataRead, LanguagesFromTheExtraction) {
+    fs::path dir = InstallStandardData("read_languages");
+    ASSERT_TRUE((DataLanguages() == std::vector<s32>{2, 3, 4, 5, 6}));
+
+    std::string text = R"({"release": "[x]", "languages": [1, 9]})";
+    WriteBytes(dir / "data/languages.json", Bytes(text.begin(), text.end()));
+    InitCDFile();
+    ASSERT_TRUE((DataLanguages() == std::vector<s32>{1})); // 9 is no language, [x] no list
+    ASSERT_TRUE((SupportedLanguages() == std::vector<s32>{1}));
+
+    fs::remove(dir / "data/languages.json");
+    InitCDFile();
+    ASSERT_TRUE(DataLanguages().empty());
     fs::remove_all(dir);
 }
 

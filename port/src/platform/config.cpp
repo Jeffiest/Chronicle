@@ -134,7 +134,7 @@ bool ReadAspect(const Json &value, ConfigAspect &out) {
     return true;
 }
 
-constexpr const char *kGlyphDeviceNames[] = {"auto", "ps4", "ps5", "xbox", "switch", "keyboard"};
+constexpr const char *kGlyphDeviceNames[] = {"auto", "ps3", "ps4", "ps5", "xbox", "switch", "steamdeck", "steamcontroller", "keyboard"};
 
 bool ReadGlyphDevice(const Json &value, ConfigGlyphDevice &out) {
     if (!value.is_string()) {
@@ -332,6 +332,28 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "input.mouse_capture") {
         return ReadBool(value, config.mouse_capture);
     }
+    if (name == "input.touchpad") {
+        return ReadBool(value, config.touchpad);
+    }
+    if (name == "input.lightbar") {
+        return ReadBool(value, config.lightbar);
+    }
+    if (name == "input.touchpad_sensitivity") {
+        float sensitivity = 0.0f;
+        if (!ReadNumber(value, sensitivity) || !(sensitivity > 0.0f) || !std::isfinite(sensitivity)) {
+            return false;
+        }
+        config.touchpad_sensitivity = sensitivity;
+        return true;
+    }
+    if (name == "input.rumble_strength") {
+        float strength = 0.0f;
+        if (!ReadNumber(value, strength) || !std::isfinite(strength) || strength < 0.0f || strength > 1.0f) {
+            return false;
+        }
+        config.rumble_strength = strength;
+        return true;
+    }
     if (name == "input.glyphs") {
         if (!value.is_string() || (value.get<std::string>() != "new" && value.get<std::string>() != "original")) {
             return false;
@@ -370,18 +392,33 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "game.qte_always_win") {
         return ReadBool(value, config.qte_always_win);
     }
+    if (name == "game.element_quick_select") {
+        return ReadBool(value, config.element_quick_select);
+    }
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
     }
-    if (name == "video.text_shadow") {
-        if (!value.is_string()) {
+    if (name == "video.text_shadow" || name == "video.glyph_shadow" || name == "video.name_shadow" ||
+        name == "video.floor_shadow" || name == "video.boss_shadow") {
+        int &target = name == "video.text_shadow"    ? config.text_shadow
+                      : name == "video.glyph_shadow" ? config.glyph_shadow
+                      : name == "video.name_shadow"  ? config.name_shadow
+                      : name == "video.floor_shadow" ? config.floor_shadow
+                                                     : config.boss_shadow;
+        if (value.is_string()) {
+            // the earlier two-choice setting
+            const std::string shadow = Lower(value.get<std::string>());
+            if (shadow != "soft" && shadow != "deep") {
+                return false;
+            }
+            target = shadow == "deep" ? 100 : 50;
+            return true;
+        }
+        double percent = 0.0;
+        if (!ReadNumber(value, percent) || !std::isfinite(percent)) {
             return false;
         }
-        const std::string shadow = Lower(value.get<std::string>());
-        if (shadow != "soft" && shadow != "deep") {
-            return false;
-        }
-        config.text_shadow = shadow == "deep" ? 1 : 0;
+        target = std::clamp(static_cast<int>(std::lround(percent / 5.0)) * 5, 0, 100);
         return true;
     }
     if (name == "game.language") {
@@ -443,6 +480,17 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
             return false;
         }
         config.detail_distance = distance;
+        return true;
+    }
+    if (name == "video.anisotropy") {
+        if (!value.is_number_integer()) {
+            return false;
+        }
+        int samples = value.get<int>();
+        if (samples != 0 && samples != 2 && samples != 4 && samples != 8 && samples != 16) {
+            return false;
+        }
+        config.anisotropy = samples;
         return true;
     }
     if (name == "video.shadow_distance") {
@@ -545,6 +593,7 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["tick_rate"] = config.tick_rate;
     root["game"]["debug_mode"] = config.debug_mode;
     root["game"]["qte_always_win"] = config.qte_always_win;
+    root["game"]["element_quick_select"] = config.element_quick_select;
     root["game"]["language"] = kLanguageNames[config.language >= 2 && config.language <= 6 ? config.language : 0];
     const ConfigGameOptions &options = config.options;
     root["game"]["save_cursor_position"] = options.save_cursor_position;
@@ -556,7 +605,11 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["player_damage"] = options.player_damage;
     root["game"]["enemy_hp"] = options.enemy_hp;
     root["game"]["names"] = options.names;
-    root["video"]["text_shadow"] = config.text_shadow == 1 ? "deep" : "soft";
+    root["video"]["text_shadow"] = config.text_shadow;
+    root["video"]["glyph_shadow"] = config.glyph_shadow;
+    root["video"]["name_shadow"] = config.name_shadow;
+    root["video"]["floor_shadow"] = config.floor_shadow;
+    root["video"]["boss_shadow"] = config.boss_shadow;
     root["video"]["present_mode"] = PresentModeName(config.present_mode);
     root["video"]["interpolation"] = config.interpolation;
     root["video"]["max_fps"] = config.max_fps;
@@ -569,6 +622,7 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["fps_detail"] = FpsDetailName(config.fps_detail);
     root["video"]["detail_distance"] = Shortest(config.detail_distance);
     root["video"]["shadow_distance"] = Shortest(config.shadow_distance);
+    root["video"]["anisotropy"] = config.anisotropy;
     root["video"]["soft_focus"] = options.soft_focus;
     root["audio"]["master_volume"] = Shortest(config.master_volume);
     root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
@@ -585,6 +639,10 @@ std::string ConfigSerialize(const Config &config) {
     root["input"]["mouse_invert_y"] = config.mouse_invert_y;
     root["input"]["mouse_capture"] = config.mouse_capture;
     root["input"]["mouse_zoom"] = config.mouse_zoom;
+    root["input"]["touchpad"] = config.touchpad;
+    root["input"]["touchpad_sensitivity"] = Shortest(config.touchpad_sensitivity);
+    root["input"]["lightbar"] = config.lightbar;
+    root["input"]["rumble_strength"] = Shortest(config.rumble_strength);
     root["input"]["glyphs"] = config.glyphs_new ? "new" : "original";
     root["input"]["glyph_device"] = kGlyphDeviceNames[static_cast<std::size_t>(config.glyph_device)];
     root["input"]["mouse_camera_return"] = Shortest(config.mouse_camera_return);

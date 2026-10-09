@@ -1,16 +1,21 @@
 #include "dataread.hpp"
+#include "dataread_port.hpp"
 
+#include <charconv>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "../../tools/dcdata/dcdata.hpp"
+#include "language.h"
 #include "localize.hpp"
 #include "platform/paths.hpp"
 
@@ -170,6 +175,39 @@ PC_OVERRIDE int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
         *out_size = size;
     }
     return 1;
+}
+
+// languages.json is {"release": "...", "languages": [n, ...]}; the numbers in the brackets after
+// "languages" are the languages.
+std::vector<s32> DataLanguages() {
+    std::vector<s32> languages;
+    const fs::path  *file = Lookup(dcdata::kLanguagesFile);
+    if (!file) {
+        return languages;
+    }
+    std::ifstream stream(*file);
+    std::string   text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    std::size_t   key = text.find("\"languages\"");
+    std::size_t   open = key == std::string::npos ? key : text.find('[', key);
+    std::size_t   close = open == std::string::npos ? open : text.find(']', open);
+    if (close == std::string::npos) {
+        return languages;
+    }
+    const char *at = text.data() + open + 1;
+    const char *end = text.data() + close;
+    while (at < end) {
+        s32  language = 0;
+        auto [next, error] = std::from_chars(at, end, language);
+        if (error == std::errc() && language >= LANG_JAPANESE && language < LANG_COUNT) {
+            languages.push_back(language);
+        }
+        at = error == std::errc() ? next : at + 1;
+    }
+    return languages;
+}
+
+std::vector<s32> SupportedLanguages() {
+    return DataLanguages();
 }
 
 PC_OVERRIDE void InitReadBG() {

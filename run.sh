@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Build and launch the selected platform, defaulting to PS2 in PCSX2.
+# Build and launch the selected platform, defaulting to the optimized Linux port.
 #
-#   ./run.sh
+#   ./run.sh                     build and launch the optimized Linux port
 #   REGION=PAL ./run.sh ps2       the July 12, 2001 PAL prototype instead
-#   ./run.sh linux-x64           build and launch the Linux port
+#   ./run.sh linux-x64           build and launch the optimized Linux port
+#   ./run.sh linux-x64-debug     build and launch the Debug Linux port
+#   ./run.sh linux-x64-release   build and launch the optimized Linux port
 #   ./run.sh macos               build and launch the macOS port
 #
 # Every build but macOS's runs in the dev container, or in place when this is
@@ -16,27 +18,44 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-    echo "Usage: ./run.sh [ps2|linux-x64|macos] [game arguments]"
-    echo "Defaults to ps2. Game arguments are forwarded to native builds."
+    echo "Usage: ./run.sh [linux-x64|linux-x64-release|linux-x64-debug|ps2|macos] [game arguments]"
+    echo "Defaults to the optimized Linux port. Game arguments are forwarded to native builds."
 }
 
-platform=${1:-ps2}
+platform=linux-x64-release
+if [ "$#" -gt 0 ]; then
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -*) ;;
+        *) platform=$1; shift ;;
+    esac
+fi
 case "$platform" in
     ps2)
         [ "$#" -le 1 ] || { usage >&2; exit 2; }
         ;;
-    linux-x64|macos)
-        shift
-        ./build.sh "$platform"
+    linux-x64|linux-x64-release|linux-x64-debug|macos)
         case "$platform" in
-            linux-x64)
+            linux-x64|linux-x64-release)
+                ./build.sh linux-x64-release
+                if [ "$(uname -s)" != Linux ]; then
+                    echo "port/build/pc-release/darkcloud is built; launching it requires a Linux host." >&2
+                    exit 1
+                fi
+                exec port/build/pc-release/darkcloud "$@"
+                ;;
+            linux-x64-debug)
+                ./build.sh linux-x64
                 if [ "$(uname -s)" != Linux ]; then
                     echo "port/build/pc/darkcloud is built; launching it requires a Linux host." >&2
                     exit 1
                 fi
                 exec port/build/pc/darkcloud "$@"
                 ;;
-            macos) exec port/build/macos-arm64/darkcloud "$@" ;;
+            macos)
+                ./build.sh macos
+                exec port/build/macos-arm64/darkcloud "$@"
+                ;;
         esac
         ;;
     -h|--help) usage; exit 0 ;;

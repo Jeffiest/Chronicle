@@ -84,6 +84,9 @@ bool LocalizeMessages(const s16 *retail, size_t words, const std::map<int, std::
 // language's text for key if its JSON has one, else english. A "%1", "%2"... in a text stands for what
 // LocalizeFormat is given.
 std::string LocalizeText(std::string_view key, std::string_view english);
+
+// The file stem of the current language (`fr_fr`), or an empty string for one with no language file.
+std::string LocalizeLanguageFile();
 std::string LocalizeFormat(std::string text, std::initializer_list<std::string> arguments);
 
 // Host hooks, called from the data loaders. LocalizeLoaded notes where a pack came from (only
@@ -99,6 +102,10 @@ const u_int *LocalizePack(const u_int *pack, std::string_view name, const u_int 
 // out/hashes/ the same way. Gives back how many message files it read, or -1 where the data cannot be
 // read; verify counts, on stderr, texts that do not encode back to the retail codes.
 int LocalizeExport(const std::filesystem::path &out, bool verify);
+
+// A font file named on the command line (--font): LocalizeFindFile("font.ttf") gives it before the language
+// folders' own.
+void LocalizeSetFontPath(const std::filesystem::path &file);
 
 // The file called name in the language folders (the save folder's before the executable's), or an
 // empty path where neither has one.

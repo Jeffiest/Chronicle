@@ -290,6 +290,9 @@ bool Prepare(PipelineFamily family, VkPrimitiveTopology topology, const TextureB
     // Index textures are looked up texel by texel in the shader, so their sampler never filters.
     Filter filter = mode == kTexturePalette ? Filter::Nearest : binding.filter;
     push.sampler_slot = SamplerIndex(filter, binding.wrap_u, binding.wrap_v);
+    if (family == kFamilyMesh && filter == Filter::Linear && g.anisotropy_level > 0) {
+        push.sampler_slot = kBaseSamplerCount + (g.anisotropy_level - 1) * 4 + (push.sampler_slot & 3);
+    }
     push.flags = static_cast<uint32_t>(blend.transform) << kPushTransformShift;
     if (state.fog) {
         push.flags |= kPushFog;
@@ -578,6 +581,58 @@ bool SamplesFrame(const TextureBinding &binding) {
 // Axes along which a 2D draw's texture continues past the logical frame: all of them untextured.
 uint32_t TextureAxes(const TextureBinding &binding) {
     return binding.texture == kNullTexture ? kAxisX | kAxisY : ExtentAxes(binding.texture);
+}
+
+// The axes along which an axis-aligned rectangle covers the whole logical frame: it starts at or
+// before the frame's low edge and ends at or past its high edge.
+uint32_t CoveredAxes(const Corners &q, const LogicalRect &frame) {
+    uint32_t axes = 0;
+    if (q.x[0] <= frame.x && q.x[1] >= frame.x + frame.w) {
+        axes |= kAxisX;
+    }
+    if (q.y[0] <= frame.y && q.y[1] >= frame.y + frame.h) {
+        axes |= kAxisY;
+    }
+    return axes;
+}
+
+// A 2D draw that covers the whole logical frame with a texture that is an image of nothing (a
+// cutscene still, a full-screen backdrop) is a cover: where the target shows past the frame, stretch
+// it to the target's edge on the axes it extends, so a 4:3 still fills a wider window instead of
+// leaving the frame's sides bare. An image of the frame is flanked instead (its own sides show) and
+// an untextured span is solid either way, so neither stretches. Empty when nothing is stretched, so
+// the caller draws the vertices as given.
+std::vector<Vertex2D> StretchFrameCovers(Primitive primitive, std::span<const Vertex2D> vertices,
+                                         const TextureBinding &binding, uint32_t extend,
+                                         const LogicalRect &frame, const LogicalMapping &mapping) {
+    std::vector<Vertex2D> stretched;
+    if (extend == 0 || binding.texture == kNullTexture || TextureAxes(binding) != 0 ||
+        (primitive != Primitive::Quads && !(primitive == Primitive::TriangleStrip && vertices.size() == 4))) {
+        return stretched;
+    }
+    LogicalRect bounds = TargetBounds(mapping);
+    bool        any = false;
+    stretched.assign(vertices.begin(), vertices.end());
+    for (size_t first = 0; first + 4 <= vertices.size(); first += 4) {
+        Corners q;
+        if (!AxisAligned(&vertices[first], q) || CoveredAxes(q, frame) != (kAxisX | kAxisY)) {
+            continue;
+        }
+        for (int i = 0; i < 4; i++) {
+            Vertex2D &vertex = stretched[first + i];
+            if (extend & kAxisX) {
+                vertex.x = bounds.x + (vertex.x - q.x[0]) / (q.x[1] - q.x[0]) * bounds.w;
+            }
+            if (extend & kAxisY) {
+                vertex.y = bounds.y + (vertex.y - q.y[0]) / (q.y[1] - q.y[0]) * bounds.h;
+            }
+        }
+        any = true;
+    }
+    if (!any) {
+        stretched.clear();
+    }
+    return stretched;
 }
 
 void DrawPrepared(Primitive primitive, std::span<const Vertex2D> vertices, const TextureBinding &binding,
@@ -875,13 +930,22 @@ void Draw2DSided(Primitive primitive, std::span<const Vertex2D> vertices, const 
         DrawPrepared(primitive, vertices, binding, state, ui, side);
         return;
     }
-    DrawPrepared(primitive, vertices, binding, state, ui);
-    if (uint32_t axes = ExtentAxes(g.target) & TextureAxes(binding); axes != 0 && g.in_frame && !g.host_draws) {
-        LogicalMapping mapping = GetLogicalMapping(g.target);
-        if (ui && g.target == kMainTarget) {
-            mapping = UiMapping(mapping);
+    uint32_t        extend = ExtentAxes(g.target);
+    LogicalMapping  mapping = GetLogicalMapping(g.target);
+    if (ui && g.target == kMainTarget) {
+        mapping = UiMapping(mapping);
+    }
+    LogicalRect               frame = LogicalFrame(g.target);
+    std::vector<Vertex2D>     stretched;
+    std::span<const Vertex2D> draw = vertices;
+    if (!g.host_draws) {
+        stretched = StretchFrameCovers(primitive, vertices, binding, extend, frame, mapping);
+        if (!stretched.empty()) {
+            draw = stretched;
         }
-        LogicalRect           frame = LogicalFrame(g.target);
+    }
+    DrawPrepared(primitive, draw, binding, state, ui);
+    if (uint32_t axes = extend & TextureAxes(binding); axes != 0 && g.in_frame && !g.host_draws) {
         std::vector<Vertex2D> flanks = FrameFlanks(primitive, vertices, axes, frame, mapping);
         if (!flanks.empty()) {
             DrawPrepared(Primitive::Quads, flanks, binding, state, ui);

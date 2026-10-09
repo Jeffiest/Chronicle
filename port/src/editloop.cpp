@@ -185,7 +185,10 @@ static void RunSystemEvent(int event_no, CCamera *camera) {
 PC_OVERRIDE int EditLoop() {
     goto_return_menu = 0;
 
-    if (EdPadDown(0x800, 4) != 0) {
+    // Pausing is a walking action: a cutscene/event must not open the pause menu over itself.
+    // Retail clears the flag again in the event case, but gating the input here keeps the intent
+    // (and the pause menu, which reads state only valid outside an event) safe at the source.
+    if (GameMode != ED_MODE_EVENT && EdPadDown(0x800, 4) != 0) {
         goto_return_menu = 1;
     }
 
@@ -1568,6 +1571,49 @@ PC_OVERRIDE void MoveCamera(CCameraFollow *camera) {
 }
 
 // Retail's EdDrawClock, kept in the window's top right corner.
+// DrawSysGra with two corrections: the day-transition text is a cutscene of its own and is not
+// drawn over an event (#72), and the pause sprite is not drawn from a null handle when an event
+// left the texture block without "pause" loaded (#113).
+PC_OVERRIDE void DrawSysGra() {
+    if (EdDebugParamDrawOff == 0) {
+        TexManager.ReloadTexture(Vif1Packet, 20);
+        EdDrawSysCursor(EditMapInfo->work.events.points, 256);
+
+        if (FishingDrawCheck() == 0) {
+            EdDrawClock(0, 0);
+        }
+
+        if (GameMode != ED_MODE_EVENT) {
+            DrawDay();
+        }
+
+        char      pause_texture[] = "pause";
+        CTexture *pause = TexManager.GetTexture(pause_texture, -1);
+
+        if (pause != NULL && ((unsigned int) (GameMode - 9) <= 1 || EdPauseFlag != 0)) {
+            CRect_i_ fade;
+            fade.x = 0;
+            fade.y = 0;
+            fade.width = 0x2800;
+            fade.height = (SCREEN_HALF_HEIGHT << 4);
+            MGFillBox(fade, 0, 0, 0, 0x40);
+            setbilinear(0);
+
+            CRect_i_ screen;
+            CRect_i_ texel;
+            texel.x = 0;
+            texel.y = 0;
+            texel.width = 0x80;
+            texel.height = 0x28;
+            screen.x = 0x100;
+            screen.y = 0xdc;
+            screen.width = 0x80;
+            screen.height = 0x28;
+            set2DSprite(GetVif1Packet(), pause, screen, texel, 0x80);
+        }
+    }
+}
+
 PC_OVERRIDE void EdDrawClock(int x, int y) {
     if (draw_clock != 0 && EditMapInfo->time_stop == 0) {
         gfx::UiAnchorScope anchor(gfx::UiAnchor::Side(1, -1));
@@ -1636,16 +1682,24 @@ PC_OVERRIDE int LoadTexture() {
 
     LOADTEXTURE_INFO2 blocks[64] = {};
 
-    char system_path[64] = "gedit/system/esys.pak";
+    int common_size;
+
+    LoadFile("gedit/system/esys_cmn.pak", read_buffer, &common_size);
+    wait_now_loading_vsync();
+
+    // The language's system image goes in the 1 KiB-aligned space after the common pack; it holds
+    // the language's own pause and day-of-adventure pictures, which the common pack does not.
+    u_int *system_image = read_buffer + ((common_size >> 6) + 1) * 64;
+    char   system_path[64] = "gedit/system/sys.img";
 
     if (LanguageCode > LANG_JAPANESE) {
-        sprintf(system_path, "gedit/system/esys_%d.pak", LanguageCode);
+        sprintf(system_path, "gedit/system/sys_%d.img", LanguageCode);
     }
 
-    LoadFile(system_path, read_buffer, NULL);
+    LoadFile(system_path, system_image, NULL);
     wait_now_loading_vsync();
-    TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
     TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "cursor.img", NULL), -1, 0, 0);
+    TexManager.EnterIMGFile((u_char *) GetPackFile(read_buffer, "e01t02.img", NULL), -1, 0, 0);
 
     LOADTEXTURE_INFO2 system_blocks[] = {
         {"#water_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",  0x15, 0},
@@ -1653,19 +1707,17 @@ PC_OVERRIDE int LoadTexture() {
         {"#blender#640#" HALF_BUFFER_HEIGHT_STR "#4",     0x18, 0},
         {"#font_buff#640#" HALF_BUFFER_HEIGHT_STR "#4",   0x1F, 0},
         {"img/system.img",                                0x14, 0},
-        {"img/pause.img",                                 0x14, 0},
+        {"",                                              0x14, 0},
         {"s_eff.img",                                     0x14, 0},
-        {"whatsday.img",                                  0x14, 0},
         {"img/ankfont.img",                               0x1F, 0},
         {"#frame_image#640#" SCREEN_HEIGHT_STR "#4",      0x13, 0},
     };
 
     memcpy(blocks, system_blocks, sizeof(system_blocks));
-    blocks[4].name = (char *) GetPackFile(read_buffer, "system.img", NULL);
-    blocks[5].name = (char *) GetPackFile(read_buffer, "pause.img", NULL);
+    blocks[4].name = (char *) GetPackFile(read_buffer, "sys_cmn.img", NULL);
+    blocks[5].name = (char *) system_image;
     blocks[6].name = (char *) GetPackFile(read_buffer, "s_eff.img", NULL);
-    blocks[7].name = (char *) GetPackFile(read_buffer, "whatsday.img", NULL);
-    blocks[8].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
+    blocks[7].name = (char *) GetPackFile(read_buffer, "ankfont.img", NULL);
     TexManager.LoadTextureBlock(-1, blocks);
     wait_now_loading_vsync();
 

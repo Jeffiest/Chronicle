@@ -116,6 +116,10 @@ void RendererShutdown();
 void RendererResize();
 // The swapchain is recreated with the mode at the next BeginFrame or tick render.
 void SetPresentMode(PresentMode mode);
+
+// Anisotropic filtering of linearly filtered meshes: 0 or 1 is off, otherwise 2, 4, 8 or 16 samples
+// (a value in between takes the level below it). Takes effect from the next draw.
+void SetAnisotropy(int samples);
 // False when no frame can be drawn (minimised window); draws until EndFrame are then dropped.
 bool BeginFrame();
 void EndFrame();

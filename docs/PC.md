@@ -45,10 +45,34 @@ port/build/pc/darkcloud --data data --save save
 ```
 
 The extractor accepts a PAL or NTSC disc image. For NTSC data it supplies the
-localized filenames and pack members expected by the shared game code. Original
-disc files remain in the extracted tree for verification against `DATA.HD2`;
+localized filenames and pack members expected by the shared game code, including
+the dungeon event text that NTSC keeps inside each `event.stb`. For the
+PAL disc's English data it gives every weapon icon sheet the one in the HUD's
+palette, which the language's dungeon-entry packs carry. The game copies the
+HUD's weapon icon by palette index from whichever sheet a menu last loaded, and
+English's others keep the American palette, so on closing the main menu or the
+quick-change ring the icon came out in the wrong colours. The other languages'
+fishing and shop sheets get it too. Original disc files remain in the extracted
+tree for verification against `DATA.HD2`;
 normalized pack copies live under `data/normalized` and are selected by the
 port's file index. Extract again after updating the port to refresh them.
+
+The extractor also writes `languages.json`: the release the disc is and the
+languages it carries, as `LanguageCode` numbers. It knows a release by a
+fingerprint of its `DATA.HD2` (dcdata's `KnownReleases`, which prints the name
+it found); a release it does not know gets NTSC's or PAL's languages by its file
+layout. The port offers the languages in `SupportedLanguages`: with one, it
+starts in it past the language select; with several, the select offers them.
+NTSC 1.02 has American English (1) alone, as retail NTSC: the disc's other
+languages are early drafts whose images were never translated (its French and
+German title cards read "Nolun Village" and "Sun/Moon Temple"), its
+British-named files have no town dialogue, and its Spanish is missing files.
+The July 12 PAL prototype has the five its select offers, English being British
+(2). Data extracted before this file existed starts at the select, with a note
+to extract again.
+
+The select is retail's one image of all five buttons, so it cannot yet leave out
+a language the data lacks, and its English button reads as the disc's art does.
 
 `darkcloud` takes:
 
@@ -64,6 +88,7 @@ port's file index. Extract again after updating the port to refresh them.
 | `--width W`, `--height H` | window size in pixels, over `config.json` (default: the monitor's resolution) |
 | `--jump MODE[:MAP]` | test hook: start in a mode (see "Test hooks"); also `DC_JUMP` |
 | `--fast-load` | test hook: loading-screen holds and fades of a few ticks; also `DC_FAST_LOAD=1` |
+| `--give ITEM,...` | test hook: items and weapons the party is given when a town or dungeon starts (see "Test hooks"); also `DC_GIVE` |
 | `--display-per-tick N` | headless test aid: render N interpolated display frames per tick (offscreen, not presented) before presenting the tick's canonical image |
 | `--show-fps` | draw the FPS counter when headless too (a headless run leaves `show_fps` off) |
 | `--screenshot-fps` | with `--screenshot` and `--show-fps`: write the image as a window shows it, the counter over the canonical image, instead of the canonical image alone |
@@ -97,6 +122,7 @@ key is optional; these are the defaults:
         "tick_rate": 60,            // logic ticks (the game's VSyncs) per second
         "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
         "qte_always_win": false,    // button-prompt events (event battles) still play, but always end in a perfect
+        "element_quick_select": false, // D-pad Up in a dungeon opens the quick-change menu as an element picker
         "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
         "message_speed": "normal",  // normal or fast
         "clock": true,              // the town clock
@@ -120,6 +146,7 @@ key is optional; these are the defaults:
         "fps_detail": "all",        // what it shows: fps (the frame rate alone), ticks (and the logic ticks) or all (and the draws)
         "detail_distance": 0,       // how far full detail reaches (world units); 0: at any distance
         "shadow_distance": 0,       // how far town parts cast full shadows (world units); 0: at any distance
+        "anisotropy": 0,            // anisotropic filtering of 3D textures: 0 (off), 2, 4, 8 or 16 samples
         "soft_focus": true          // the game's farside soft focus
     },
     "audio": {
@@ -135,6 +162,10 @@ key is optional; these are the defaults:
         "gyro_sensitivity": 0.5,    // camera-stick deflection per radian per second the pad turns
         "gyro_invert_x": false,
         "gyro_invert_y": false,
+        "touchpad": true,           // a DualSense's touchpad is the menus' mouse
+        "touchpad_sensitivity": 1.0, // pointer speed: 1 is a swipe across the pad for 1500 window pixels
+        "lightbar": true,           // a DualSense's lightbar shows the active character's life in a dungeon
+        "rumble_strength": 1.0,     // scales a gamepad's rumble motors, 0 to 1
         "mouse_invert_y": false,
         "mouse_capture": true,      // SDL relative mouse mode while the window has focus
         "mouse_zoom": false,        // optional third-person wheel zoom; middle click resets by default
@@ -243,13 +274,19 @@ dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 | R | R2 | first-person look (`dun/gameloop.cpp:4354`) |
 | C, Backspace | select | switch character (`dun/gameloop.cpp:3185`) |
 | Return | start | pause (`dun/gameloop.cpp:3045`); the title's prompts |
-| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); menus |
+| arrows | d-pad | left and right pick the active item in the dungeon (`dun/gameloop.cpp:3218`); up opens the element picker when `game.element_quick_select` is on and the weapon has more than one element to pick between (`port/src/menu_dungeon.cpp`); menus |
 | V; middle click, B | L3; R3 | debug and editor functions only |
 | IJKL | right stick | the camera from the keyboard |
 | F3 | none | the FPS counter on and off (see "The FPS counter") |
 | gamepad L4 (`paddle2`) | none | the developer menu, in debug mode |
 | gamepad R4 (`paddle1`) | none | the town or dungeon debug menu, in debug mode, without Select+L2 |
 | gamepad L5 (`paddle4`) | none | held, the gyroscope turns the camera (`gyro` set to `held`) |
+
+The pad's buttons are the DualShock 2's, whichever gamepad SDL reports
+(`platform/gamepad_map.hpp`). Back/View is Select on every pad but the
+PlayStation ones that have a touchpad: a DualShock 4 or DualSense presses
+Select with the touchpad click and leaves Share/Create unbound (issue #73),
+and a PS3, which has no touchpad, keeps its Select on Select.
 
 The square button is not a guard in this game: the guard is R1 held while
 locked on, so right click is R1. The follow camera sits at
@@ -287,6 +324,19 @@ Each key-down of a toggle's key counts once, however briefly it is held.
   or down, `gyro_sensitivity` times the rate in radians per second; below 0.03
   is ignored as drift. `gyro_invert_x`/`_y` flip it, and `stick_invert_x`/`_y`
   flip the camera stick the same way.
+- **DualSense.** A DualSense works as any gamepad; with SDL's HID driver (not Steam Input or
+  DS4Windows, which present an Xbox pad) it also gets:
+  - **Touchpad as a mouse.** On the screens that take the mouse as a pointer (the Options
+    screen) one finger moves the game's hand, pressing the pad is Cross, the
+    Create button and a quick two-finger tap are Circle, and two fingers sliding scroll like the
+    wheel. A single-finger tap does not click, so a brush of the pad never confirms anything.
+    `touchpad` turns it off; `touchpad_sensitivity` sets the speed.
+  - **Lightbar.** In a dungeon it follows the active character's life, green when whole through
+    yellow to red; elsewhere it rests at blue. `lightbar` turns it off.
+  - **Player light.** The pad lights its player number (1 for the first pad).
+  - **Rumble.** `rumble_strength` scales both motors, for pads whose motors feel stronger than a
+    DualShock 2's.
+  Adaptive triggers are not used.
 - **First-person view.** R2's view, in a dungeon or outdoors in a town, reads
   only the left stick, so while it is on, the right stick and the gyro drive the left stick whenever
   the left stick itself is centred.
@@ -458,7 +508,7 @@ before the window opens. `GamePad.Down` fires on a press edge, so a press
 needs a later line that releases it:
 
 ```
-# language select (English), attract movie, title logo, menu
+# language select (English; skipped when the data has one language), attract movie, title logo, menu
 0
 70 cross
 75
@@ -488,6 +538,12 @@ For tests and debugging only; nothing the game does depends on them.
 - `--fast-load` (or `DC_FAST_LOAD=1`) cuts the loading screen's start delay to
   one tick, its fades to two or four ticks and its holds (PAL 120, 183 and 83
   ticks) to two. The modes' own fades are untouched.
+- `--give ITEM,...` (or `DC_GIVE`) gives the party the items and weapons it
+  lacks, by their numbers in `ps2/include/itemdata.hpp` (`ITEM_*`), each time a
+  town or dungeon starts, through `CDngStatusData::GetItem` as an event's gift
+  would: an item into the dungeon inventory, a weapon to the character it
+  belongs to. One already held is skipped. `--give 210,211` gives the Sun and
+  Moon Signets. A bad list exits with status 2.
 
 `darkcloud --headless --jump dungeon:0 --fast-load --frames 60` shows the first
 dungeon's floor select after about five seconds on lavapipe.
@@ -499,7 +555,7 @@ the warm-up; the game then starts in `GAME_MODE_MENU`, the developer menu
 (`MenuLoop`, `ps2/src/main.cpp`), instead of the language select, and leaves
 pad 2 unlocked. The port takes `DebugMode` from `game.debug_mode` in
 `config.json`, which is off by default. The port starts at the language select
-whether this flag is true or false. Setting it to true enables debug controls
+(the attract movie when the data has one language) whether this flag is true or false. Setting it to true enables debug controls
 from startup; the debug toggle chord can also enable them during play.
 `darkcloud` prints `debug mode on` when the flag starts enabled. An explicit
 `--jump menu` opens the developer menu at startup.
@@ -605,7 +661,7 @@ Cross enters the selected dungeon and Circle returns to the developer menu:
 | opening | the opening (`GAME_MODE_OPENING`, scenes op_a to op_d) |
 | `eventN` | one of three story events (map 23 event 310, map 41 event 150, map 19 event 305) |
 | `memory card N` | the save screen in mode N |
-| `Language N` | sets `LanguageCode` (PAL default 2, British English) |
+| `Language N` | sets `LanguageCode` (default: the data's one language when it has one, otherwise 2, British English) |
 
 ```
 0 down
@@ -660,6 +716,7 @@ with the hardware taken out, line for line otherwise:
 - The transitions are `GameApplyLoopResult` (what each mode's loop result
   does) and `GameFollowMapJump` (`NextMapNo` into the next mode), exported for
   the tests.
+- Data with one language starts at the attract movie, in that language.
 - The language select goes straight on to the attract movie: retail's memory
   card check (`GAME_MODE_MEMORY_CHECK`, `MemCheckLoop`) is never entered, as
   there is no card (see "Saves and host files").
@@ -851,8 +908,11 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   `MGFillBox`, the previous-frame feedback, frame grabs drawn back; the loading
   screen clears the whole window) reaches the window's edges by the rule in
   `port/src/gfx/README.md`, "Aspect": an untextured or frame-image rectangle that
-  reaches an edge of the frame from inside is carried to the window's edge;
-  textured HUD pieces and 4:3 pictures (the floor select's backdrop) are not.
+  reaches an edge of the frame from inside is carried to the window's edge. A
+  4:3 picture that covers the whole frame (the cutscenes' stills over the 3D
+  scene) is stretched to the window's edges instead, so it no longer leaves the
+  frame's sides bare; textured HUD pieces and 4:3 pictures that do not cover the
+  whole frame (the floor select's backdrop, 640x448 at y 16) are not.
   `video.ui_scale` scales the depthless 2D about the window's centre.
 - **HUD.** The pieces that sit by an edge of the frame keep their distance to
   that edge of the window instead, at their own size (`gfx::UiAnchor`,
@@ -883,9 +943,12 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   blur and the haze reach the window's edges;
   the two outermost haze columns do not wander, which on the PS2 left a
   ragged strip of the sharp frame in the overscan. For heat haze, eight depth
-  samples build a gradual coverage mask around each focus distance. The
-  bands also test against depth at the front of that range, keeping nearby
-  objects sharp while the background haze fades in. `frame_image` is no
+  samples build a gradual coverage mask; the wobble's planes run from the
+  camera's near clip to past the far focus plane, spaced in 1/z (what the
+  frame's rows are linear in), so the haze ramps up evenly from the foreground
+  to the horizon and every object takes up as much of the wobble as its depth
+  gives instead of the effect starting at a line partway up the view. The near
+  pass keeps its narrower range around the near focus plane. `frame_image` is no
   longer written.
 - **Water** (`port/src/water_draw.cpp`) refracts the frame at its own
   resolution instead of the game's field copy, and only from where water
@@ -1219,7 +1282,7 @@ the last message by id may extend beyond that range. `GameTextFile::Set`
 gives back -1 and leaves the file as it was where either would not hold.
 
 The text of retail's message files can be replaced from JSON, one file per language, with the
-disc's text as the fallback: see [LOCALIZATION.md](LOCALIZATION.md).
+disc's text as the fallback: see `docs/LOCALIZATION.md`.
 
 ## The Options screen
 
@@ -1246,8 +1309,8 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 
 | Page | Rows |
 |---|---|
-| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence |
-| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), soft focus |
+| Game | save cursor position, message speed, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select |
+| Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
 | Audio | volume, sound (stereo or mono) |
 | Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
 | Accessibility | always win QTEs |
@@ -1308,6 +1371,82 @@ mode starts (`RunGame`, before `ModeInit`), after a new game, and whenever they
 change. `CMemoryCardAccess::SetBuff` zeroes them in the copy it writes, so
 `save.dat` carries no options; its layout is retail's, so their bytes remain,
 as zeros.
+
+## The Register Name screen
+
+While the name-entry screen is open (from the read of its textures until
+the game closes it) the mouse is a pointer there as well, taken with
+`InputSetMenuMouse` as the Options screen takes it: its motion and buttons stop
+pressing pad 1's buttons and reach `InputTakeMenuMouse`. The game's own hand
+follows the pointer freely across the screen, as the Options screen's does
+(`NameMouseHand`, through `DrawMenu2DSprite`), while the orange brackets stay on
+the control it is over. The pointer is a point in the
+640x480 space that the mouse's relative motion moves, through the mapping the 2D is
+drawn with (`gfx::GetUiMapping`, so `video.aspect` and `ui_scale` both hold, and a
+window whose size differs from its target's, as on a high-DPI display); a
+script's `mouse:DX,DY` counts main-target pixels. It starts at the hand's
+fingertip, appears on the first motion, click or wheel notch and goes back to
+the pad when a pad button or the left stick is used.
+
+- **Hover.** A key, a tab (ALPHABET, SYMBOL/NUMBERS, DEFAULT, DECIDE, the two
+  arrows, DEL., INS., PROFILE) puts the cursor on it, with the cursor
+  sound, by setting `NameSelect.area`, `cursor` and `side_row` as the pad would.
+  Nothing else moves; the name's slots are not hover targets, since they lie on the way
+  to the tabs.
+- **Left click** is Cross. On a key or tab it presses `PAD_CROSS` for the
+  tick, which `CGamePad::Down` reports from `NameMouseSyntheticDown`, so the game
+  types the character, switches the tab, deletes, inserts, moves the text cursor,
+  opens the PROFILE message or asks to confirm (DECIDE) with its own code and
+  sounds. On a slot of the name it moves the text cursor there. In the "Accept?"
+  dialog the Yes line is Cross and the No line Circle; a click on the message
+  of PROFILE or of the default-name notice closes it. A click on nothing does
+  nothing.
+- **Right click** is Circle, as on the pad: it blanks a character on the keyboard
+  and tabs, answers No in "Accept?" and closes a message.
+- **Wheel.** Away from the user goes left or back, toward the user right or
+  forward. Over the name it moves the text cursor, as L1 and R1 do; anywhere
+  else it cycles the keyboard tabs (ALPHABET and SYMBOL/NUMBERS), as L2 and R2 do.
+- Clicks are ignored while the screen fades in and out, and a button still held
+  when it closes (or as it opens, from the book before it) acts only once
+  released, so no click reaches the next screen.
+
+The hit areas (`port/src/name_mouse_layout.cpp`) are the places
+`DrawNameTemplete`, `DrawCharaName` and `NameEnterDraw` draw at, for PAL's
+languages: the alphabet keyboard with the accented rows of French, German,
+Italian and Spanish, the symbol keyboard without its blank keys, and each
+language's tabs. The kana keyboards are Japanese-only and not offered.
+`name_mouse.cpp` is called from `pad_button_read`, ahead of the game's read of
+the pad, so no function of `ps2/src` is replaced for it.
+
+## The mouse in the pause menu
+
+The pause menu (the ring of pages in a dungeon, and the same ring in town) takes the mouse as a
+pointer the way the Register Name screen does, through `MenuPointer` (`port/src/menu_pointer.cpp`):
+its relative motion, mapped through the 2D's own mapping, drives the game's hand, which
+`DrawMenuObjectVibe` now draws at the pointer while it is in use, brackets and all staying on the
+control the pointer is over. A hover moves the game's own cursor (state the pad would set, and the
+cursor sound); a left click presses Cross for the tick, a right click Circle, so the game's code does
+what it would for the pad; a held button acts only once let go, so no click reaches the next page. A page
+without a handler (Save, Manual, the world map, and the rarer modes of the pages below) leaves the
+mouse to the pad's buttons as before.
+
+| Page | Hover and click | Wheel |
+|---|---|---|
+| Ring | an icon's row moves the selection; click opens the page | |
+| Item | a quick slot, the weapon and defense squares, the portrait, a cell of the board or the trash can; a tab or arrow turns the board's page; a party arrow changes member | over the board scrolls it, elsewhere changes page or member |
+| Weapon | a click left or right of the weapon in the middle steps the list and in the middle opens the actions; a face at the top brings that member round; the action rows, the element rows, Yes and No; on the attachment screen a socket, a cell of the board or the trash can | steps the list or the rows |
+| Allies | a face on the turntable turns to it (one place a tick, as held d-pad does); the card in front selects | turns one place |
+| Georama Parts | the part, one of its chips, or a cell of the board; the arrows turn to the next town's parts | scrolls the list or the board |
+| Leave Dungeon | Yes or No | |
+
+An item picked up rides the hand: click it and click where it goes, or press, drag and let go over the
+target. Let go over empty ground and the game asks "Throw this item away?"; Yes sends it through the
+trash can, as the pad does. The scroll bar beside a board takes clicks on its arrows and can be
+dragged. On the attachment screen the three tabs of the tag board turn its pages and its rows follow
+the pointer.
+
+The hit areas are the places the pages draw their brackets at (`ItemMenuModeDraw`, `WeaponMenuDraw`,
+`DrawCharaSelect`, `DrawAtoraSelect`, `DrawMenuMove`), so they follow the interface size and aspect.
 
 ## Arenas
 
@@ -1600,6 +1739,10 @@ renames what the unit takes from MWCC or from the PS2 link alone:
 - `mathutil` gets the Metrowerks runtime's own `std::exception` and
   `std::bad_exception` renamed apart from the host library's, and
   `__exception_magic`, which MWCC provides inside an exception handler.
+- `menu_dungeon` renames its `CharaChangeLoop` to `CharaChangeLoopRetail`. The
+  port's `CharaChangeLoop` (`port/src/menu_dungeon.cpp`) runs the dungeon's
+  quick-change menu as an element picker when D-pad Up opened it, and this
+  unit's loop when SELECT did.
 - `menu_save` and `memcard` export statics the other calls: memcard's
   `SaveMenuFunc` table names menu_save's eighteen `SaveMenuKey*` steps and
   menu_save calls memcard's `ExitSaveSelect`. The port's `SaveMenuFunc`

@@ -8,7 +8,7 @@ layout(constant_id = 0) const int kTextureMode = 0; // 0 none, 1 RGBA, 2 index +
 layout(constant_id = 1) const bool kAlphaTest  = false;
 
 layout(set = 0, binding = 0) uniform texture2D u_textures[8192];
-layout(set = 0, binding = 1) uniform sampler u_samplers[8];
+layout(set = 0, binding = 1) uniform sampler u_samplers[24];
 
 layout(push_constant, std430) uniform Push {
     vec4 xform;

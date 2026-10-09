@@ -8,6 +8,21 @@ extracted data (below), and the files the port distributes hold only text writte
 The files are laid out as Minecraft's language files are: one flat JSON file per language, named
 `language_COUNTRY.json`, each an object of `"dotted.key": "text"`, with the same keys in every language.
 
+## Quick start
+
+1. **The language files.** Build the game and start it once with the game data in place. The first start writes
+   every language's JSON to `<save folder>/lang-export/` (`en_gb.json`, `fr_fr.json`...; the save folder is
+   `--save`, else `./save`). They come from your own disc, so the build cannot make them and the repository
+   does not hold them. To write them again, or anywhere else:
+   `darkcloud --data <data folder> --export-text <folder>`. Copy the file you want to change to
+   `<save folder>/lang/` and edit it.
+2. **Sharp text.** The port draws message text from a TrueType font instead of the game's blurry bitmaps. The
+   Dark Cloud Compendium Community Font (by Dayuppy and Moonbunny, used with their permission) is in
+   `tools/font/`, and the build copies it to `lang/font.ttf` beside the executable, so it works as built. To use another font, put it at `<save folder>/lang/font.ttf` (that wins), or start with
+   `--font <file>`; delete `lang/font.ttf` to go back to the game's bitmaps. The port says
+   `font: message text from ...` when it found one, and `font: no font.ttf ...` when it did not.
+3. **The language.** Options, Game page, Language row (or `game.language` in `config.json`).
+
 ## Where the files go
 
 One file per language, named by the language the game is set to:
@@ -242,10 +257,56 @@ letters and marks. The port logs `font: message text from <file>` when it loads 
 - It works for every message the game draws through its message windows, whatever its source: the disc's
   text, the JSON's, item and monster names.
 - It does not touch text that is a picture: the large menu words (ITEM, WEAPON...), the title screen's and
-  the like are textures, and stay as they are.
+  the like are textures, and stay as they are. A few of those pictures can be replaced per language, see
+  "Pictures of text" below.
 - A word keeps the cells the game gave it: its letters are spaced by the font inside the word and the word
   is centred on its cells, so rows, indents and the icons between words stay where the game put them.
-- The font is not shipped with the port: each user adds a file they have the right to use.
+- The bundled font is the community font above (credited in `CREDITS`, see `tools/font/README.md`); a font you add
+  is yours to license.
+
+## Pictures of text
+
+Some words are not messages but textures: an area's name card (Nolun Village...), the dungeon floor labels
+(Floor, Limited Zone, Back) and the bosses' names. The disc has one picture of each per language. The port
+takes a language's pictures from
+
+    <language folder>/textures/<language>/<texture name>.png      e.g. lang/textures/fr_fr/mt01.png
+
+in the same folders as the language files (the save folder's before the executable's); `<language>` is the
+language file's stem (`en_gb`, `fr_fr`...). It looks when the game decodes a texture of that name, so the
+pictures follow `game.language` like the messages. A picture is scaled to the size of the texture it stands
+for; one of another shape (a 4:1 card for a 2:1 sheet) is left unused and the port says so once. If two textures
+of different sizes share a name, `<name>_<w>x<h>.png` is tried first. A texture with no picture is the disc's.
+
+The pictures are not shipped (they are made from the disc's art). `tools/textpack/build.py` draws them on the
+player's own machine from the words in `tools/textpack/strings/*.json`:
+
+    python tools/textpack/build.py --originals <extracted textures> --out <save folder>/lang/textures
+
+It erases the old lettering from the disc's own textures and draws the language's words in the message font
+(the Dark Cloud Compendium font: the cards are lettered in it, squeezed, with an outline, glow and underline;
+the floor labels are the same face embossed). The bosses' names are a serif that is not in that font; Cinzel
+(`tools/font/`, SIL Open Font License) stands in for it. `--originals` is a folder of the disc's textures as PNG
+files named `<game file with / as __>/<name>.png`. Change a word in the strings file and run it again; add a
+language by adding its words. The Japanese pictures are not made.
+
+**Shadows.** The pictures carry no shadow of their own; the port casts it when it loads one, so it can be set
+per kind of text. In Options, Display page: Text Shadow (the message text), Symbol Shadow (the button symbols),
+and for the pictures Area Name Shadow, Floor Label Shadow and Boss Name Shadow (`video.text_shadow`,
+`video.glyph_shadow`, `video.name_shadow`, `video.floor_shadow`, `video.boss_shadow` in `config.json`; percent in
+steps of 5, default 50). A picture's shadow is its lettering moved down and to the right by about a tenth of the
+letters' height and blurred, black, at an opacity that rises quickly (50% is a solid shadow, 100% darker and a little
+longer, 0% none). What casts it is `<name>_text.png` where the language folder has one (the name cards do: their
+backdrop is opaque), otherwise the picture's own opacity (the floor labels and boss names are lettering on
+transparency). A change takes effect from the next area that loads the picture.
+`python tools/textpack/shadow_preview.py <folder> <name> <area|floor|boss> <out.png>` shows a picture at 0, 25, 50
+and 100 percent.
+
+| Pictures | Names | Strings file |
+|---|---|---|
+| 16 area name cards (+ `mtNN_text.png`) | `mt01`..`mt301` | `strings/titles.json` |
+| 7 dungeon floor label sheets (+ `floorNN_text.png`) | `floor00`..`floor06` | `strings/floors.json` |
+| 5 boss names | `boss_1`, `boss_3`, `boss_4`, `boss_6`, `boss_7` | `strings/bosses.json` |
 
 ## Limits, and what happens when they are passed
 

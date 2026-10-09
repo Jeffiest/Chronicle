@@ -160,7 +160,9 @@ struct TextureDesc {
     TextureFormat format = TextureFormat::Rgba8;
     uint32_t      mip_levels = 1;
     // False for 24-bit sources: the draw's TEXA state supplies alpha when the texture is sampled.
-    bool has_alpha = true;
+    bool     has_alpha = true;
+    uint32_t logical_width = 0;
+    uint32_t logical_height = 0;
 };
 
 struct TextureInfo {

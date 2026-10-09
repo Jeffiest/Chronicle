@@ -7,6 +7,7 @@
 #include <string>
 
 #include "mglib_port.hpp"
+#include "platform/config.hpp"
 #include "texture.hpp"
 
 namespace {
@@ -30,6 +31,9 @@ struct Entry {
     EntryKind          kind = EntryKind::Free;
     PortTextureOwner   owner = PortTextureOwner::Other;
     gfx::TextureHandle texture = gfx::kNullTexture;
+    gfx::TextureHandle hires_texture = gfx::kNullTexture;
+    bool               has_hires = false;
+    bool               clut_modified = false;
     bool               owns_texture = false;
     // A named render target is looked up by name on every use: gfx recreates it when asked for at
     // another size, and the handle this entry saw would die with the old one.
@@ -88,8 +92,20 @@ unsigned AllocateKey(EntryKind kind, PortTextureOwner owner) {
     std::abort();
 }
 
+gfx::TextureHandle ResolveHiresTexture(gfx::TextureHandle original, gfx::TextureHandle hires, bool enabled,
+                                       bool clut_modified);
+
 gfx::TextureHandle EntryTexture(const Entry &entry) {
-    return entry.target.empty() ? entry.texture : gfx::FindNamedRenderTarget(entry.target);
+    if (!entry.target.empty()) {
+        return gfx::FindNamedRenderTarget(entry.target);
+    }
+    return ResolveHiresTexture(entry.texture, entry.has_hires ? entry.hires_texture : gfx::kNullTexture,
+                               ConfigGet().hires_textures, entry.clut_modified);
+}
+
+gfx::TextureHandle ResolveHiresTexture(gfx::TextureHandle original, gfx::TextureHandle hires, bool enabled,
+                                       bool clut_modified) {
+    return enabled && !clut_modified && hires != gfx::kNullTexture ? hires : original;
 }
 
 unsigned RegisterPalette(const std::array<uint32_t, 256> &rgba, bool four_bit, PortTextureOwner owner) {
@@ -268,6 +284,11 @@ bool ResolveSide(unsigned tbp, unsigned psm, Side &side) {
 
 } // namespace
 
+gfx::TextureHandle PortResolveHiresTexture(gfx::TextureHandle original, gfx::TextureHandle hires, bool enabled,
+                                           bool clut_modified) {
+    return ResolveHiresTexture(original, hires, enabled, clut_modified);
+}
+
 void PortUnswizzle8(int width, int height, const u_char *swizzled, u_char *linear) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
@@ -313,7 +334,8 @@ bool PortDecodeTexture(int bpp, int width, int height, const u_char *const *leve
     return true;
 }
 
-unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner owner, unsigned *palette_key) {
+unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner owner, unsigned *palette_key,
+                           gfx::TextureHandle hires_texture) {
     if (palette_key) {
         *palette_key = 0;
     }
@@ -326,6 +348,9 @@ unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner o
     entry.height = decoded.height;
     entry.format = decoded.format;
     entry.has_alpha = decoded.has_alpha;
+    entry.hires_texture = hires_texture;
+    entry.has_hires = (hires_texture != gfx::kNullTexture);
+    entry.clut_modified = false;
     if (RendererUp()) {
         gfx::TextureDesc desc;
         desc.width = decoded.width;
@@ -403,6 +428,9 @@ void PortReleaseKey(unsigned key) {
     if (entry->owns_texture && entry->texture != gfx::kNullTexture && RendererUp()) {
         gfx::DestroyTexture(entry->texture);
     }
+    if (entry->owns_texture && entry->hires_texture != gfx::kNullTexture && RendererUp()) {
+        gfx::DestroyTexture(entry->hires_texture);
+    }
     *entry = Entry{};
 }
 
@@ -434,10 +462,12 @@ PortTextureRef PortTextureFromTex0(u_long tex0, u_long tex1) {
     if (entry == nullptr || entry->kind != EntryKind::Image) {
         return ref;
     }
-    ref.binding.texture = EntryTexture(*entry);
+    bool alternate_clut = entry->format == gfx::TextureFormat::Index8 && cbp != 0 && cbp != entry->palette;
+    ref.binding.texture = (alternate_clut ? entry->texture : EntryTexture(*entry));
     ref.width = entry->width;
     ref.height = entry->height;
-    if (entry->format == gfx::TextureFormat::Index8) {
+    bool using_hires = (ref.binding.texture == entry->hires_texture && entry->hires_texture != gfx::kNullTexture);
+    if (entry->format == gfx::TextureFormat::Index8 && !using_hires) {
         // The game draws one image with another's CLUT by changing CBP alone (text colours,
         // SetClut), so CBP picks the palette; the image's own is the fallback.
         const Entry *palette = Live(cbp);
@@ -496,6 +526,13 @@ bool PortMoveImage(unsigned src_tbp, unsigned src_psm, int x, int y, int width, 
         if (dst.palette->texture != gfx::kNullTexture) {
             gfx::UpdatePalette(dst.palette->texture, to.data());
         }
+        // Palette was modified; disable hires replacement on any image using this palette
+        unsigned dst_cbp = static_cast<unsigned>(dst.palette - Reg().entries.data());
+        for (Entry &img_entry : Reg().entries) {
+            if (img_entry.kind == EntryKind::Image && img_entry.palette == dst_cbp) {
+                img_entry.clut_modified = true;
+            }
+        }
         return true;
     }
     if (src.palette || dst.palette || src.format != dst.format) {
@@ -503,6 +540,11 @@ bool PortMoveImage(unsigned src_tbp, unsigned src_psm, int x, int y, int width, 
         ReportOnce(reported, "move between a palette and an image, or an index and a colour image", src_tbp,
                    dst_tbp);
         return false;
+    }
+    // Writing into destination image - disable hires replacement for it
+    Entry *dst_entry = Live(dst_tbp);
+    if (dst_entry && dst_entry->kind == EntryKind::Image) {
+        dst_entry->clut_modified = true;
     }
     return gfx::CopyTexture(src.texture, gfx::Rect{x, y, width, height}, dst.texture, dst_x, dst_y);
 }
@@ -530,6 +572,12 @@ bool PortLoadClut(unsigned cbp, const u_int *clut) {
     }
     if (entry->texture != gfx::kNullTexture) {
         gfx::UpdatePalette(entry->texture, rgba.data());
+    }
+    // Palette was modified; disable hires replacement on any image using this palette
+    for (Entry &img_entry : Reg().entries) {
+        if (img_entry.kind == EntryKind::Image && img_entry.palette == cbp) {
+            img_entry.clut_modified = true;
+        }
     }
     return true;
 }

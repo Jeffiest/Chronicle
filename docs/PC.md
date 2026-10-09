@@ -149,6 +149,10 @@ key is optional; these are the defaults:
         "anisotropy": 0,            // anisotropic filtering of 3D textures: 0 (off), 2, 4, 8 or 16 samples
         "soft_focus": true          // the game's farside soft focus
     },
+    "graphics": {
+        "hires_textures": false,    // use matching replacements from the hires texture pack; defaults on when the pack exists
+        "hires_pack": "<data>/hires" // pack directory containing index.json and replacement PNG files
+    },
     "audio": {
         "master_volume": 1.0,       // 0 to 1
         "sound": "stereo"           // stereo or mono
@@ -184,6 +188,8 @@ key is optional; these are the defaults:
     }
 }
 ```
+
+The hires pack index is `index.json`, with `{"version":1,"scale":2,"textures":{"<md5>":{"file":"tex/ab/<md5>.png","w":W,"h":H,"scale":S}}}`. The key is the MD5 of width and height as little-endian u32 values followed by the decoded level-zero RGBA bytes. Indexed game textures are expanded through their loaded palette. Replacement PNGs are decoded when first used; their decoded pixels are released after upload. The Graphics > Upscaled Textures option switches replacement bindings immediately.
 
 Discord Rich Presence (`port/src/presence.cpp`, `port/src/platform/discord.cpp`) speaks Discord's
 local IPC protocol over its Unix socket (a named pipe on Windows), so it needs no Discord library. It shows the character

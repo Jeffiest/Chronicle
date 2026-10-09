@@ -52,7 +52,7 @@
     "options.game.language.choice.3": "Deutsch",
     "options.game.language.choice.4": "Italiano",
     "options.game.language.choice.5": "Español",
-    "options.page.display": "Pantalla",
+    "options.page.graphics": "Gráficos",
     "options.video.fullscreen.label": "Modo de ventana",
     "options.video.fullscreen.help": "\"Modo de ventana\"\nJuega en ventana o\nen pantalla completa.",
     "options.video.fullscreen.choice.0": "Ventana",
@@ -144,7 +144,7 @@
     "options.input.bindings.zoom_reset.help": "\"Restablecer zoom\"\nRestaura la distancia\nnormal de la cámara.",
     "options.help.turn_page": "{L1} {R1} cambian de página.",
     "options.page.game.help": "\"Juego\"\nCómo se juega.",
-    "options.page.display.help": "\"Pantalla\"\nLa ventana y la imagen.",
+    "options.page.graphics.help": "\"Gráficos\"\nLa ventana y la imagen.",
     "options.page.audio.help": "\"Audio\"\nSonido y música.",
     "options.page.controls.help": "\"Controles\"\nRatón, mando y giroscopio.",
     "options.page.accessibility": "Accesibilidad",
@@ -248,5 +248,9 @@
     "options.video.anisotropy.choice.3": "8x",
     "options.video.anisotropy.choice.4": "16x",
     "options.video.anisotropy.help": "\"Filtro anisotrópico\"\nTexturas más nítidas\nen superficies vistas\nen ángulo.",
-    "options.video.anisotropy.label": "Filtro anisotrópico"
+    "options.video.anisotropy.label": "Filtro anisotrópico",
+    "options.graphics.hires_textures.label": "Texturas escaladas",
+    "options.graphics.hires_textures.help": "\"Texturas escaladas\"\nUsa texturas de alta\nresolución de paquetes\nde texturas.",
+    "options.graphics.hires_textures.choice.0": "Sí",
+    "options.graphics.hires_textures.choice.1": "No"
 }

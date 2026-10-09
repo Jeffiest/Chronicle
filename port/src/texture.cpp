@@ -10,10 +10,50 @@
 #include "dataalloc.hpp"
 #include "mglib.hpp"
 #include "localize_texture.hpp"
+#include "platform/hires_pack.hpp"
+#include "platform/md5.hpp"
+#include "platform/config.hpp"
+#include "gfx/gfx.hpp"
 #include "texture_port.hpp"
 #include "tim2.hpp"
 
 namespace {
+
+std::string HiresKey(const PortDecodedTexture &decoded) {
+    if (decoded.levels.empty()) return {};
+    std::vector<uint8_t> rgba(static_cast<size_t>(decoded.width) * decoded.height * 4);
+    if (decoded.format == gfx::TextureFormat::Rgba8) {
+        rgba.assign(decoded.levels[0].begin(), decoded.levels[0].begin() + rgba.size());
+    } else {
+        for (size_t i = 0; i < static_cast<size_t>(decoded.width) * decoded.height; ++i) {
+            uint32_t c = decoded.palette[decoded.levels[0][i]];
+            std::memcpy(rgba.data() + i * 4, &c, 4);
+        }
+    }
+    return platform::ComputeTextureKey(decoded.width, decoded.height, rgba.data());
+}
+
+gfx::TextureHandle LoadHires(const PortDecodedTexture &original) {
+    if (!ConfigGet().hires_textures || original.levels.empty()) return gfx::kNullTexture;
+    std::string key = HiresKey(original);
+    auto &pack = platform::HiresActivePack();
+    const auto *item = pack.FindEntry(key);
+    if (!item || item->width != original.width * item->scale || item->height != original.height * item->scale) return gfx::kNullTexture;
+    const uint32_t mip_levels = static_cast<uint32_t>(original.levels.size() + (original.levels.size() > 1 ? 1 : 0));
+    auto decoded = pack.LoadTexture(key, original.levels.size() > 1, mip_levels);
+    if (!decoded || decoded->width != item->width || decoded->height != item->height) return gfx::kNullTexture;
+    gfx::TextureDesc desc;
+    desc.width = decoded->width; desc.height = decoded->height;
+    desc.logical_width = original.width; desc.logical_height = original.height;
+    desc.mip_levels = static_cast<uint32_t>(decoded->levels.size());
+    desc.has_alpha = original.has_alpha;
+    auto handle = gfx::CreateTexture(desc);
+    for (size_t i = 0; handle != gfx::kNullTexture && i < decoded->levels.size(); ++i) {
+        uint32_t w = std::max(1, decoded->width >> i), h = std::max(1, decoded->height >> i);
+        gfx::UpdateTexture(handle, static_cast<uint32_t>(i), 0, 0, w, h, decoded->levels[i].data());
+    }
+    return handle;
+}
 
 constexpr int kPsmT8H = 27;
 
@@ -352,7 +392,8 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
         LocalizeTexture(name, decoded);
         MakeGroundPeriodic(name, decoded);
         DumpTexture(name, decoded);
-        tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
+        gfx::TextureHandle hires = LoadHires(decoded);
+        tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp, hires);
     }
     tex->tex0 = Tex0(tbp, tbw, psm, tw, th, cbp, indexed ? 1 : 0);
 

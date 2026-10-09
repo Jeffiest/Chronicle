@@ -24,6 +24,8 @@ struct PortTextureRef {
 };
 
 PortTextureRef PortTextureFromTex0(u_long tex0, u_long tex1);
+gfx::TextureHandle PortResolveHiresTexture(gfx::TextureHandle original, gfx::TextureHandle hires, bool enabled,
+                                           bool clut_modified);
 PortTextureRef PortTextureFromTex0(const sceGsTex0 &tex0, u_long tex1 = 0);
 PortTextureRef PortTextureFromHandle(int handle);
 PortTextureRef PortTextureFromCTexture(const CTexture *texture);
@@ -71,7 +73,8 @@ constexpr unsigned PortClutCsm1(unsigned position) {
 
 // Creates the renderer texture (and palette, for an index texture) and registers both. Returns
 // the TBP0 key, 0 when the renderer is not up or refused it; *palette_key gets the CBP key or 0.
-unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner owner, unsigned *palette_key);
+unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner owner, unsigned *palette_key,
+                           gfx::TextureHandle hires_texture = gfx::kNullTexture);
 
 // A texture the game draws into or uploads into without pixels of its own: a named render
 // target (kept alive across releases, so its contents survive a mode's re-entry) for 16, 24 and

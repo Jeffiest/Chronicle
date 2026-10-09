@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "paths.hpp"
+#include "hires_pack.hpp"
 
 namespace {
 
@@ -501,6 +502,16 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         config.shadow_distance = distance;
         return true;
     }
+    if (name == "graphics.hires_textures" || name == "video.hires_textures") {
+        return ReadBool(value, config.hires_textures);
+    }
+    if (name == "graphics.hires_pack" || name == "video.hires_pack") {
+        if (!value.is_string()) {
+            return false;
+        }
+        config.hires_pack = value.get<std::string>();
+        return true;
+    }
     if (name == "discord.rich_presence") {
         return ReadBool(value, config.discord_rich_presence);
     }
@@ -624,6 +635,8 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["shadow_distance"] = Shortest(config.shadow_distance);
     root["video"]["anisotropy"] = config.anisotropy;
     root["video"]["soft_focus"] = options.soft_focus;
+    root["graphics"]["hires_textures"] = config.hires_textures;
+    root["graphics"]["hires_pack"] = config.hires_pack;
     root["audio"]["master_volume"] = Shortest(config.master_volume);
     root["audio"]["sound"] = options.stereo ? "stereo" : "mono";
     root["audio"]["surround"] = config.surround;
@@ -663,11 +676,17 @@ bool ConfigSave() {
 }
 
 bool ConfigLoad() {
+    auto prepare_hires = [](Config &config, std::string_view source) {
+        if (config.hires_pack.empty()) config.hires_pack = PathsDisplay(PathsDataRoot() / "hires");
+        platform::HiresSetPackPath(PathsFromUtf8(config.hires_pack));
+        if (source.find("\"hires_textures\"") == std::string_view::npos) config.hires_textures = platform::HiresHasPack();
+    };
     std::filesystem::path path = PathsSaveRoot() / "config.json";
     std::ifstream         file(path, std::ios::binary);
     std::error_code       error;
     if (!file || !std::filesystem::is_regular_file(path, error)) {
         g_config = Config{};
+        prepare_hires(g_config, {});
         if (std::filesystem::exists(PathsSaveRoot() / "config.ini")) {
             std::fprintf(stderr, "config.ini is no longer read: move its settings to config.json (docs/PC.md)\n");
         }
@@ -677,6 +696,7 @@ bool ConfigLoad() {
     std::ostringstream text;
     text << file.rdbuf();
     g_config = ConfigParse(text.str());
+    prepare_hires(g_config, text.str());
     g_saved = true;
     std::fprintf(stderr, "config: loaded %s\n", PathsDisplay(path).c_str());
     return true;

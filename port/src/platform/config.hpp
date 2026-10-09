@@ -137,6 +137,8 @@ struct Config {
     int                           name_shadow = 50;
     int                           floor_shadow = 50;
     int                           boss_shadow = 50;
+    bool                          hires_textures = false;
+    std::string                   hires_pack = "";
 
     bool operator==(const Config &) const = default;
 };

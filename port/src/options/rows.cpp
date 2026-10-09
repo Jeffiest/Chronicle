@@ -598,6 +598,8 @@ const Row kDisplayRows[] = {
     SettingRow("video.anisotropy", "Anisotropic Filter",
                "\"Anisotropic Filter\"\nSharper textures on\nsurfaces seen at a\nslant.", AnisotropyCount,
                AnisotropyChoice, SetAnisotropy, nullptr, "Off|2x|4x|8x|16x"),
+    OnOffRow<&Config::hires_textures>("graphics.hires_textures", "Upscaled Textures",
+                                      "\"Upscaled Textures\"\nUse high-resolution\nreplacement textures\nfrom texture packs."),
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
     SettingRow("video.text_shadow", "Text Shadow",
                "\"Text Shadow\"\nHow dark the shadow\nunder the letters is.\n50% is the soft one.", ShadowCount,
@@ -775,7 +777,7 @@ std::span<const Row> BindingRows() {
 std::span<const Page> Pages() {
     static const std::vector<Page> pages = {
         {"Game",          "\"Game\"\nHow the game plays.",                           kGameRows         },
-        {"Display",       "\"Display\"\nThe window and picture.",                    kDisplayRows      },
+        {"Graphics",      "\"Graphics\"\nThe window and picture.",                   kDisplayRows      },
         {"Audio",         "\"Audio\"\nSound and music.",                             kAudioRows        },
         {"Controls",      "\"Controls\"\nMouse, gamepad and gyro.",                  kControlRows      },
         {"Accessibility", "\"Accessibility\"\nHelp with harder parts\nof the game.", kAccessibilityRows},

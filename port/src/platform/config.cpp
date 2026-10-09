@@ -395,6 +395,9 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
     if (name == "game.element_quick_select") {
         return ReadBool(value, config.element_quick_select);
     }
+    if (name == "game.smooth_fish_sizes") {
+        return ReadBool(value, config.smooth_fish_sizes);
+    }
     if (name == "game.debug_mode") {
         return ReadBool(value, config.debug_mode);
     }
@@ -594,6 +597,7 @@ std::string ConfigSerialize(const Config &config) {
     root["game"]["debug_mode"] = config.debug_mode;
     root["game"]["qte_always_win"] = config.qte_always_win;
     root["game"]["element_quick_select"] = config.element_quick_select;
+    root["game"]["smooth_fish_sizes"] = config.smooth_fish_sizes;
     root["game"]["language"] = kLanguageNames[config.language >= 2 && config.language <= 6 ? config.language : 0];
     const ConfigGameOptions &options = config.options;
     root["game"]["save_cursor_position"] = options.save_cursor_position;

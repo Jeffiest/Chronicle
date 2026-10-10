@@ -463,7 +463,7 @@ void SetGyro(Config &config, int choice) {
 }
 
 int GlyphDeviceCount(const Config &) {
-    return 9;
+    return 10;
 }
 
 int GlyphDeviceChoice(const Config &config) {
@@ -674,7 +674,7 @@ const Row kTextRows[] = {
                                   "Original|New"),
     SettingRow("input.glyph_device", "Symbols Shown",
                "\"Symbols Shown\"\nAuto: the device you\nuse. Or always show one\nof the others.", GlyphDeviceCount,
-               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS3|PS4|PS5|Xbox|Switch|Steam Deck|Steam Controller|Keyboard"),
+               GlyphDeviceChoice, SetGlyphDevice, nullptr, "Auto|PS3|PS4|PS5|PS5 Colored|Xbox|Switch|Steam Deck|Steam Controller|Keyboard"),
     SettingRow("video.text_shadow", "Text Shadow",
                "\"Text Shadow\"\nHow dark the shadow\nunder the letters is.\n50% is the soft one.", ShadowCount,
                TextShadowChoice, SetTextShadow, TextShadowText),

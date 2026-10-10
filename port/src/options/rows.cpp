@@ -9,6 +9,8 @@
 #include <string_view>
 #include <vector>
 
+#include <SDL3/SDL.h>
+
 #include "localize.hpp"
 #include "menu_option.hpp"
 #include "platform/input.hpp"
@@ -90,6 +92,12 @@ Row SettingRow(const char *key, const char *label, const char *help, int (*count
             .text = text,
             .names = names,
             .restore = restore};
+}
+
+void QuitGame() {
+    SDL_Event event{};
+    event.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&event);
 }
 
 std::string ChoiceName(const char *names, int choice) {
@@ -584,6 +592,8 @@ const Row kGameRows[] = {
                                              "\"Discord Rich Presence\"\nShows what you are\nplaying on Discord."),
     OnOffRow<&Config::element_quick_select>("game.element_quick_select", "Element Quick Select",
                                             "\"Element Quick Select\"\nD-pad Up in a dungeon\npicks the element."),
+    Row{.key = "quit_game", .label = "Quit Game", .help = "Exit the game and return to the desktop.",
+        .activate = QuitGame},
 };
 
 const Row kDisplayRows[] = {

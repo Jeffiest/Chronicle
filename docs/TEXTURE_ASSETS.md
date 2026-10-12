@@ -18,6 +18,20 @@ redone without touching the rest. The layout matches what `tools/areapack` write
   The title, menus and loading screens are in no area and use `textures/` only.
 - A language's own picture (`lang/textures/...`, see LOCALIZATION.md) is tried first and wins.
 
+## Making the pictures
+
+```
+dcdata extract "Dark Cloud.iso" data
+dcdata textures data assets          # add --overwrite to replace pictures that are already there
+```
+
+`dcdata textures` finds every named TIM2 picture in the extracted files, decodes it (palettes, 4/8-bit, the PS2's
+swizzled order and alpha range) and writes it in the layout above. A picture the same in every area is written once in
+`textures/`; one that differs in an area goes in that area's folder; a name used at two sizes gets `_<w>x<h>`. A
+picture already in the assets folder is kept, so running it again never undoes an artist's work. Unnamed pictures and
+TIM2 files holding several pictures are counted and skipped. `tools/areapack` gives the same pictures with the rest of
+an area's data and is the reference for the decoding.
+
 ## Size
 
 A picture must have the texture's shape (sides in the same ratio, 2% tolerance); otherwise it is ignored and the

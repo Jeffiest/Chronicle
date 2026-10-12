@@ -31,6 +31,7 @@ struct Assets {
     fs::path dir = fs::temp_directory_path() / ("dc_texture_assets_test_" + std::to_string(dc::test::ProcessId()));
     s32      saved_mode = mode;
     s32      saved_menu = main_select_menu_no;
+    s32      saved_language = LanguageCode;
     char     saved_map[sizeof EditMapName];
 
     Assets() {
@@ -46,6 +47,7 @@ struct Assets {
         TextureAssetsSetRoots({});
         mode = saved_mode;
         main_select_menu_no = saved_menu;
+        LanguageCode = saved_language;
         std::memcpy(EditMapName, saved_map, sizeof saved_map);
         std::error_code error;
         fs::remove_all(dir, error);
@@ -98,21 +100,35 @@ TEST(TextureAssets, TheAreaFolderComesBeforeTheSharedOneAndTheSaveFolderBeforeTh
     Assets files;
     files.Put("second", "d02/textures/card.png");
     files.Put("first", "textures/card.png");
-    EXPECT_EQ(TextureAssetPath("d02", "card", 4, 2), files.dir / "first" / "textures" / "card.png");
-    EXPECT_EQ(TextureAssetPath("d03", "card", 4, 2), files.dir / "first" / "textures" / "card.png");
+    EXPECT_EQ(TextureAssetPath("d02", "", "card", 4, 2), files.dir / "first" / "textures" / "card.png");
+    EXPECT_EQ(TextureAssetPath("d03", "", "card", 4, 2), files.dir / "first" / "textures" / "card.png");
     files.Put("first", "d02/textures/card.png");
-    EXPECT_EQ(TextureAssetPath("d02", "card", 4, 2), files.dir / "first" / "d02" / "textures" / "card.png");
-    EXPECT_EQ(TextureAssetPath("d02", "other", 4, 2), fs::path());
+    EXPECT_EQ(TextureAssetPath("d02", "", "card", 4, 2), files.dir / "first" / "d02" / "textures" / "card.png");
+    EXPECT_EQ(TextureAssetPath("d02", "", "other", 4, 2), fs::path());
+}
+
+TEST(TextureAssets, ALanguagesPictureComesAfterTheAreasAndBeforeTheSharedOne) {
+    Assets files;
+    files.Put("first", "textures/menu.png");
+    files.Put("first", "a_fre/textures/menu.png");
+    EXPECT_EQ(TextureAssetPath("", "a_fre", "menu", 4, 2), files.dir / "first" / "a_fre" / "textures" / "menu.png");
+    EXPECT_EQ(TextureAssetPath("", "a_eng", "menu", 4, 2), files.dir / "first" / "textures" / "menu.png");
+    files.Put("first", "d01/textures/menu.png");
+    EXPECT_EQ(TextureAssetPath("d01", "a_fre", "menu", 4, 2), files.dir / "first" / "d01" / "textures" / "menu.png");
+    LanguageCode = 3;
+    EXPECT_EQ(TextureAssetsLanguage(), "a_fre");
+    LanguageCode = 9;
+    EXPECT_EQ(TextureAssetsLanguage(), "");
 }
 
 TEST(TextureAssets, ASizedNameIsTriedFirstAndAnUnsafeNameFindsNothing) {
     Assets files;
     files.Put("first", "textures/card.png");
     files.Put("first", "textures/card_8x4.png");
-    EXPECT_EQ(TextureAssetPath("", "card", 8, 4), files.dir / "first" / "textures" / "card_8x4.png");
-    EXPECT_EQ(TextureAssetPath("", "card", 2, 1), files.dir / "first" / "textures" / "card.png");
-    EXPECT_EQ(TextureAssetPath("", "../card", 2, 1), fs::path());
-    EXPECT_EQ(TextureAssetPath("../first", "card", 2, 1), files.dir / "first" / "textures" / "card.png");
+    EXPECT_EQ(TextureAssetPath("", "", "card", 8, 4), files.dir / "first" / "textures" / "card_8x4.png");
+    EXPECT_EQ(TextureAssetPath("", "", "card", 2, 1), files.dir / "first" / "textures" / "card.png");
+    EXPECT_EQ(TextureAssetPath("", "", "../card", 2, 1), fs::path());
+    EXPECT_EQ(TextureAssetPath("../first", "", "card", 2, 1), files.dir / "first" / "textures" / "card.png");
 }
 
 TEST(TextureAssets, AnAreasPictureIsUsedOnlyInThatArea) {

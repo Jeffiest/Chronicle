@@ -18,10 +18,12 @@ namespace fs = std::filesystem;
 std::vector<unsigned char> Image(const std::string &name, unsigned w, unsigned h, unsigned char red) {
     std::vector<unsigned char> out(0x10, 0);
     std::memcpy(out.data(), "IMG", 3);
+    out[4] = 1; // one entry: a 32-byte name, then the offset of its TIM2
     std::vector<unsigned char> label(16, 0);
     std::memcpy(label.data(), name.data(), name.size());
     out.insert(out.end(), label.begin(), label.end());
     out.resize(out.size() + 0x20, 0);
+    out[0x10 + 32] = 0x40;
     std::vector<unsigned char> tim(0x10 + 0x30, 0);
     std::memcpy(tim.data(), "TIM2", 4);
     tim[4] = 4;
@@ -68,6 +70,12 @@ TEST(DcdataTextures, AFileBelongsToTheAreaItsPathNames) {
     EXPECT_EQ(dcdata::AreaOf("gedit/e03/map.img"), "e03");
     EXPECT_EQ(dcdata::AreaOf("gedit/system/esys.pak"), "");
     EXPECT_EQ(dcdata::AreaOf("chara/hero.chr"), "");
+}
+
+TEST(DcdataTextures, ALanguagesFolderIsNamedByItsDirectory) {
+    EXPECT_EQ(dcdata::LanguageOf("commenu/a_eng/menu.img"), "a_eng");
+    EXPECT_EQ(dcdata::LanguageOf("commenu/a_fre/eastk/x.img"), "a_fre");
+    EXPECT_EQ(dcdata::LanguageOf("commenu/menu.img"), "");
 }
 
 TEST(DcdataTextures, APictureDecodesWithPs2AlphaDoubled) {

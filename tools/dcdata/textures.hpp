@@ -8,6 +8,7 @@
 //
 //     textures/<name>.png            used in every area
 //     <area>/textures/<name>.png     used only in that dungeon (d01..d07) or town / event map, when it differs
+//     a_eng/textures/<name>.png      used only with that language (a_jpn a_usa a_eng a_fre a_ger a_ita a_spa)
 //
 // A name two sizes share is written `<name>_<w>x<h>.png`. A picture that is the same everywhere it appears is written
 // once, in textures/.
@@ -437,11 +438,24 @@ inline std::string AreaOf(std::string_view path) {
     return {};
 }
 
+/// The language folder a file is in (a_jpn, a_usa, a_eng, a_fre, a_ger, a_ita, a_spa), or "". The game reads the
+/// folder of the language it is set to, so these pictures are the language's own.
+inline std::string LanguageOf(std::string_view path) {
+    for (std::string_view tag : {"a_jpn", "a_usa", "a_eng", "a_fre", "a_ger", "a_ita", "a_spa"}) {
+        std::string key = "/" + std::string(tag) + "/";
+        if (path.find(key) != std::string_view::npos || path.starts_with(key.substr(1))) {
+            return std::string(tag);
+        }
+    }
+    return {};
+}
+
 // -------------------------------------------------------------------------------------------------- scan
 
 struct TextureFound {
     std::string   file;   // path under the data folder
-    std::size_t   offset; // of the TIM2
+    std::size_t   offset; // of the picture's TIM2
+    bool          swizzled = false;
     std::string   name;
     std::string   area;
     std::uint32_t width = 0;
@@ -479,39 +493,52 @@ inline bool SafeTextureName(std::string_view name) {
     return name != "." && name != "..";
 }
 
-/// The named, single-picture TIM2 files in one game file: the ones an IM2/IMG container introduces.
+/// One picture of an IMG / IM2 bank: the game's own picture list (CTextureManager::EnterIMGFile). A bank is a 16-byte
+/// header whose word at +4 counts the entries, then 48-byte entries: a 32-byte name and the offset, from the bank's
+/// start, of the entry's TIM2 file. An IM2 bank's 8-bit pictures are swizzled.
+struct BankEntry {
+    std::size_t bank;  // offset of the bank in the file
+    std::size_t index; // entry number
+    std::string name;
+    bool        swizzled;
+    std::size_t tim2;  // offset of the picture's TIM2 file
+};
+
+/// Whether a bank starts at d[pos]: its signature, a sane count and every entry's offset pointing at a TIM2.
+inline bool IsBank(std::span<const std::uint8_t> d, std::size_t pos) {
+    if (pos + 16 > d.size() || (std::memcmp(d.data() + pos, "IMG", 3) != 0 && std::memcmp(d.data() + pos, "IM2", 3) != 0) ||
+        d[pos + 3] != 0) {
+        return false;
+    }
+    std::uint32_t count = Le32(d.data() + pos + 4);
+    if (count == 0 || count > 4096 || pos + 16 + std::uint64_t(count) * 48 > d.size()) {
+        return false;
+    }
+    for (std::uint32_t i = 0; i < count; i++) {
+        const std::uint8_t *entry = d.data() + pos + 16 + i * 48;
+        std::uint64_t       at = pos + std::uint64_t(Le32(entry + 32));
+        if (at + 32 > d.size() || std::memcmp(d.data() + at, "TIM2", 4) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Calls visit(entry) for each entry of each bank in the file's bytes.
 template <class Visit>
-inline void ScanTextures(std::span<const std::uint8_t> d, Visit &&visit) {
-    std::size_t pos = 0;
-    while (pos + 4 <= d.size()) {
-        const std::uint8_t *at = static_cast<const std::uint8_t *>(
-            std::memchr(d.data() + pos, 'T', d.size() - pos));
-        if (at == nullptr) {
-            return;
-        }
-        pos = static_cast<std::size_t>(at - d.data());
-        if (pos + 4 > d.size()) {
-            return;
-        }
-        if (std::memcmp(d.data() + pos, "TIM2", 4) != 0) {
-            pos++;
+inline void ScanBanks(std::span<const std::uint8_t> d, Visit &&visit) {
+    for (std::size_t pos = 0; pos + 16 <= d.size(); pos += 16) {
+        if (d[pos] != 'I' || !IsBank(d, pos)) {
             continue;
         }
-        bool container = pos >= 0x40 && (std::memcmp(d.data() + pos - 0x40, "IM2", 3) == 0 ||
-                                         std::memcmp(d.data() + pos - 0x40, "IMG", 3) == 0);
-        bool swizzled = pos >= 0x40 && std::memcmp(d.data() + pos - 0x40, "IM2", 3) == 0;
-        std::vector<Picture> pictures = DecodeTim2(d, pos, swizzled);
-        if (pictures.empty()) {
-            pos += 4;
-            continue;
+        bool          swizzled = std::memcmp(d.data() + pos, "IM2", 3) == 0;
+        std::uint32_t count = Le32(d.data() + pos + 4);
+        for (std::uint32_t i = 0; i < count; i++) {
+            const std::uint8_t *entry = d.data() + pos + 16 + i * 48;
+            const char         *text = reinterpret_cast<const char *>(entry);
+            visit(BankEntry{pos, i, std::string(text, strnlen(text, 32)), swizzled, pos + Le32(entry + 32)});
         }
-        std::string name;
-        if (container) {
-            const char *text = reinterpret_cast<const char *>(d.data() + pos - 0x30);
-            name.assign(text, strnlen(text, 16));
-        }
-        visit(pos, name, pictures);
-        pos += 4;
+        pos += 16 + std::size_t(count) * 48 - 16; // the entries are not banks; the pictures after them are scanned on
     }
 }
 
@@ -544,19 +571,26 @@ inline TexturePlan ScanTextureFolder(const fs::path &data, std::FILE *log = null
             continue;
         }
         std::string area = AreaOf(rel);
-        ScanTextures(bytes, [&](std::size_t offset, const std::string &name, const std::vector<Picture> &pictures) {
-            if (pictures.size() > 1) {
-                plan.multiple++;
-                return;
+        if (area.empty()) {
+            area = LanguageOf(rel); // a language's own pictures are kept apart like an area's
+        }
+        ScanBanks(bytes, [&](const BankEntry &entry) {
+            std::vector<Picture> pictures = DecodeTim2(bytes, entry.tim2, entry.swizzled);
+            if (pictures.empty()) {
+                return; // a type the game skips, too
             }
-            if (!SafeTextureName(name)) {
+            if (!SafeTextureName(entry.name)) {
                 plan.unnamed++;
                 return;
             }
+            if (pictures.size() > 1) {
+                plan.multiple++;
+            }
             TextureFound f;
             f.file = rel;
-            f.offset = offset;
-            f.name = name;
+            f.offset = entry.tim2;
+            f.swizzled = entry.swizzled;
+            f.name = entry.name;
             f.area = area;
             f.width = pictures[0].width;
             f.height = pictures[0].height;
@@ -565,7 +599,7 @@ inline TexturePlan ScanTextureFolder(const fs::path &data, std::FILE *log = null
         });
     }
     if (log != nullptr) {
-        std::fprintf(log, "textures: %zu named pictures in %zu files (%zu unnamed, %zu multi-picture skipped)\n",
+        std::fprintf(log, "textures: %zu named pictures in %zu files (%zu unnamed, %zu with extra pictures: first used)\n",
                      plan.found.size(), files.size(), plan.unnamed, plan.multiple);
     }
     return plan;
@@ -580,13 +614,12 @@ struct TextureOutput {
 
 /// Decides which picture goes where: in textures/ the one most areas share (or the shared files' own), and in an
 /// area's folder only a picture that differs from it.
-inline std::vector<TextureOutput> PlanTextureOutputs(const TexturePlan &plan, std::FILE *log = nullptr) {
+inline std::vector<TextureOutput> PlanTextureOutputs(const TexturePlan &plan, std::vector<std::string> *conflicts = nullptr) {
     std::map<std::string, std::vector<std::size_t>> by_name;
     for (std::size_t i = 0; i < plan.found.size(); i++) {
         by_name[plan.found[i].name].push_back(i);
     }
     std::vector<TextureOutput> outputs;
-    std::size_t                 conflicts = 0;
     for (const auto &[name, indices] : by_name) {
         std::set<std::pair<std::uint32_t, std::uint32_t>> sizes;
         for (std::size_t i : indices) {
@@ -625,8 +658,16 @@ inline std::vector<TextureOutput> PlanTextureOutputs(const TexturePlan &plan, st
                     }
                 }
             }
-            std::set<std::string> done_areas;
-            bool                  wrote_baseline = false;
+            std::set<std::string>              done_areas;
+            std::map<std::string, std::size_t> kept;
+            std::size_t                        first_shared = group[0];
+            for (std::size_t i : group) {
+                if (plan.found[i].area.empty()) {
+                    first_shared = i;
+                    break;
+                }
+            }
+            bool wrote_baseline = false;
             for (std::size_t i : group) {
                 const TextureFound &f = plan.found[i];
                 if (f.hash == baseline) {
@@ -636,25 +677,19 @@ inline std::vector<TextureOutput> PlanTextureOutputs(const TexturePlan &plan, st
                     }
                 } else if (!f.area.empty()) {
                     if (done_areas.insert(f.area).second) {
+                        kept[f.area] = i;
                         outputs.push_back({fs::path(f.area) / "textures" / (stem + ".png"), i});
-                    } else {
-                        conflicts++;
-                        if (log != nullptr) {
-                            std::fprintf(log, "textures: %s has two different pictures in %s; the first is kept\n",
-                                         stem.c_str(), f.area.c_str());
-                        }
+                    } else if (conflicts != nullptr) {
+                        conflicts->push_back(stem + " | " + f.area + " | kept: " + plan.found[kept[f.area]].file +
+                                             " | not used: " + f.file);
                     }
-                } else {
-                    conflicts++;
-                    if (log != nullptr) {
-                        std::fprintf(log, "textures: %s has two different shared pictures; the first is kept\n",
-                                     stem.c_str());
-                    }
+                } else if (conflicts != nullptr) {
+                    conflicts->push_back(stem + " | shared | kept: " + plan.found[first_shared].file +
+                                         " | not used: " + f.file);
                 }
             }
         }
     }
-    (void) conflicts;
     return outputs;
 }
 
@@ -671,7 +706,8 @@ struct TextureSummary {
 inline TextureSummary ConvertTextures(const fs::path &data, const fs::path &assets, std::FILE *log = nullptr,
                                       bool overwrite = false) {
     TexturePlan                plan = ScanTextureFolder(data, log);
-    std::vector<TextureOutput> outputs = PlanTextureOutputs(plan, log);
+    std::vector<std::string>   conflicts;
+    std::vector<TextureOutput> outputs = PlanTextureOutputs(plan, &conflicts);
     TextureSummary             summary;
     summary.scanned = plan.found.size();
     summary.duplicates_saved = plan.found.size() - outputs.size();
@@ -690,9 +726,8 @@ inline TextureSummary ConvertTextures(const fs::path &data, const fs::path &asse
                 summary.kept++;
                 continue;
             }
-            bool swizzled = f.offset >= 0x40 && std::memcmp(bytes.data() + f.offset - 0x40, "IM2", 3) == 0;
-            std::vector<Picture> pictures = DecodeTim2(bytes, f.offset, swizzled);
-            if (pictures.size() != 1) {
+            std::vector<Picture> pictures = DecodeTim2(bytes, f.offset, f.swizzled);
+            if (pictures.empty()) {
                 continue;
             }
             std::vector<std::uint8_t> png = EncodePng(pictures[0].rgba.data(), pictures[0].width, pictures[0].height);
@@ -701,7 +736,17 @@ inline TextureSummary ConvertTextures(const fs::path &data, const fs::path &asse
             summary.bytes += png.size();
         }
     }
+    // A name two files of one area (or two shared files) give different pictures to cannot be told apart by name: the
+    // first file's is used and the rest are listed here.
+    {
+        std::string text = "# name | area | kept | not used\n";
+        for (const std::string &line : conflicts) {
+            text += line + "\n";
+        }
+        WriteFile(assets / "_conflicts.txt", std::span<const unsigned char>(reinterpret_cast<const unsigned char *>(text.data()), text.size()));
+    }
     if (log != nullptr) {
+        std::fprintf(log, "textures: %zu names with different pictures in one place, listed in _conflicts.txt\n", conflicts.size());
         std::fprintf(log, "textures: wrote %zu pictures (%llu bytes), kept %zu already present, %zu duplicates not written\n",
                      summary.written, static_cast<unsigned long long>(summary.bytes), summary.kept,
                      summary.duplicates_saved);

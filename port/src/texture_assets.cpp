@@ -7,6 +7,7 @@
 #include <string>
 
 #include "editloop.hpp"
+#include "mainselect.hpp"
 #include "localize_texture.hpp"
 #include "main.hpp"
 #include "platform/imagefile.hpp"
@@ -64,6 +65,11 @@ std::string TextureAssetsArea() {
     }
 }
 
+std::string TextureAssetsLanguage() {
+    static const char *const kDirs[7] = {"a_jpn", "a_usa", "a_eng", "a_fre", "a_ger", "a_ita", "a_spa"};
+    return LanguageCode >= 0 && LanguageCode < 7 ? kDirs[LanguageCode] : "";
+}
+
 std::vector<fs::path> TextureAssetRoots() {
     if (g_roots_set) {
         return g_roots;
@@ -82,15 +88,21 @@ void TextureAssetsSetRoots(const std::vector<fs::path> &roots) {
     g_roots_set = !roots.empty();
 }
 
-fs::path TextureAssetPath(std::string_view area, std::string_view name, unsigned width, unsigned height) {
+fs::path TextureAssetPath(std::string_view area, std::string_view language, std::string_view name, unsigned width,
+                          unsigned height) {
     if (name.empty() || name.find_first_of("/\\") != std::string_view::npos || name == "." || name == "..") {
         return {};
     }
+    auto safe = [](std::string_view folder) {
+        return !folder.empty() && folder != "." && folder != ".." && folder.find_first_of("/\\") == std::string_view::npos;
+    };
     for (const fs::path &root : TextureAssetRoots()) {
-        if (!area.empty() && area != "." && area != ".." && area.find_first_of("/\\") == std::string_view::npos) {
-            fs::path found = Find(root / std::string(area) / "textures", name, width, height);
-            if (!found.empty()) {
-                return found;
+        for (std::string_view folder : {area, language}) {
+            if (safe(folder)) {
+                fs::path found = Find(root / std::string(folder) / "textures", name, width, height);
+                if (!found.empty()) {
+                    return found;
+                }
             }
         }
         fs::path found = Find(root / "textures", name, width, height);
@@ -109,7 +121,7 @@ bool TextureAssetApply(const char *name, PortDecodedTexture &texture) {
     if (texture.logical_width != 0) {
         return false;
     }
-    fs::path path = TextureAssetPath(TextureAssetsArea(), name, texture.width, texture.height);
+    fs::path path = TextureAssetPath(TextureAssetsArea(), TextureAssetsLanguage(), name, texture.width, texture.height);
     if (path.empty()) {
         return false;
     }

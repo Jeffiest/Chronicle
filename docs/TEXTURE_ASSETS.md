@@ -9,11 +9,13 @@ redone without touching the rest. The layout matches what `tools/areapack` write
 ```
 <root>/d02/textures/<name>.png     only while the game is in dungeon 2
 <root>/e03/textures/<name>.png     only in that town or event map
+<root>/a_fre/textures/<name>.png   only with that language set (a_jpn a_usa a_eng a_fre a_ger a_ita a_spa)
 <root>/textures/<name>.png         everywhere (shared, title, menus, loading screens)
 ```
 
 - Roots, in order: the save folder's `assets`, then `assets` next to the executable. The save folder wins.
 - At each step `<name>_<w>x<h>.png` is tried before `<name>.png`, for two textures of different sizes sharing a name.
+- Order: the area's folder, then the language's, then `textures/`.
 - Areas: `d01`..`d07` are the dungeons (the disc tags), a town or event map is its map name (`e01`, `s04`, ...).
   The title, menus and loading screens are in no area and use `textures/` only.
 - A language's own picture (`lang/textures/...`, see LOCALIZATION.md) is tried first and wins.

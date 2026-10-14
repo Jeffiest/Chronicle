@@ -108,10 +108,16 @@ bool Render(int item_no, CTexture &out) {
     char model_path[64];
     char texture_path[76];
     if (!ModelPaths(item_no, model_path, texture_path)) {
+        if (Debug()) {
+            std::fprintf(stderr, "item icon 3d: item %d has no model\n", item_no);
+        }
         return false;
     }
     Work &work = GetWork();
     int   size = 0;
+    if (Debug()) {
+        std::fprintf(stderr, "item icon 3d: item %d reads %s and %s\n", item_no, model_path, texture_path);
+    }
     if (!LoadFile2(model_path, work.model, &size, 0) || size <= 0 || static_cast<std::size_t>(size) + 2048 > kModelBytes) {
         return false;
     }
@@ -125,6 +131,9 @@ bool Render(int item_no, CTexture &out) {
     gfx::TextureHandle target = gfx::FindNamedRenderTarget(name);
     gfx::TextureHandle scratch = gfx::NamedRenderTarget(kScratch, 640, 480, true);
     if (key == 0 || target == gfx::kNullTexture || scratch == gfx::kNullTexture) {
+        if (Debug()) {
+            std::fprintf(stderr, "item icon 3d: item %d: no target (key %u)\n", item_no, key);
+        }
         return false;
     }
 
@@ -218,6 +227,13 @@ void ItemIcons3DDrawSheet() {
 
 // Retail's lookup of the sheet cell an item's icon is in, with the model's own icon in front of it.
 PORT_OVERRIDE CTexture *RetCTex(short item_no, int &u, int &v) {
+    if (Debug()) {
+        static bool said = false;
+        if (!said) {
+            said = true;
+            std::fprintf(stderr, "item icon 3d: RetCTex first asked for item %d, enabled=%d\n", item_no, ItemIcons3DEnabled());
+        }
+    }
     COM_ITEM_INFO *info = GetCommonItemInfo(item_no);
 
     if (info == nullptr) {

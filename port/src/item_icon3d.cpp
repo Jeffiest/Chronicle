@@ -203,7 +203,7 @@ bool Render(int item_no, CTexture &out) {
     // Pixels per world unit at the origin, from one trial draw, which also puts the camera in place for the projection.
     static float pixels_per_unit = 0.0f;
     if (pixels_per_unit <= 0.0f) {
-        gfx::Clear(true, none, true, 1.0f);
+        gfx::Clear(true, none, true, 0.0f);
         MenuPolygonDraw(0x80, DrawModel);
         float a[4] = {0, 0, 0, 1}, c[4] = {10.0f, 0, 0, 1};
         int   pa[4], pc[4];
@@ -224,7 +224,7 @@ bool Render(int item_no, CTexture &out) {
     float position[4] = {-rotated[0] * scale, -rotated[1] * scale, -rotated[2] * scale, 1.0f};
     g_frame->SetPosition(position);
     const uint8_t red[4] = {0x80, 0, 0, 0x80};
-    gfx::Clear(true, EnvOn("DC_ITEM_ICONS_3D_RED") ? red : none, true, 1.0f);
+    gfx::Clear(true, EnvOn("DC_ITEM_ICONS_3D_RED") ? red : none, true, 0.0f);
     MenuPolygonDraw(0x80, DrawModel);
     int centre[2] = {320, 240};
     Get3DPosTo2DPos(g_frame, centre);

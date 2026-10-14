@@ -33,7 +33,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 112.0f; // pixels across the model inside the crop
+constexpr float       kFill = 92.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -302,11 +302,7 @@ PORT_OVERRIDE CTexture *RetCTex(short item_no, int &u, int &v) {
     }
 
     if (std::getenv("DC_ITEM_ICONS_3D_SHEET") != nullptr) {
-        static int drawn_at = -1;
-        if (drawn_at != MGGetVSyncCount()) {
-            drawn_at = MGGetVSyncCount();
-            ItemIcons3DDrawSheet();
-        }
+        ItemIcons3DDrawSheet(); // every ask, so the last one is on top of the menu panels
     }
 
     if (CTexture *model = ItemIcon3DTexture(item_no)) {

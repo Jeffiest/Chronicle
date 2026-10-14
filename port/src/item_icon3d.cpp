@@ -39,7 +39,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 136.0f; // pixels across the model inside the crop
+constexpr float       kFill = 120.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -103,9 +103,45 @@ void NoCull(CFrame *frame, int &count) {
     }
 }
 
-// Drawn by MenuPolygonDraw, which has set the menu camera's position and the lights.
+// 0: the lit model; 1: the same model unlit, which is black and makes the outline and shadow.
+int g_pass = 0;
+
+float EnvFloat(const char *name, float fallback) {
+    const char *text = std::getenv(name);
+    return text != nullptr ? static_cast<float>(std::atof(text)) : fallback;
+}
+
+// Drawn by MenuPolygonDraw, which has set the menu camera's position and the lights (and puts them back after).
 void DrawModel() {
     MenuWorldTrans(&MenuCamera);
+    if (g_pass == 1) {
+        float none_dir[4][4] = {};
+        float none_colour[4][4] = {};
+        float dark[4] = {0.0f, 0.0f, 0.0f, 128.0f};
+        MGSetPLight(none_dir, none_colour);
+        MGSetAmbient(dark);
+    } else {
+        // A key light from the upper left, a weak fill from the other side, and enough ambient that the shade side
+        // stays a colour: the retail icons are painted with a highlight on the top left and shade bottom right.
+        float key[3] = {-0.45f, 0.75f, 0.5f};
+        float fill[3] = {0.6f, -0.2f, 0.4f};
+        float key_length = std::sqrt(key[0] * key[0] + key[1] * key[1] + key[2] * key[2]);
+        float fill_length = std::sqrt(fill[0] * fill[0] + fill[1] * fill[1] + fill[2] * fill[2]);
+        float dir[4][4] = {};
+        float colour[4][4] = {};
+        for (int i = 0; i < 3; i++) {
+            dir[i][0] = key[i] / key_length;
+            dir[i][1] = fill[i] / fill_length;
+        }
+        const float key_strength = EnvFloat("DC_ITEM_ICONS_3D_KEY", 120.0f);
+        const float fill_strength = EnvFloat("DC_ITEM_ICONS_3D_FILL_LIGHT", 36.0f);
+        colour[0][0] = colour[0][1] = colour[0][2] = key_strength;
+        colour[1][0] = colour[1][1] = colour[1][2] = fill_strength;
+        float ambient[4] = {EnvFloat("DC_ITEM_ICONS_3D_AMBIENT", 70.0f), 0.0f, 0.0f, 128.0f};
+        ambient[1] = ambient[2] = ambient[0];
+        MGSetPLight(dir, colour);
+        MGSetAmbient(ambient);
+    }
     MGDraw(g_root);
 }
 
@@ -280,10 +316,37 @@ bool Render(int item_no, CTexture &out) {
         }
     };
     measure();
+    // A plate (a medallion, a scroll, a tablet): its broad face should face us, whichever way the chest pose lays it.
+    float sorted_ext[3] = {ext[0], ext[1], ext[2]};
+    std::sort(sorted_ext, sorted_ext + 3);
+    const bool plate = !weapon && sorted_ext[2] > 0.0001f && sorted_ext[0] < 0.6f * sorted_ext[1] && sorted_ext[1] > 0.5f * sorted_ext[2];
+    if (plate && !shape_pose) {
+        float best = -1.0f, best_stand = stand_x, best_turn = turn_now;
+        for (int quarter = -2; quarter <= 2; quarter++) {
+            for (int step = -6; step <= 6; step++) {
+                stand_x = quarter * 1.5707964f;
+                turn_now = step * 0.2618f;
+                apply();
+                measure();
+                const float area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
+                const float score = area * (1.0f - 0.01f * std::fabs(turn_now) - 0.01f * std::fabs(stand_x + 1.5707964f));
+                if (score > best) {
+                    best = score;
+                    best_stand = stand_x;
+                    best_turn = turn_now;
+                }
+            }
+        }
+        stand_x = best_stand;
+        turn_now = best_turn;
+        tip = 0.0f;
+        apply();
+        measure();
+    }
     // The turn about the vertical: the chest pose keeps the item upright but not facing us, so a flat thing can be edge-on
     // here. Try a spread of turns and keep the one whose box shows the most (the widest face), leaning to the usual
     // three-quarter turn when two are as good.
-    if (!shape_pose && !EnvOn("DC_ITEM_ICONS_3D_NO_TURN_SEARCH")) {
+    if (!shape_pose && !plate && !EnvOn("DC_ITEM_ICONS_3D_NO_TURN_SEARCH")) {
         float best_score = -1.0f, best_turn = turn_now;
         for (int step = -6; step <= 6; step++) {
             turn_now = step * 0.2618f; // 15 degrees
@@ -354,6 +417,22 @@ bool Render(int item_no, CTexture &out) {
     root.SetPosition(position);
     const uint8_t red[4] = {0x80, 0, 0, 0x80};
     gfx::Clear(true, EnvOn("DC_ITEM_ICONS_3D_RED") ? red : none, true, 0.0f);
+    if (!EnvOn("DC_ITEM_ICONS_3D_NO_OUTLINE")) {
+        // The outline and shadow: the unlit (black) model drawn shifted about the picture, a pixel of the icon (4 of
+        // the scratch's) each way and a little more down and right for the shadow, then the lit model on top.
+        const float step = 4.0f / pixels_per_unit;
+        const float shifts[9][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-0.75f, -0.75f}, {0.75f, -0.75f},
+                                    {-0.75f, 0.75f}, {0.75f, 0.75f}, {1.4f, -1.6f}};
+        g_pass = 1;
+        for (const auto &shift : shifts) {
+            float moved[4] = {position[0] + shift[0] * step, position[1] + shift[1] * step, position[2], 1.0f};
+            root.SetPosition(moved);
+            MenuPolygonDraw(0x80, DrawModel);
+        }
+        g_pass = 0;
+        root.SetPosition(position);
+        gfx::Clear(false, none, true, 0.0f);
+    }
     MenuPolygonDraw(0x80, DrawModel);
     int centre[2] = {320, 240};
     Get3DPosTo2DPos(g_root, centre);

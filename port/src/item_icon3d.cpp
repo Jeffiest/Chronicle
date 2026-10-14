@@ -88,6 +88,16 @@ Work &GetWork() {
 CFrame *g_frame = nullptr;
 std::string g_last_name;
 
+// The icon's frame is drawn into a target of its own, so the screen-bound test (made against the visible extent) is
+// switched off for every frame of it.
+void NoCull(CFrame *frame, int &count) {
+    for (; frame != nullptr; frame = frame->brother) {
+        frame->attr.cull_enable = 0;
+        count++;
+        NoCull(frame->child, count);
+    }
+}
+
 // Drawn by MenuPolygonDraw, which has set the menu camera's position and the lights.
 void DrawModel() {
     MenuWorldTrans(&MenuCamera);
@@ -203,6 +213,11 @@ bool Render(int item_no, CTexture &out) {
         if (pixels_per_unit <= 0.0f) {
             pixels_per_unit = 3.0f;
         }
+    }
+    int frames = 0;
+    NoCull(g_frame, frames);
+    if (Debug()) {
+        std::fprintf(stderr, "item icon 3d: %d frames, draw_on %d, max %g,%g,%g\n", frames, g_frame->attr.draw_on, g_frame->max[0], g_frame->max[1], g_frame->max[2]);
     }
     const float scale = (kFill * 0.5f) / (pixels_per_unit * radius);
     g_frame->SetScale(scale, scale, scale);

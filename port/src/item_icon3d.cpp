@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <set>
 #include <string>
 #include <memory>
 #include <vector>
@@ -294,18 +295,31 @@ CTexture *ItemIcon3DTexture(int item_no) {
 
 void ItemIcons3DDrawSheet() {
     const char *page = std::getenv("DC_ITEM_ICONS_3D_SHEET");
-    if (page == nullptr || !ItemIcons3DEnabled()) {
+    if (page == nullptr || !ItemIcons3DEnabled() || !gfx::InFrame()) {
         return;
     }
-    const int first = ITEM_ATTACH_START + std::atoi(page) * 280;
+    static std::set<int> built;
+    const int            index = std::atoi(page);
+    if (!built.insert(index).second) {
+        return;
+    }
+    // A contact sheet of the page's icons in a target of its own, for the debug dump to write out.
+    gfx::TextureHandle sheet = gfx::NamedRenderTarget("item icon 3d sheet", 640, 448, true);
+    if (sheet == gfx::kNullTexture) {
+        return;
+    }
+    const int first = ITEM_ATTACH_START + index * 280;
     for (int i = 0; i < 280; i++) {
-        CTexture *texture = ItemIcon3DTexture(first + i);
-        if (texture == nullptr) {
+        if (ItemIcon3DTexture(first + i) == nullptr) {
             continue;
         }
-        const int x = (i % 20) * kIconSize;
-        const int y = (i / 20) * kIconSize + 16;
-        DrawMenu2DSprite(texture, CRect_i_(x, y, kIconSize, kIconSize), CRect_i_(0, 0, kIconSize, kIconSize), 0x80);
+        char name[48];
+        std::snprintf(name, sizeof name, "item icon 3d %d", first + i);
+        gfx::TextureHandle icon = gfx::FindNamedRenderTarget(name);
+        if (icon != gfx::kNullTexture) {
+            gfx::BlitTexture(icon, {0, 0, kIconSize, kIconSize}, sheet,
+                             {(i % 20) * kIconSize, (i / 20) * kIconSize, kIconSize, kIconSize}, gfx::Filter::Nearest);
+        }
     }
 }
 
@@ -357,7 +371,7 @@ PORT_OVERRIDE CTexture *RetCTex(short item_no, int &u, int &v) {
 // Debug: with DC_ITEM_ICONS_3D_DUMP=<dir>, the scratch render and the newest icon are written there. Called outside a frame.
 void ItemIcons3DDumpDebug() {
     const char *dir = std::getenv("DC_ITEM_ICONS_3D_DUMP");
-    if (dir == nullptr || g_last_name.empty()) {
+    if (dir == nullptr) {
         return;
     }
     auto write = [&](const char *target_name, const char *file) {
@@ -368,7 +382,10 @@ void ItemIcons3DDumpDebug() {
             gfx::WritePng(std::filesystem::path(dir) / file, rgba.data(), width, height);
         }
     };
+    write("item icon 3d sheet", "sheet.png");
     write(kScratch, "scratch.png");
     write("item icon 3d half", "half.png");
-    write(g_last_name.c_str(), "icon.png");
+    if (!g_last_name.empty()) {
+        write(g_last_name.c_str(), "icon.png");
+    }
 }

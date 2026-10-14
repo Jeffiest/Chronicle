@@ -208,7 +208,8 @@ bool Render(int item_no, CTexture &out) {
     g_frame->SetScale(scale, scale, scale);
     float position[4] = {-rotated[0] * scale, -rotated[1] * scale, -rotated[2] * scale, 1.0f};
     g_frame->SetPosition(position);
-    gfx::Clear(true, none, true, 1.0f);
+    const uint8_t red[4] = {0x80, 0, 0, 0x80};
+    gfx::Clear(true, EnvOn("DC_ITEM_ICONS_3D_RED") ? red : none, true, 1.0f);
     MenuPolygonDraw(0x80, DrawModel);
     int centre[2] = {320, 240};
     Get3DPosTo2DPos(g_frame, centre);

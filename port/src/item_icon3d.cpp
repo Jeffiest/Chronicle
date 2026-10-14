@@ -38,7 +38,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 120.0f; // pixels across the model inside the crop
+constexpr float       kFill = 124.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -195,8 +195,27 @@ bool Render(int item_no, CTexture &out) {
     g_frame->SetScale(1.0f, 1.0f, 1.0f);
     float origin[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     g_frame->SetPosition(origin);
-    float rotated[4];
-    g_frame->GetWorldPosition(rotated, mid);
+    // Turned bound: the picture's extent is that of the box's eight corners, not of its sphere, so long thin
+    // things fill the cell along the diagonal they lie on.
+    float rotated[4] = {0, 0, 0, 1};
+    float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+    for (int c = 0; c < 8; c++) {
+        float corner[4] = {(c & 1) ? box.max[0] : box.min[0], (c & 2) ? box.max[1] : box.min[1],
+                           (c & 4) ? box.max[2] : box.min[2], 1.0f};
+        float world[4];
+        g_frame->GetWorldPosition(world, corner);
+        for (int i = 0; i < 3; i++) {
+            lo[i] = std::min(lo[i], world[i]);
+            hi[i] = std::max(hi[i], world[i]);
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        rotated[i] = (lo[i] + hi[i]) * 0.5f;
+    }
+    radius = 0.5f * std::max(hi[0] - lo[0], hi[1] - lo[1]);
+    if (!(radius > 0.0001f)) {
+        radius = 1.0f;
+    }
 
     RenderInfo saved = mgRenderInfo;
     const gfx::TextureHandle previous = gfx::CurrentRenderTarget();

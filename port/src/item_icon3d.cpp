@@ -27,6 +27,7 @@
 #include "memcard.hpp"
 #include "mds.hpp"
 #include "menu_draw.hpp"
+#include "normal_smoothing.hpp"
 #include "menu_save.hpp"
 #include "menuetc.hpp"
 #include "mglib.hpp"
@@ -197,6 +198,13 @@ bool Render(int item_no, CTexture &out) {
         return false;
     }
 
+    // Smooth the model's normals while it is built and drawn here, so a rounded thing is lit as a curve (see
+    // normal_smoothing.hpp); DC_ITEM_ICONS_3D_SMOOTH is the crease angle in degrees, 0 for retail's flat shading.
+    struct SmoothScope {
+        float previous;
+        SmoothScope() : previous(PortSetNormalSmoothing(EnvFloat("DC_ITEM_ICONS_3D_SMOOTH", 60.0f))) {}
+        ~SmoothScope() { PortSetNormalSmoothing(previous); }
+    } smooth_scope;
     SetTempTexture(kBlock, reinterpret_cast<char *>(work.image));
     CDataAlloc2<1> arena(-1);
     arena.base = work.arena_base;

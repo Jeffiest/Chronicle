@@ -35,7 +35,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 92.0f; // pixels across the model inside the crop
+constexpr float       kFill = 120.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;

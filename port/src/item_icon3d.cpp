@@ -39,7 +39,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 118.0f; // pixels across the model inside the crop
+constexpr float       kFill = 136.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -229,7 +229,7 @@ bool Render(int item_no, CTexture &out) {
     g_frame->parent = nullptr;
     root.SetChild(g_frame);
     g_root = &root;
-    float view[3] = {-1.5707964f, 0.5f, 0.0f};
+    float view[3] = {-1.15f, 0.5f, 0.0f};
     if (const char *text = std::getenv("DC_ITEM_ICONS_3D_VIEW")) {
         std::sscanf(text, "%f,%f,%f", &view[0], &view[1], &view[2]);
     }

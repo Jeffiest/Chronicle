@@ -39,7 +39,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 136.0f; // pixels across the model inside the crop
+constexpr float       kFill = 124.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -222,39 +222,61 @@ bool Render(int item_no, CTexture &out) {
         std::fprintf(stderr, "item icon 3d: item %d pose %.2f %.2f %.2f\n", item_no, rx, ry, rz);
     }
     g_frame->SetRotation(rx, ry, rz);
-    // The pose is the chest's, seen by the chest's camera; the view turn on top of it is the picture's own.
-    static CFrameVu1 root;
-    root.visual = nullptr;
-    root.SetChild(nullptr);
-    g_frame->parent = nullptr;
-    root.SetChild(g_frame);
-    g_root = &root;
-    float view[3] = {-1.15f, 0.5f, 0.0f};
-    if (const char *text = std::getenv("DC_ITEM_ICONS_3D_VIEW")) {
-        std::sscanf(text, "%f,%f,%f", &view[0], &view[1], &view[2]);
+    // The pose is the chest's, seen by the chest's camera. The picture's own turns sit on top of it, one frame per
+    // turn so each is about the axis it names: stand it up, turn it about the vertical, tip it to look from a little
+    // above, and last roll it in the picture. Scale and place are on the outermost.
+    static CFrameVu1 stand, yaw, elev, root;
+    CFrameVu1       *chain[4] = {&stand, &yaw, &elev, &root};
+    for (CFrameVu1 *frame : chain) {
+        frame->visual = nullptr;
+        frame->SetChild(nullptr);
     }
-    root.SetRotation(view[0], view[1], view[2]);
+    g_frame->parent = nullptr;
+    root.SetChild(&elev);
+    elev.SetChild(&yaw);
+    yaw.SetChild(&stand);
+    stand.SetChild(g_frame);
+    g_root = &root;
+    const bool weapon = item_no >= ITEM_WEAPON_START;
+    float      stand_x = weapon ? -1.15f : -1.5707964f;
+    float      tip = weapon ? 0.0f : 0.35f;
+    if (const char *text = std::getenv("DC_ITEM_ICONS_3D_TIP")) {
+        tip = static_cast<float>(std::atof(text));
+    }
+    float turn_now = 0.5f, roll = 0.0f;
+    auto  apply = [&]() {
+        stand.SetRotation(stand_x, 0.0f, 0.0f);
+        yaw.SetRotation(0.0f, turn_now, 0.0f);
+        elev.SetRotation(tip, 0.0f, 0.0f);
+        root.SetRotation(0.0f, 0.0f, roll);
+    };
+    apply();
     root.SetScale(1.0f, 1.0f, 1.0f);
     float origin[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     root.SetPosition(origin);
-    // Turned bound: the picture's extent is that of the box's eight corners, not of its sphere, so long thin
-    // things fill the cell along the diagonal they lie on.
+    // The picture's extent. A box's eight corners overstate a rounded thing (a bottle or fruit is nearer an ellipsoid
+    // in its box), so the extent is the mean of the box's and the ellipsoid's reach along each picture axis.
     float rotated[4] = {0, 0, 0, 1};
     float lo[3], hi[3];
     auto  measure = [&]() {
+        float o[4] = {0, 0, 0, 1}, wo[4], we[3][4];
+        g_frame->GetWorldPosition(wo, o);
         for (int i = 0; i < 3; i++) {
-            lo[i] = 1e30f;
-            hi[i] = -1e30f;
+            float e[4] = {i == 0 ? 1.0f : 0.0f, i == 1 ? 1.0f : 0.0f, i == 2 ? 1.0f : 0.0f, 1.0f};
+            g_frame->GetWorldPosition(we[i], e);
         }
-        for (int c = 0; c < 8; c++) {
-            float corner[4] = {(c & 1) ? box.max[0] : box.min[0], (c & 2) ? box.max[1] : box.min[1],
-                               (c & 4) ? box.max[2] : box.min[2], 1.0f};
-            float world[4];
-            g_frame->GetWorldPosition(world, corner);
+        float mid_local[4] = {mid[0], mid[1], mid[2], 1.0f}, centre_world[4];
+        g_frame->GetWorldPosition(centre_world, mid_local);
+        for (int k = 0; k < 3; k++) {
+            float sum_box = 0.0f, sum_sq = 0.0f;
             for (int i = 0; i < 3; i++) {
-                lo[i] = std::min(lo[i], world[i]);
-                hi[i] = std::max(hi[i], world[i]);
+                const float reach = 0.5f * ext[i] * (we[i][k] - wo[k]);
+                sum_box += std::fabs(reach);
+                sum_sq += reach * reach;
             }
+            const float half = k == 2 ? 0.0f : 0.5f * (sum_box + std::sqrt(sum_sq));
+            lo[k] = centre_world[k] - half;
+            hi[k] = centre_world[k] + half;
         }
     };
     measure();
@@ -262,36 +284,36 @@ bool Render(int item_no, CTexture &out) {
     // here. Try a spread of turns and keep the one whose box shows the most (the widest face), leaning to the usual
     // three-quarter turn when two are as good.
     if (!shape_pose && !EnvOn("DC_ITEM_ICONS_3D_NO_TURN_SEARCH")) {
-        float best_score = -1.0f, best_turn = view[1];
+        float best_score = -1.0f, best_turn = turn_now;
         for (int step = -6; step <= 6; step++) {
-            const float turn = step * 0.2618f; // 15 degrees
-            root.SetRotation(view[0], turn, view[2]);
+            turn_now = step * 0.2618f; // 15 degrees
+            apply();
             measure();
             const float area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
-            const float score = area * (1.0f - 0.04f * std::fabs(turn - 0.5f));
+            const float score = area * (1.0f - 0.04f * std::fabs(turn_now - 0.5f));
             if (score > best_score) {
                 best_score = score;
-                best_turn = turn;
+                best_turn = turn_now;
             }
         }
-        view[1] = best_turn;
+        turn_now = best_turn;
         // Everything but weapons reads better turned a little more to the left than the widest face has it.
-        if (item_no < ITEM_WEAPON_START) {
+        if (!weapon) {
             float offset = -0.2618f;
             if (const char *text = std::getenv("DC_ITEM_ICONS_3D_ITEM_TURN")) {
                 offset = static_cast<float>(std::atof(text));
             }
-            view[1] += offset;
+            turn_now += offset;
         }
-        root.SetRotation(view[0], view[1], view[2]);
+        apply();
         measure();
     }
     // Long and thin as seen (weapons, keys, rods): lay it along the diagonal, which is how the retail icons draw them,
     // and which fills a square cell the best.
     const float width = hi[0] - lo[0], height = hi[1] - lo[1];
     if (!shape_pose && (width > 2.0f * height || height > 2.0f * width)) {
-        view[2] += width > height ? 0.785f : -0.785f;
-        root.SetRotation(view[0], view[1], view[2]);
+        roll += width > height ? 0.785f : -0.785f;
+        apply();
         measure();
     }
     for (int i = 0; i < 3; i++) {

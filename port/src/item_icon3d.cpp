@@ -183,13 +183,41 @@ bool Render(int item_no, CTexture &out) {
     if (!(radius > 0.0001f)) {
         radius = 1.0f;
     }
-    // Long axis: x or y long becomes a diagonal in the picture, z long (pointing at the camera) is laid down first.
-    float rx = 0.35f, ry = 0.0f, rz = 0.0f;
-    if (ext[2] > ext[0] && ext[2] > ext[1]) {
-        rx = 1.2f;
+    // The pose: the one the treasure chest presents the item in, which depends on who the weapon belongs to
+    // (BtGetTreasureboxBig_Init); everything else is shown as the chest shows a consumable. PORT_ICON_POSE=shape
+    // keeps the older rule that turns the long side onto a diagonal.
+    float rx = 1.5707964f, ry = 0.0f, rz = 1.5707964f;
+    const bool shape_pose = EnvOn("DC_ITEM_ICONS_3D_POSE_SHAPE");
+    if (shape_pose) {
+        rx = 0.35f;
+        ry = 0.0f;
         rz = 0.785f;
-    } else {
-        rz = 0.785f;
+        if (ext[2] > ext[0] && ext[2] > ext[1]) {
+            rx = 1.2f;
+        }
+    } else if (BtlMenuStatusPt != nullptr) {
+        switch (reinterpret_cast<CDngStatusData *>(BtlMenuStatusPt)->CheckWeaponUser(item_no)) {
+            case CHARA_XIAO:
+                rx = -1.5707964f;
+                ry = -1.5707964f;
+                rz = 0.0f;
+                break;
+            case CHARA_OSMOND:
+                rx = -1.5707964f;
+                ry = 3.1415927f;
+                rz = 0.0f;
+                break;
+            case CHARA_RUBY:
+                rx = 0.0f;
+                ry = 1.5707964f;
+                rz = 0.0f;
+                break;
+            default:
+                break;
+        }
+    }
+    if (Debug()) {
+        std::fprintf(stderr, "item icon 3d: item %d pose %.2f %.2f %.2f\n", item_no, rx, ry, rz);
     }
     g_frame->SetRotation(rx, ry, rz);
     g_frame->SetScale(1.0f, 1.0f, 1.0f);

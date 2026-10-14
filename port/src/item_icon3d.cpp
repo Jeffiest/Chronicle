@@ -258,6 +258,26 @@ bool Render(int item_no, CTexture &out) {
         }
     };
     measure();
+    // The turn about the vertical: the chest pose keeps the item upright but not facing us, so a flat thing can be edge-on
+    // here. Try a spread of turns and keep the one whose box shows the most (the widest face), leaning to the usual
+    // three-quarter turn when two are as good.
+    if (!shape_pose && !EnvOn("DC_ITEM_ICONS_3D_NO_TURN_SEARCH")) {
+        float best_score = -1.0f, best_turn = view[1];
+        for (int step = -6; step <= 6; step++) {
+            const float turn = step * 0.2618f; // 15 degrees
+            root.SetRotation(view[0], turn, view[2]);
+            measure();
+            const float area = (hi[0] - lo[0]) * (hi[1] - lo[1]);
+            const float score = area * (1.0f - 0.04f * std::fabs(turn - 0.5f));
+            if (score > best_score) {
+                best_score = score;
+                best_turn = turn;
+            }
+        }
+        view[1] = best_turn;
+        root.SetRotation(view[0], view[1], view[2]);
+        measure();
+    }
     // Long and thin as seen (weapons, keys, rods): lay it along the diagonal, which is how the retail icons draw them,
     // and which fills a square cell the best.
     const float width = hi[0] - lo[0], height = hi[1] - lo[1];

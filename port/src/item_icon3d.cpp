@@ -21,6 +21,7 @@
 #include "dataread.hpp"
 #include "dun/gameloop.hpp"
 #include "frame.hpp"
+#include "framevu1.hpp"
 #include "gfx/gfx.hpp"
 #include "itemdata.hpp"
 #include "memcard.hpp"
@@ -88,7 +89,8 @@ Work &GetWork() {
     return work;
 }
 
-CFrame *g_frame = nullptr;
+CFrame *g_frame = nullptr; // the model
+CFrame *g_root = nullptr;  // the frame the picture is turned, scaled and placed by, with the model its child
 std::string g_last_name;
 
 // The icon's frame is drawn into a target of its own, so the screen-bound test (made against the visible extent) is
@@ -104,7 +106,7 @@ void NoCull(CFrame *frame, int &count) {
 // Drawn by MenuPolygonDraw, which has set the menu camera's position and the lights.
 void DrawModel() {
     MenuWorldTrans(&MenuCamera);
-    MGDraw(g_frame);
+    MGDraw(g_root);
 }
 
 // The model's file names, or false where the item has none of its own (an empty slot of the table falls back to the
@@ -220,9 +222,21 @@ bool Render(int item_no, CTexture &out) {
         std::fprintf(stderr, "item icon 3d: item %d pose %.2f %.2f %.2f\n", item_no, rx, ry, rz);
     }
     g_frame->SetRotation(rx, ry, rz);
-    g_frame->SetScale(1.0f, 1.0f, 1.0f);
+    // The pose is the chest's, seen by the chest's camera; the view turn on top of it is the picture's own.
+    static CFrameVu1 root;
+    root.visual = nullptr;
+    root.SetChild(nullptr);
+    g_frame->parent = nullptr;
+    root.SetChild(g_frame);
+    g_root = &root;
+    float view[3] = {-1.5707964f, 0.5f, 0.0f};
+    if (const char *text = std::getenv("DC_ITEM_ICONS_3D_VIEW")) {
+        std::sscanf(text, "%f,%f,%f", &view[0], &view[1], &view[2]);
+    }
+    root.SetRotation(view[0], view[1], view[2]);
+    root.SetScale(1.0f, 1.0f, 1.0f);
     float origin[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-    g_frame->SetPosition(origin);
+    root.SetPosition(origin);
     // Turned bound: the picture's extent is that of the box's eight corners, not of its sphere, so long thin
     // things fill the cell along the diagonal they lie on.
     float rotated[4] = {0, 0, 0, 1};
@@ -270,14 +284,14 @@ bool Render(int item_no, CTexture &out) {
         std::fprintf(stderr, "item icon 3d: %d frames, draw_on %d, max %g,%g,%g\n", frames, g_frame->attr.draw_on, g_frame->max[0], g_frame->max[1], g_frame->max[2]);
     }
     const float scale = (kFill * 0.5f) / (pixels_per_unit * radius);
-    g_frame->SetScale(scale, scale, scale);
+    root.SetScale(scale, scale, scale);
     float position[4] = {-rotated[0] * scale, -rotated[1] * scale, -rotated[2] * scale, 1.0f};
-    g_frame->SetPosition(position);
+    root.SetPosition(position);
     const uint8_t red[4] = {0x80, 0, 0, 0x80};
     gfx::Clear(true, EnvOn("DC_ITEM_ICONS_3D_RED") ? red : none, true, 0.0f);
     MenuPolygonDraw(0x80, DrawModel);
     int centre[2] = {320, 240};
-    Get3DPosTo2DPos(g_frame, centre);
+    Get3DPosTo2DPos(g_root, centre);
     // Supersample down in exact halves: kCrop -> kCrop/2 -> the icon.
     gfx::TextureHandle half = gfx::NamedRenderTarget("item icon 3d half", kCrop / 2, kCrop / 2, true);
     const gfx::Rect from = {320 - kCrop / 2, 240 - kCrop / 2, kCrop, kCrop};
@@ -291,7 +305,9 @@ bool Render(int item_no, CTexture &out) {
     }
     mgRenderInfo = saved;
     TexManager.DeleteTextureBlock(kBlock);
+    root.SetChild(nullptr);
     g_frame = nullptr;
+    g_root = nullptr;
     g_last_name = name;
     if (Debug()) {
         std::fprintf(stderr, "item icon 3d: item %d %s radius %.2f scale %.3f ppu %.2f centre %d,%d\n", item_no, model_path,

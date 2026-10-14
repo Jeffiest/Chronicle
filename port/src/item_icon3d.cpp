@@ -13,6 +13,8 @@
 #include <cmath>
 #include <filesystem>
 
+#include "battlemenu.hpp"
+#include "dngstatusdata.hpp"
 #include "btitem.hpp"
 #include "collision.hpp"
 #include "btmisc.hpp"
@@ -333,6 +335,21 @@ PORT_OVERRIDE CTexture *RetCTex(short item_no, int &u, int &v) {
         }
     }
     COM_ITEM_INFO *info = GetCommonItemInfo(item_no);
+
+    if (EnvOn("DC_ITEM_ICONS_3D_FILL") && BtlMenuStatusPt != nullptr) {
+        // Debug: put a spread of items in the bag once, so the menu's grid has icons to show.
+        static bool filled = false;
+        if (!filled) {
+            filled = true;
+            CDngStatusData *status = reinterpret_cast<CDngStatusData *>(BtlMenuStatusPt);
+            for (int id = 132; id < 160; id++) {
+                status->GetItem(id, 1);
+            }
+            for (int id = 81; id < 100; id++) {
+                status->GetItem(id, 1);
+            }
+        }
+    }
 
     if (info == nullptr) {
         return nullptr;

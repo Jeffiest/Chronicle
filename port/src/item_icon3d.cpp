@@ -220,6 +220,10 @@ bool Render(int item_no, CTexture &out) {
         gfx::SetRenderTarget(previous);
         gfx::BlitTexture(scratch, from, target, {0, 0, kIconSize, kIconSize}, gfx::Filter::Linear);
     }
+    if (EnvOn("DC_ITEM_ICONS_3D_SCRATCH") && previous != gfx::kNullTexture) {
+        // Diagnostic: show the scratch render itself in the corner of the picture.
+        gfx::BlitTexture(scratch, {0, 0, 640, 480}, previous, {0, 0, 320, 240}, gfx::Filter::Linear);
+    }
     mgRenderInfo = saved;
     TexManager.DeleteTextureBlock(kBlock);
     g_frame = nullptr;

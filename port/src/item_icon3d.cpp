@@ -275,6 +275,14 @@ bool Render(int item_no, CTexture &out) {
             }
         }
         view[1] = best_turn;
+        // Everything but weapons reads better turned a little more to the left than the widest face has it.
+        if (item_no < ITEM_WEAPON_START) {
+            float offset = -0.2618f;
+            if (const char *text = std::getenv("DC_ITEM_ICONS_3D_ITEM_TURN")) {
+                offset = static_cast<float>(std::atof(text));
+            }
+            view[1] += offset;
+        }
         root.SetRotation(view[0], view[1], view[2]);
         measure();
     }

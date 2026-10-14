@@ -39,7 +39,7 @@ namespace {
 
 constexpr int         kIconSize = 32;
 constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
-constexpr float       kFill = 168.0f; // pixels across the model inside the crop
+constexpr float       kFill = 118.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -240,16 +240,31 @@ bool Render(int item_no, CTexture &out) {
     // Turned bound: the picture's extent is that of the box's eight corners, not of its sphere, so long thin
     // things fill the cell along the diagonal they lie on.
     float rotated[4] = {0, 0, 0, 1};
-    float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
-    for (int c = 0; c < 8; c++) {
-        float corner[4] = {(c & 1) ? box.max[0] : box.min[0], (c & 2) ? box.max[1] : box.min[1],
-                           (c & 4) ? box.max[2] : box.min[2], 1.0f};
-        float world[4];
-        g_frame->GetWorldPosition(world, corner);
+    float lo[3], hi[3];
+    auto  measure = [&]() {
         for (int i = 0; i < 3; i++) {
-            lo[i] = std::min(lo[i], world[i]);
-            hi[i] = std::max(hi[i], world[i]);
+            lo[i] = 1e30f;
+            hi[i] = -1e30f;
         }
+        for (int c = 0; c < 8; c++) {
+            float corner[4] = {(c & 1) ? box.max[0] : box.min[0], (c & 2) ? box.max[1] : box.min[1],
+                               (c & 4) ? box.max[2] : box.min[2], 1.0f};
+            float world[4];
+            g_frame->GetWorldPosition(world, corner);
+            for (int i = 0; i < 3; i++) {
+                lo[i] = std::min(lo[i], world[i]);
+                hi[i] = std::max(hi[i], world[i]);
+            }
+        }
+    };
+    measure();
+    // Long and thin as seen (weapons, keys, rods): lay it along the diagonal, which is how the retail icons draw them,
+    // and which fills a square cell the best.
+    const float width = hi[0] - lo[0], height = hi[1] - lo[1];
+    if (!shape_pose && (width > 2.0f * height || height > 2.0f * width)) {
+        view[2] += width > height ? 0.785f : -0.785f;
+        root.SetRotation(view[0], view[1], view[2]);
+        measure();
     }
     for (int i = 0; i < 3; i++) {
         rotated[i] = (lo[i] + hi[i]) * 0.5f;

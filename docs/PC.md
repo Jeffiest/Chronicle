@@ -123,6 +123,8 @@ key is optional; these are the defaults:
         "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
         "qte_always_win": false,    // button-prompt events (event battles) still play, but always end in a perfect
         "element_quick_select": false, // D-pad Up in a dungeon opens the quick-change menu as an element picker
+        "swap_keeps_lock_on": false, // switching characters with SELECT keeps the lock-on
+        "text_wipe": false,         // developer tool: F9 splits the screen between picture text and runtime text (docs/TEXTWIPE.md)
         "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
         "message_speed": "normal",  // normal or fast
         "clock": true,              // the town clock
@@ -202,8 +204,13 @@ the player steps and draws (retail: the two nearest in front of the camera,
 within 150). A dungeon monster within it of the player draws and animates
 while still dormant: it wakes, acts, and shows on the map only at its own
 clip distance (300 unless its script sets one) and under retail's limit of
-four awake at once. The overhead view of georama mode keeps its coarse
-models, and the 1200 cull of far town parts is unchanged.
+four awake at once. The 1200 cull of far town parts is unchanged.
+
+Georama mode draws the town's parts at the levels of detail walking does, and
+the part on the cursor at its finest. Retail's `MainDraw`
+(`ps2/src/editloop.cpp:2125`) pinned every part and fixed part to level 3, its
+coarsest model, in georama mode, and `LoadObjectParts` made the cursor's part
+that level too. Every part's four levels are loaded in both modes.
 
 `video.shadow_distance` is how deep into the view a town part (a house, a
 tree, a fixed part) casts its shadow at full strength; past it the game's own
@@ -219,6 +226,16 @@ drops its shadow past it. A part within `shadow_distance` belongs to the near
 band with the precise program (`port/src/editground.cpp`). The characters'
 shadows have no such distances, the overhead view of georama mode keeps its
 own faint shadows, and a map whose `SHADOW_LEVEL` is 0 still has none.
+
+Retail draws the town's characters and shadows after its soft focus
+(`EdDrawDOF`, `ps2/src/editloop.cpp:2212`), so they are never softened, and
+it drew few of them far enough for that to show. The villagers that
+`detail_distance` keeps past retail's 150 from the player, with their
+shadows, and the part shadows that `shadow_distance` moves into the near band
+past `shadow_near` are drawn before the soft focus instead, which softens
+them with the scenery around them (`EdDrawBeyondRetailReach`,
+`port/src/editloop.cpp`). The player, the villagers retail draws and the
+shadows of its own bands keep retail's place after it.
 
 `video.vsync` is shorthand for `present_mode`: `true` is `fifo`, `false`
 `immediate`. A binding is one name or a list of names. The `bindings` shown
@@ -914,6 +931,10 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
   scene) is stretched to the window's edges instead, so it no longer leaves the
   frame's sides bare; textured HUD pieces and 4:3 pictures that do not cover the
   whole frame (the floor select's backdrop, 640x448 at y 16) are not.
+  Since Kazarov `5bec132` the flanks sample with clamped wrap whatever the
+  draw's wrap, so a full-frame draw of a repeating texture repeats its edge
+  texels past the frame instead of tiling there (no seam at the frame's
+  border); 4:3 windows are unchanged.
   `video.ui_scale` scales the depthless 2D about the window's centre.
 - **HUD.** The pieces that sit by an edge of the frame keep their distance to
   that edge of the window instead, at their own size (`gfx::UiAnchor`,
@@ -1130,6 +1151,13 @@ flag when state cannot supply one. If that state write fails, it reports the
 failure to stderr and still loads the valid save. Saving and the ending's
 state write explicitly record the current game's clear flag.
 
+The autosave is `<save>/saves/autosave/save.dat`, the same image as a
+numbered save. It is written over whenever a town starts without an event,
+the only place retail lets the game be saved, and never by the save screen.
+The load screen lists it first, its board reading "Auto"; loading it leaves
+`last_save` on the last numbered save. Headless and `--jump` runs do not
+write it.
+
 `port/src/memorycardaccess.cpp` replaces the operations of
 `CMemoryCardAccess` with plain reads and writes of these files
 (`port/src/save_slots.cpp` names and lists them, `port/src/platform/save_state.cpp`
@@ -1310,7 +1338,7 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 
 | Page | Rows |
 |---|---|
-| Game | save cursor position, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select |
+| Game | save cursor position, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select, swap keeps lock-on |
 | Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
 | Audio | volume, sound (mono, stereo or surround), soundtrack (PS2 or custom) |
 | Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, vertical return, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
@@ -1458,7 +1486,7 @@ The hit areas are the places the pages draw their brackets at (`ItemMenuModeDraw
 `SetPacketReadBuffer` (`dataset.cpp`, `dataalloc2_1.cpp`) give each arena its
 own block, an ordinary anonymous mapping wherever the system puts it
 (`tools/kazarov/port/platform/memory.hpp`), sized at four times the quadwords retail
-asked for (`kArenaHeadroom`, `port/src/arena.hpp`), because the game sizes
+asked for (`kArenaHeadroom`, `tools/kazarov/port/platform/arena.hpp`, shared with Dark Chronicle), because the game sizes
 allocations with the host's larger `sizeof`s. A guard page follows each
 block, and an overflow aborts naming the arena instead of retail's endless
 loop. A debug build stops when no block lies above 4 GiB, so a mapping that

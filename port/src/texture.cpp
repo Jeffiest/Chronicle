@@ -7,9 +7,10 @@
 #include <filesystem>
 #include <string>
 
+#include "caption_text.hpp"
 #include "dataalloc.hpp"
-#include "mglib.hpp"
 #include "localize_texture.hpp"
+#include "mglib.hpp"
 #include "texture_assets.hpp"
 #include "texture_port.hpp"
 #include "tim2.hpp"
@@ -353,6 +354,7 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
         if (!LocalizeTexture(name, decoded)) {
             TextureAssetApply(name, decoded);
         }
+        caption::PreparePainted(name, decoded);
         MakeGroundPeriodic(name, decoded);
         DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
@@ -456,6 +458,7 @@ PORT_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
     unsigned           cbp = 0;
     if (PortDecodeTexture(1, width, height, levels, 1, clut, 256, false, decoded)) {
         LocalizeTexture(name, decoded);
+        caption::PreparePainted(name, decoded);
         DumpTexture(name, decoded);
         tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
     }

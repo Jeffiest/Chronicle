@@ -13,11 +13,12 @@
 
 #include "battle_globals.hpp"
 #include "btsysscript.hpp"
+#include "caption_text.hpp"
 #include "dataread.hpp"
 #include "dataread_port.hpp"
 #include "dataset.hpp"
-#include "draw2d_port.hpp"
 #include "dngstatusdata.hpp"
+#include "draw2d_port.hpp"
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
 #include "exitcodes.hpp"
@@ -25,6 +26,7 @@
 #include "gamepad.hpp"
 #include "gametext.hpp"
 #include "langset.hpp"
+#include "localize.hpp"
 #include "main.hpp"
 #include "mainselect.hpp"
 #include "menu_option.hpp"
@@ -33,14 +35,16 @@
 #include "mglib_port.hpp"
 #include "nowload.hpp"
 #include "platform/clock.hpp"
-#include "localize.hpp"
 #include "platform/config.hpp"
 #include "platform/input.hpp"
 #include "platform/overlay.hpp"
+#include "platform/paths.hpp"
 #include "presence.hpp"
+#include "save_slots.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
 #include "texture.hpp"
+#include "textwipe.hpp"
 #include "title/opening.hpp"
 #include "title/rushmovi.hpp"
 #include "title/title.hpp"
@@ -95,11 +99,13 @@ struct FpsOverlay {
     std::string         text;
     gfx::LogicalMapping mapping = {};
     gfx::DisplayListRef list;
+    bool                font = false;
 };
 
 FpsOverlay g_fps;
 
 void PollFpsToggle() {
+    textwipe::Update();
     if (InputHostPressed(InputHostAction::FpsToggle)) {
         g_fps.on = !g_fps.on;
     }
@@ -150,7 +156,9 @@ const gfx::DisplayList *FpsOverlayList() {
     }
     std::string         text = GameFpsText();
     gfx::LogicalMapping mapping = gfx::GetLogicalMapping(gfx::kMainTarget);
-    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping)) {
+    const bool          font = caption::Ready();
+    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping) || font != g_fps.font) {
+        g_fps.font = font;
         g_fps.list = OverlayRecord(text);
         g_fps.text = std::move(text);
         g_fps.mapping = mapping;
@@ -197,6 +205,7 @@ struct Jump {
 
 Jump g_jump;
 bool g_fast_load;
+bool g_autosave;
 int g_developer_return_mode = GAME_MODE_TITLE;
 int g_developer_return_map = 800;
 int g_developer_return_local_map = 0;
@@ -647,6 +656,10 @@ void GameEnterDeveloperMenu() {
     std::fprintf(stderr, "debug mode: start + select, the developer menu\n");
 }
 
+void GameSetAutosave(bool on) {
+    g_autosave = on;
+}
+
 void GameSetFastLoad(bool fast) {
     g_fast_load = fast;
 }
@@ -895,6 +908,7 @@ int RunGame(int argc, char **argv) {
 
         // A save loaded since the last mode brought its own options.
         GameOptionsApply(ConfigGet().options);
+        bool event_start = StartEventNo >= 0;
         ModeInit(title_ran, exist_data, skip_title);
 
         NextMapNo = -1;
@@ -907,6 +921,9 @@ int RunGame(int argc, char **argv) {
         ClockSyncV();
         MGPortCutInterpolation();
         *reinterpret_cast<s32 *>(reinterpret_cast<char *>(SaveData) + kSaveMapNoOffset) = MapNo;
+        if (g_autosave && mode == GAME_MODE_EDIT && !event_start && !SaveSlotWriteAutosave()) {
+            std::fprintf(stderr, "autosave: could not write %s\n", PathsDisplay(SaveSlotPath(kSaveSlotAutosave)).c_str());
+        }
 
         int result;
         do {

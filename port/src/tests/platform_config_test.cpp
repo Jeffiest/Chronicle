@@ -642,6 +642,14 @@ TEST(PlatformConfig, QteAlwaysWin) {
     ASSERT_TRUE(!ConfigParse(R"({"game": {"qte_always_win": "yes"}})").qte_always_win);
 }
 
+TEST(PlatformConfig, TextWipe) {
+    ASSERT_TRUE(!ConfigParse("").text_wipe);
+    Config config = ConfigParse(R"({"game": {"text_wipe": true}})");
+    ASSERT_TRUE(config.text_wipe);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).text_wipe);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"text_wipe": "yes"}})").text_wipe);
+}
+
 TEST(PlatformConfig, Anisotropy) {
     ASSERT_TRUE(ConfigParse("").anisotropy == 0);
     ASSERT_TRUE(ConfigParse(R"({"video": {"anisotropy": 16}})").anisotropy == 16);
@@ -655,6 +663,14 @@ TEST(PlatformConfig, ElementPicker) {
     ASSERT_TRUE(config.element_quick_select);
     ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).element_quick_select);
     ASSERT_TRUE(!ConfigParse(R"({"game": {"element_quick_select": "yes"}})").element_quick_select);
+}
+
+TEST(PlatformConfig, SwapKeepsLockOn) {
+    ASSERT_TRUE(!ConfigParse("").swap_keeps_lock_on);
+    Config config = ConfigParse(R"({"game": {"swap_keeps_lock_on": true}})");
+    ASSERT_TRUE(config.swap_keeps_lock_on);
+    ASSERT_TRUE(ConfigParse(ConfigSerialize(config)).swap_keeps_lock_on);
+    ASSERT_TRUE(!ConfigParse(R"({"game": {"swap_keeps_lock_on": "yes"}})").swap_keeps_lock_on);
 }
 
 TEST(PlatformConfig, TextFont) {

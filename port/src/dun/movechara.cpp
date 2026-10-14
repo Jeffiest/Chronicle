@@ -185,6 +185,11 @@ extern float stickVector;
 extern float stickVector2;
 extern s32 targetCursorShiftNo;
 extern s32 targetCursorShiftRot;
+
+// The lock-on taken into the quick change (game.swap_keeps_lock_on), or -1.
+static s32 quickChangeLockOn = -1;
+static s32 quickChangeShiftNo;
+static s32 quickChangeShiftRot;
 extern s32 tryalExit;
 extern sceVu0FVECTOR velo2;
 extern sceVu0FVECTOR veloOld;
@@ -435,6 +440,9 @@ PORT_OVERRIDE void DunMoveChara() {
                                     ElementPickerHasChoice();
 
                     if ((party || elements) && BtActStatus.action_on == 0) {
+                        quickChangeLockOn = ConfigGet().swap_keeps_lock_on && lockOnTargetFlag != 0 ? lockOnTargetNo : -1;
+                        quickChangeShiftNo = targetCursorShiftNo;
+                        quickChangeShiftRot = targetCursorShiftRot;
                         QuickChangeOpenElements(elements);
                         DngMessMan.enabled = false;
                         DngMessMan.message = -1;
@@ -2653,6 +2661,20 @@ PORT_OVERRIDE void DunMoveChara() {
             break;
         case GAME_TASK_CHARA_SELECT_LOOP:
             if (BtMiniChrSelect_Loop() != 0) {
+                // CharaChangeKey drops the lock-on; it comes back if its monster can still be locked on.
+                if (quickChangeLockOn >= 0) {
+                    MONSTOR &locked = NowMonstorUnit->monster[quickChangeLockOn];
+
+                    if (locked.state == 2 && locked.hp > 0 && locked.lockon_enabled != 0) {
+                        lockOnTargetNo = quickChangeLockOn;
+                        lockOnTargetFlag = 1;
+                        targetCursorShiftNo = quickChangeShiftNo;
+                        targetCursorShiftRot = quickChangeShiftRot;
+                    }
+
+                    quickChangeLockOn = -1;
+                }
+
                 if (BtMiniChrSelectNo == 2) {
                     ClearSystemMes();
                     driveStepHold = 1;
@@ -2978,6 +3000,37 @@ PORT_OVERRIDE void DunMoveChara() {
     motionDrive();
 }
 
+// The way hit hit_no throws the player, into velocity. A bomb's blast (SetBombEffect, the only hit that
+// waits for its phase to reach 10) keeps CCollisionData::Set's (1, 0, 0), so retail threw the player toward
+// world +X whichever side of it he stood; it throws him level and away from the blast, or straight back from
+// where he faces when it bursts on him. Any other hit throws him the way it was recorded.
+static void HitBlowVelocity(int hit_no, float *velocity) {
+    COLLISION_HIT &hit = NowColData->hit[hit_no];
+
+    sceVu0CopyVector(velocity, hit.velocity);
+
+    if (hit.ready_phase != 10) {
+        return;
+    }
+
+    float away_x = CharaMain.pos[0] - hit.pos[0];
+    float away_z = CharaMain.pos[2] - hit.pos[2];
+    float length = std::sqrt(away_x * away_x + away_z * away_z);
+
+    if (length < 0.1f) {
+        sceVu0FVECTOR rotation;
+
+        CharaFrame->GetRotation(rotation);
+        away_x = -std::sin(rotation[1]);
+        away_z = -std::cos(rotation[1]);
+        length = 1.0f;
+    }
+
+    velocity[0] = away_x / length;
+    velocity[1] = 0.0f;
+    velocity[2] = away_z / length;
+}
+
 PORT_OVERRIDE int BtCheckDamageProc() {
     sceVu0FVECTOR pos;
     sceVu0FVECTOR from;
@@ -3200,7 +3253,7 @@ PORT_OVERRIDE int BtCheckDamageProc() {
                 GamePad.SetVibration(1, 0xE6, 0x16);
 
                 if (BtActStatus.action_no == 9) {
-                    sceVu0CopyVector(blowVelo, NowColData->hit[hit_no].velocity);
+                    HitBlowVelocity(hit_no, blowVelo);
                     velo__2[0] = blowVelo[0] / 10.0f;
                     velo__2[2] = blowVelo[2] / 10.0f;
 
@@ -3224,7 +3277,7 @@ PORT_OVERRIDE int BtCheckDamageProc() {
                     number_pos[1] = CharaHeight(UserStatus);
                     HitValueEntry(NowHitValue, number_pos, damage, HIT_VALUE_PLAYER, CharaMain.frame);
 
-                    sceVu0CopyVector(blowVelo, NowColData->hit[hit_no].velocity);
+                    HitBlowVelocity(hit_no, blowVelo);
                     unitBlowActionRot(blowVelo);
 
                     if (NowColData->hit[hit_no].target_mask != 3) {

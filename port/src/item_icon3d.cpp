@@ -252,6 +252,15 @@ CTexture *ItemIcon3DTexture(int item_no) {
     if (!ItemIcons3DEnabled()) {
         return nullptr;
     }
+    if (!gfx::InFrame()) {
+        if (Debug()) {
+            static int said = 0;
+            if (said++ < 5) {
+                std::fprintf(stderr, "item icon 3d: item %d asked outside a frame, sheet icon for now\n", item_no);
+            }
+        }
+        return nullptr; // drawing is dropped outside a frame; ask again next time
+    }
     Icon &icon = g_icons[item_no];
     if (icon.failed) {
         return nullptr;

@@ -4,11 +4,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <string>
 #include <memory>
 #include <vector>
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 #include "btitem.hpp"
 #include "collision.hpp"
@@ -84,6 +86,7 @@ Work &GetWork() {
 }
 
 CFrame *g_frame = nullptr;
+std::string g_last_name;
 
 // Drawn by MenuPolygonDraw, which has set the menu camera's position and the lights.
 void DrawModel() {
@@ -220,13 +223,10 @@ bool Render(int item_no, CTexture &out) {
         gfx::SetRenderTarget(previous);
         gfx::BlitTexture(scratch, from, target, {0, 0, kIconSize, kIconSize}, gfx::Filter::Linear);
     }
-    if (EnvOn("DC_ITEM_ICONS_3D_SCRATCH") && previous != gfx::kNullTexture) {
-        // Diagnostic: show the scratch render itself in the corner of the picture.
-        gfx::BlitTexture(scratch, {0, 0, 640, 480}, previous, {0, 0, 320, 240}, gfx::Filter::Linear);
-    }
     mgRenderInfo = saved;
     TexManager.DeleteTextureBlock(kBlock);
     g_frame = nullptr;
+    g_last_name = name;
     if (Debug()) {
         std::fprintf(stderr, "item icon 3d: item %d %s radius %.2f scale %.3f ppu %.2f centre %d,%d\n", item_no, model_path,
                      radius, scale, pixels_per_unit, centre[0], centre[1]);
@@ -327,4 +327,23 @@ PORT_OVERRIDE CTexture *RetCTex(short item_no, int &u, int &v) {
     }
 
     return nullptr;
+}
+
+// Debug: with DC_ITEM_ICONS_3D_DUMP=<dir>, the scratch render and the newest icon are written there. Called outside a frame.
+void ItemIcons3DDumpDebug() {
+    const char *dir = std::getenv("DC_ITEM_ICONS_3D_DUMP");
+    if (dir == nullptr || g_last_name.empty()) {
+        return;
+    }
+    auto write = [&](const char *target_name, const char *file) {
+        gfx::TextureHandle texture = gfx::FindNamedRenderTarget(target_name);
+        std::vector<uint8_t> rgba;
+        uint32_t width = 0, height = 0;
+        if (texture != gfx::kNullTexture && gfx::ReadbackTexture(texture, rgba, width, height)) {
+            gfx::WritePng(std::filesystem::path(dir) / file, rgba.data(), width, height);
+        }
+    };
+    write(kScratch, "scratch.png");
+    write("item icon 3d half", "half.png");
+    write(g_last_name.c_str(), "icon.png");
 }

@@ -19,3 +19,5 @@ CTexture *ItemIcon3DTexture(int item_no);
 
 /// Debug: with DC_ITEM_ICONS_3D_SHEET=<page> set, draws every item's icon in a grid over the screen (page 0 or 1).
 void ItemIcons3DDrawSheet();
+
+void ItemIcons3DDumpDebug();

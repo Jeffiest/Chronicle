@@ -7,7 +7,11 @@
 #include <memory>
 #include <vector>
 
+#include <algorithm>
+#include <cmath>
+
 #include "btitem.hpp"
+#include "collision.hpp"
 #include "btmisc.hpp"
 #include "dataread.hpp"
 #include "dun/gameloop.hpp"
@@ -28,6 +32,8 @@
 namespace {
 
 constexpr int         kIconSize = 32;
+constexpr int         kCrop = 128;  // scratch pixels turned into one icon (4x4 each)
+constexpr float       kFill = 112.0f; // pixels across the model inside the crop
 constexpr int         kBlock = 0x47; // a texture block nothing else loads into
 constexpr std::size_t kModelBytes = 8u << 20;
 constexpr std::size_t kImageBytes = 4u << 20;
@@ -147,30 +153,79 @@ bool Render(int item_no, CTexture &out) {
         TexManager.DeleteTextureBlock(kBlock);
         return false;
     }
-    const float scale = 3.0f;
-    float       position[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-    g_frame->SetRotation(0.0f, 0.0f, 0.0f);
-    g_frame->SetScale(scale, scale, scale);
-    g_frame->SetPosition(position);
+    // Frame the model: centre its bound on the origin, turn it so its long side runs corner to corner, and scale it
+    // so the bound's sphere fills kFill pixels of the scratch target.
+    CBoxVu0 box;
+    g_frame->GetBoundBox(&box, 1);
+    float ext[3], mid[4];
+    for (int i = 0; i < 3; i++) {
+        ext[i] = box.max[i] - box.min[i];
+        mid[i] = (box.max[i] + box.min[i]) * 0.5f;
+    }
+    mid[3] = 1.0f;
+    float radius = 0.5f * std::sqrt(ext[0] * ext[0] + ext[1] * ext[1] + ext[2] * ext[2]);
+    if (!(radius > 0.0001f)) {
+        radius = 1.0f;
+    }
+    // Long axis: x or y long becomes a diagonal in the picture, z long (pointing at the camera) is laid down first.
+    float rx = 0.35f, ry = 0.0f, rz = 0.0f;
+    if (ext[2] > ext[0] && ext[2] > ext[1]) {
+        rx = 1.2f;
+        rz = 0.785f;
+    } else {
+        rz = 0.785f;
+    }
+    g_frame->SetRotation(rx, ry, rz);
+    g_frame->SetScale(1.0f, 1.0f, 1.0f);
+    float origin[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    g_frame->SetPosition(origin);
+    float rotated[4];
+    g_frame->GetWorldPosition(rotated, mid);
 
     RenderInfo saved = mgRenderInfo;
     const gfx::TextureHandle previous = gfx::CurrentRenderTarget();
     gfx::SetRenderTarget(scratch);
     const uint8_t none[4] = {};
+
+    // Pixels per world unit at the origin, from one trial draw, which also puts the camera in place for the projection.
+    static float pixels_per_unit = 0.0f;
+    if (pixels_per_unit <= 0.0f) {
+        gfx::Clear(true, none, true, 1.0f);
+        MenuPolygonDraw(0x80, DrawModel);
+        float a[4] = {0, 0, 0, 1}, c[4] = {10.0f, 0, 0, 1};
+        int   pa[4], pc[4];
+        MGRotTransPers2D(pa, a, 0);
+        MGRotTransPers2D(pc, c, 0);
+        pixels_per_unit = std::fabs(static_cast<float>(pc[0] - pa[0])) / 10.0f;
+        if (pixels_per_unit <= 0.0f) {
+            pixels_per_unit = 3.0f;
+        }
+    }
+    const float scale = (kFill * 0.5f) / (pixels_per_unit * radius);
+    g_frame->SetScale(scale, scale, scale);
+    float position[4] = {-rotated[0] * scale, -rotated[1] * scale, -rotated[2] * scale, 1.0f};
+    g_frame->SetPosition(position);
     gfx::Clear(true, none, true, 1.0f);
     MenuPolygonDraw(0x80, DrawModel);
     int centre[2] = {320, 240};
     Get3DPosTo2DPos(g_frame, centre);
-    gfx::SetRenderTarget(previous);
+    // Supersample down in exact halves: kCrop -> kCrop/2 -> the icon.
+    gfx::TextureHandle half = gfx::NamedRenderTarget("item icon 3d half", kCrop / 2, kCrop / 2, true);
+    const gfx::Rect from = {320 - kCrop / 2, 240 - kCrop / 2, kCrop, kCrop};
+    if (half != gfx::kNullTexture) {
+        gfx::SetRenderTarget(previous);
+        gfx::BlitTexture(scratch, from, half, {0, 0, kCrop / 2, kCrop / 2}, gfx::Filter::Linear);
+        gfx::BlitTexture(half, {0, 0, kCrop / 2, kCrop / 2}, target, {0, 0, kIconSize, kIconSize}, gfx::Filter::Linear);
+    } else {
+        gfx::SetRenderTarget(previous);
+        gfx::BlitTexture(scratch, from, target, {0, 0, kIconSize, kIconSize}, gfx::Filter::Linear);
+    }
     mgRenderInfo = saved;
-
-    const int half = 96;
-    gfx::Rect from = {centre[0] - half, centre[1] - half, half * 2, half * 2};
-    gfx::BlitTexture(scratch, from, target, {0, 0, kIconSize, kIconSize}, gfx::Filter::Linear);
     TexManager.DeleteTextureBlock(kBlock);
     g_frame = nullptr;
     if (Debug()) {
-        std::fprintf(stderr, "item icon 3d: item %d %s centre %d,%d\n", item_no, model_path, centre[0], centre[1]);
+        std::fprintf(stderr, "item icon 3d: item %d %s radius %.2f scale %.3f ppu %.2f centre %d,%d\n", item_no, model_path,
+                     radius, scale, pixels_per_unit, centre[0], centre[1]);
     }
 
     out.block = -1;

@@ -16,6 +16,7 @@
 #include "gameloop.hpp"
 #include "gamemode.hpp"
 #include "gfx/gfx.hpp"
+#include "identity.hpp"
 #include "langset.hpp"
 #include "localize.hpp"
 #include "menu_option.hpp"
@@ -31,7 +32,9 @@
 #include "platform/input.hpp"
 #include "platform/input_script.hpp"
 #include "platform/paths.hpp"
+#include "platform/settings.hpp"
 #include "platform/window.hpp"
+#include "screen.hpp"
 #include "snd.hpp"
 #include "title/opening.hpp"
 #include "title/rushmovi.hpp"
@@ -362,6 +365,7 @@ int Screenshot(const char *path) {
 }
 
 int Run(int argc, const char **argv) {
+    GameSetIdentity();
     argc = PathsConsumeArgs(argc, argv);
     g_options = ParseOptions(argc, argv);
     Options &options = g_options;
@@ -380,9 +384,13 @@ int Run(int argc, const char **argv) {
         std::fprintf(stderr, "bad --jump: %s\n", options.jump);
         std::exit(kExitUsage);
     }
+    GameSetAutosave(!options.headless && (options.jump == nullptr || *options.jump == '\0'));
     const char *fast_load = std::getenv("DC_FAST_LOAD");
     GameSetFastLoad(options.fast_load || (fast_load != nullptr && *fast_load != '\0' && *fast_load != '0'));
     RequireData();
+    if (!options.headless) {
+        GameSetDataIcon();
+    }
     if (options.font != nullptr) {
         LocalizeSetFontPath(PathsFromUtf8(options.font));
     }
@@ -415,11 +423,16 @@ int Run(int argc, const char **argv) {
     InputInit();
 
     gfx::RendererConfig renderer;
+    renderer.app_name = "Dark Cloud";
+    renderer.logical_width = kScreenWidth;
+    renderer.logical_height = kScreenHeight;
+    renderer.display_aspect = 4.0f / 3.0f;
     renderer.present_mode = PresentMode(config.present_mode);
     renderer.pipeline_cache = PathsSaveRoot() / "pipeline_cache.bin";
     renderer.progress = ReportShaderProgress;
     renderer.offscreen = offscreen;
     renderer.layout = Layout(config);
+    renderer.validation = renderer.validation || SettingsEnv("VULKAN_VALIDATION") != nullptr;
     gfx::RendererInit(WindowHandle(), renderer);
     gfx::SetAnisotropy(config.anisotropy);
 
@@ -434,7 +447,7 @@ int Run(int argc, const char **argv) {
     ApplyDiscord(config);
     GameSetPresentSettings(PresentSettings(config));
     ConfigAddChangeHook(ApplyConfigChange);
-    ConfigAddChangeHook(DisplayChanged);
+    ConfigAddChangeHook(ConfigDisplayChanged);
     ConfigAddChangeHook(GameOptionsChanged);
     ConfigAddChangeHook(LocalizeConfigChanged);
 
@@ -446,7 +459,7 @@ int Run(int argc, const char **argv) {
 
     ConfigRemoveChangeHook(LocalizeConfigChanged);
     ConfigRemoveChangeHook(GameOptionsChanged);
-    ConfigRemoveChangeHook(DisplayChanged);
+    ConfigRemoveChangeHook(ConfigDisplayChanged);
     ConfigRemoveChangeHook(ApplyConfigChange);
     ClockRemovePumpHook(PumpHost);
     DiscordStop();

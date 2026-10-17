@@ -32,7 +32,7 @@ same.
 It needs clang 20 with lld, Python 3, CMake 3.28, Ninja,
 `glslangValidator`, SDL3 (3.4) and the Vulkan 1.4 headers and loader, and at
 run time a device with Vulkan 1.3 or later, `dualSrcBlend` and `shaderClipDistance`
-(any desktop driver; Mesa's lavapipe in CI; `port/src/gfx/README.md`, "Device", has the whole list). `.github/workflows/pc.yml` is a
+(any desktop driver; Mesa's lavapipe in CI; `tools/kazarov/port/gfx/README.md`, "Device", has the whole list). `.github/workflows/pc.yml` is a
 complete recipe on Ubuntu 26.04.
 
 The game's files come from the disc (see "Game data"). Without them a
@@ -123,6 +123,8 @@ key is optional; these are the defaults:
         "debug_mode": false,        // Start with debug controls off; the debug toggle chord enables them
         "qte_always_win": false,    // button-prompt events (event battles) still play, but always end in a perfect
         "element_quick_select": false, // D-pad Up in a dungeon opens the quick-change menu as an element picker
+        "swap_keeps_lock_on": false, // switching characters with SELECT keeps the lock-on
+        "text_wipe": false,         // developer tool: F9 splits the screen between picture text and runtime text (docs/TEXTWIPE.md)
         "save_cursor_position": true, // the game's own options, for every save (see "The Options screen")
         "message_speed": "normal",  // normal or fast
         "clock": true,              // the town clock
@@ -202,8 +204,13 @@ the player steps and draws (retail: the two nearest in front of the camera,
 within 150). A dungeon monster within it of the player draws and animates
 while still dormant: it wakes, acts, and shows on the map only at its own
 clip distance (300 unless its script sets one) and under retail's limit of
-four awake at once. The overhead view of georama mode keeps its coarse
-models, and the 1200 cull of far town parts is unchanged.
+four awake at once. The 1200 cull of far town parts is unchanged.
+
+Georama mode draws the town's parts at the levels of detail walking does, and
+the part on the cursor at its finest. Retail's `MainDraw`
+(`ps2/src/editloop.cpp:2125`) pinned every part and fixed part to level 3, its
+coarsest model, in georama mode, and `LoadObjectParts` made the cursor's part
+that level too. Every part's four levels are loaded in both modes.
 
 `video.shadow_distance` is how deep into the view a town part (a house, a
 tree, a fixed part) casts its shadow at full strength; past it the game's own
@@ -219,6 +226,16 @@ drops its shadow past it. A part within `shadow_distance` belongs to the near
 band with the precise program (`port/src/editground.cpp`). The characters'
 shadows have no such distances, the overhead view of georama mode keeps its
 own faint shadows, and a map whose `SHADOW_LEVEL` is 0 still has none.
+
+Retail draws the town's characters and shadows after its soft focus
+(`EdDrawDOF`, `ps2/src/editloop.cpp:2212`), so they are never softened, and
+it drew few of them far enough for that to show. The villagers that
+`detail_distance` keeps past retail's 150 from the player, with their
+shadows, and the part shadows that `shadow_distance` moves into the near band
+past `shadow_near` are drawn before the soft focus instead, which softens
+them with the scenery around them (`EdDrawBeyondRetailReach`,
+`port/src/editloop.cpp`). The player, the villagers retail draws and the
+shadows of its own bands keep retail's place after it.
 
 `video.vsync` is shorthand for `present_mode`: `true` is `fifo`, `false`
 `immediate`. A binding is one name or a list of names. The `bindings` shown
@@ -256,7 +273,7 @@ next one.
 ### Keyboard and mouse
 
 The keyboard and the mouse drive pad 1 next to the first gamepad
-(`port/src/platform/input.cpp`, `mouse.cpp`); a second gamepad is pad 2.
+(`tools/kazarov/port/platform/input.cpp`, `mouse.cpp`); a second gamepad is pad 2.
 The defaults, and what the game does with each button (PAL, English: the
 dungeon's `PadInput_OK` is cross and `PadInput_NO` circle,
 `ps2/src/dun/gameloop.cpp:1666`):
@@ -485,7 +502,7 @@ the item viewer) and the event script's `GET_APAD` read the stick alone.
 
 ### Scripted input
 
-`--input FILE` (`port/src/platform/input_script.cpp`) replaces the pads with
+`--input FILE` (`tools/kazarov/port/platform/input_script.cpp`) replaces the pads with
 a script, through `InputSetOverride`. Each line is
 
 ```
@@ -732,7 +749,7 @@ with the hardware taken out, line for line otherwise:
 ### Ticks and display frames
 
 The game logic runs at the fixed tick rate; the window is presented at its own
-rate, with motion interpolated between ticks (`port/src/gfx/README.md`,
+rate, with motion interpolated between ticks (`tools/kazarov/port/gfx/README.md`,
 "Display lists"):
 
 1. `MGBeginFrame` starts recording the tick's display list: what the game draws,
@@ -780,7 +797,7 @@ With `video.show_fps` (on by default; `fps_toggle`, F3, flips it at any
 time), every presented frame carries one line at the window's top-left
 corner, in the game's own message font (white with a black edge, as the menus
 draw their text) while a mode has the font's textures loaded, and in the
-port's 5x7 font (`port/src/platform/overlay.cpp`, white on a translucent black
+port's 5x7 font (`tools/kazarov/port/platform/overlay.cpp`, white on a translucent black
 backdrop, on whole pixels: one per logical unit, rounded) on the loading
 screens and between modes, where it has not:
 
@@ -829,7 +846,7 @@ that mode's `case`: the developer menu sets `mode` itself and returns 1.
 
 ## Platform
 
-`port/src/platform`, `port/src/gfx` and `port/src/audio` are the host side.
+The host side is Kazarov's `tools/kazarov/port` (`gfx`, `audio`, `platform`, `sce`); `port/src/platform` keeps the game's config, firstrun, discord and save_state.
 They build as `dc_host` without `port.h` or the game's include paths, so no
 game header or SDK type reaches them. Game types meet them only in the
 replacement units.
@@ -876,12 +893,12 @@ replacement units.
 
 ## Rendering
 
-`port/src/gfx` is a Vulkan 1.3+ renderer: one graphics queue that presents,
+`tools/kazarov/port/gfx` is a Vulkan 1.3+ renderer: one graphics queue that presents,
 two frames in flight, dynamic rendering, synchronization2, a bindless texture
 array, every pipeline created at start-up against the on-disk pipeline
 cache, reverse-Z D32 depth with stencil, an immediate 2D API in the game's 640x480 logical
 space (centred in the window) and a mesh API in 3D, named render targets,
-copies, blits, depth readback and screenshots. `port/src/gfx/README.md` is its
+copies, blits, depth readback and screenshots. `tools/kazarov/port/gfx/README.md` is its
 contract: spaces, colour and alpha units, how the GS blend equation maps to
 Vulkan blending and where it does not.
 
@@ -908,16 +925,20 @@ shape. With `video.aspect` `auto` the rest of the window is not bars:
 - **2D** stays in logical space. Full-frame 2D (fades, the screen filter's
   `MGFillBox`, the previous-frame feedback, frame grabs drawn back; the loading
   screen clears the whole window) reaches the window's edges by the rule in
-  `port/src/gfx/README.md`, "Aspect": an untextured or frame-image rectangle that
+  `tools/kazarov/port/gfx/README.md`, "Aspect": an untextured or frame-image rectangle that
   reaches an edge of the frame from inside is carried to the window's edge. A
   4:3 picture that covers the whole frame (the cutscenes' stills over the 3D
   scene) is stretched to the window's edges instead, so it no longer leaves the
   frame's sides bare; textured HUD pieces and 4:3 pictures that do not cover the
   whole frame (the floor select's backdrop, 640x448 at y 16) are not.
+  Since Kazarov `5bec132` the flanks sample with clamped wrap whatever the
+  draw's wrap, so a full-frame draw of a repeating texture repeats its edge
+  texels past the frame instead of tiling there (no seam at the frame's
+  border); 4:3 windows are unchanged.
   `video.ui_scale` scales the depthless 2D about the window's centre.
 - **HUD.** The pieces that sit by an edge of the frame keep their distance to
   that edge of the window instead, at their own size (`gfx::UiAnchor`,
-  `port/src/gfx/README.md`, "Aspect"): the dungeon's status panel (life, weapon
+  `tools/kazarov/port/gfx/README.md`, "Aspect"): the dungeon's status panel (life, weapon
   and water to the top left, the quick items top centre, the floor plate and the
   mini map to the top right, the weapon's portrait and gauge to the bottom left;
   `DrawGame`, `port/src/dun/gameloop.cpp`) and the town's clock (top right;
@@ -1034,7 +1055,7 @@ share small internal headers:
 
 ## Audio
 
-All music and effects are sequenced. `port/src/audio` decodes VAG ADPCM,
+All music and effects are sequenced. `tools/kazarov/port/audio` decodes VAG ADPCM,
 parses HD banks and SQ sequences, and runs a sixteen-port MIDI player into a
 48-voice synth with envelopes and an approximated reverb (`audio::Mixer`).
 `port/src/sound.cpp` replaces `CSound` (bank and sequence transfers, play,
@@ -1130,11 +1151,18 @@ flag when state cannot supply one. If that state write fails, it reports the
 failure to stderr and still loads the valid save. Saving and the ending's
 state write explicitly record the current game's clear flag.
 
+The autosave is `<save>/saves/autosave/save.dat`, the same image as a
+numbered save. It is written over whenever a town starts without an event,
+the only place retail lets the game be saved, and never by the save screen.
+The load screen lists it first, its board reading "Auto"; loading it leaves
+`last_save` on the last numbered save. Headless and `--jump` runs do not
+write it.
+
 `port/src/memorycardaccess.cpp` replaces the operations of
 `CMemoryCardAccess` with plain reads and writes of these files
 (`port/src/save_slots.cpp` names and lists them, `port/src/platform/save_state.cpp`
 reads and writes `state.json`); each finishes in the step that starts it. Every write goes through `FilesWrite`
-(`port/src/platform/files.cpp`): a temporary file of its own beside the
+(`tools/kazarov/port/platform/files.cpp`): a temporary file of its own beside the
 target, `<target>.<16 hex digits>.tmp`, created exclusively, written,
 flushed to the disk and closed, then moved onto the target. Until that move
 the target keeps what it held. Removing the temporary file after a failure
@@ -1172,7 +1200,10 @@ conversion of NTSC 1.0 saves do nothing.
 The save screens (`port/src/memcard.cpp`, `port/src/menu_save.cpp`) keep
 retail's steps, less the card:
 
-- The card choice is gone: the screen opens on its list.
+- The card choice is gone: the screen opens on its list. In town, the pause
+  menu's Save entry (`SAVE/LOAD`) asks whether to save or load before opening
+  the screen; loading a save from town reloads the saved area, inventory, and
+  Georama state just as loading from the title screen does.
 - The boards are every readable save in file order, then, on the save
   screen only, one "New file" board, which saves to the lowest free N. File
   order keeps each board where it was from one visit to the next and matches
@@ -1310,7 +1341,7 @@ help. Retail's screen-position row is gone: `MGAdjustScreen` moves nothing on PC
 
 | Page | Rows |
 |---|---|
-| Game | save cursor position, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select |
+| Game | save cursor position, clock, time speed, dungeon map, enemy damage, party damage, enemy HP, names, Discord Rich Presence, element quick select, swap keeps lock-on |
 | Display | window mode, resolution (the monitor's own and the sizes that fit it), V-Sync (`fifo`, `mailbox`, `immediate`), frame limit, aspect ratio, interface size (`ui_scale`), smooth motion (`interpolation`), FPS counter, FPS info (`fps_detail`), anisotropic filter (`anisotropy`), soft focus |
 | Audio | volume, sound (mono, stereo or surround), soundtrack (PS2 or custom) |
 | Controls | vibration, mouse sensitivity (in hundredths below 1 and tenths above, whatever its unit), invert mouse Y, vertical return, mouse wheel zoom, reset zoom (its binding), stick sensitivity, invert stick X and Y, gyro, gyro sensitivity, invert gyro X and Y |
@@ -1457,8 +1488,8 @@ The hit areas are the places the pages draw their brackets at (`ItemMenuModeDraw
 `InitializeDataBuffer`, `BufferAllClear`, `SetDataBuffer` and
 `SetPacketReadBuffer` (`dataset.cpp`, `dataalloc2_1.cpp`) give each arena its
 own block, an ordinary anonymous mapping wherever the system puts it
-(`port/src/platform/memory.hpp`), sized at four times the quadwords retail
-asked for (`kArenaHeadroom`, `port/src/arena.hpp`), because the game sizes
+(`tools/kazarov/port/platform/memory.hpp`), sized at four times the quadwords retail
+asked for (`kArenaHeadroom`, `tools/kazarov/port/platform/arena.hpp`, shared with Dark Chronicle), because the game sizes
 allocations with the host's larger `sizeof`s. A guard page follows each
 block, and an overflow aborts naming the arena instead of retail's endless
 loop. A debug build stops when no block lies above 4 GiB, so a mapping that
@@ -1518,14 +1549,14 @@ widens it against the image's own address.
 
 ## What is still a stub
 
-`port/src/stubs/sce/` holds the remaining SDK stubs: libdma, libgraph (all but
-`sceGsSyncV`, which is `port/src/sce/libgraph.cpp`) and libpkt. Each calls
+`tools/kazarov/port/sce/stubs/` holds the remaining SDK stubs: libdma, libgraph (all but
+`sceGsSyncV`, which is `tools/kazarov/port/sce/libgraph.cpp`) and libpkt. Each calls
 `PS2_UNIMPLEMENTED()` (`port/include/port.h`), which prints the function,
 file and line and aborts. They stay stubs by design: the port does not
 emulate DMA chains, VIF/GIF packets or the GS, so a call that reaches one
 is a drawing path no replacement unit covers yet.
 
-Everything else from the SDK is implemented in `port/src/sce/`: libvu0 in
+Everything else from the SDK is implemented in `tools/kazarov/port/sce/`: libvu0 in
 C++ (static constructors call it before `main`), libpad, libmc, sifdev,
 eekernel (`FlushCache` and friends do nothing, `Exit` exits), libcdvd's
 `sceCdInit`/`sceCdMmode` and sifrpc's IOP boot and module loads (no-ops).
@@ -1558,7 +1589,7 @@ executable's symbols).
   `MakeFukidashi`'s mask) is not emulated. TEX1 LOD (L, K) is ignored in
   favour of standard trilinear filtering. The GS blends that need a factor
   above 1 or a destination scaled past 1 are approximated
-  (`port/src/gfx/README.md`, "Blending" and "Not done here").
+  (`tools/kazarov/port/gfx/README.md`, "Blending" and "Not done here").
 - **Overlay re-initialisation.** Retail reloads `TITLE.BIN` or `DUN.BIN` and
   re-runs its constructors on every switch; the port links both once and
   runs nothing again but the title objects it lays out with host classes
@@ -1907,7 +1938,7 @@ The layout of `data/` is the archive's own: `dun/pack/maindat.pac`,
 `commenu/a_eng/savetex.pak`, `sound/bgm/...` and so on. Lookups fold case,
 as the game's `strcasecmp` does, so the case on disk does not matter.
 
-`port/src/platform/paths.cpp` finds the data directory from `--data <dir>`,
+`tools/kazarov/port/platform/paths.cpp` finds the data directory from `--data <dir>`,
 then `DC_DATA`, then `data/` in the working directory, then `data/` beside
 the executable, and failing all of those `$XDG_DATA_HOME/chronicle/data`
 (`~/.local/share/chronicle/data` when `XDG_DATA_HOME` is unset or relative),

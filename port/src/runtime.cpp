@@ -7,11 +7,6 @@
 #include "mathutil.hpp"
 #include "title/title_port.hpp"
 
-[[noreturn]] void Ps2Unimplemented(const char *function, const char *file, int line) {
-    std::fprintf(stderr, "%s:%d: %s: PlayStation 2 code is not implemented on PC\n", file, line, function);
-    std::abort();
-}
-
 // Retail halted on a failed assertion. The game prints its own context on stdout first (LoadFile
 // names the file), so stdout is flushed ahead of the message. _Exit, not exit: static destructors
 // would tear down the renderer under a frame the game may have open.

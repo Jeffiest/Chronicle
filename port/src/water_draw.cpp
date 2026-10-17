@@ -5,6 +5,7 @@
 #include "draw3d.hpp"
 #include "mglib.hpp"
 #include "renderinfo.hpp"
+#include "screen.hpp"
 #include "texture.hpp"
 #include "water.hpp"
 
@@ -67,8 +68,8 @@ bool PrepareRefraction(Refraction &refraction) {
     if (gfx::CurrentRenderTarget() != gfx::kMainTarget || refraction.frame == gfx::kNullTexture) {
         return false;
     }
-    uint32_t width = static_cast<uint32_t>(gfx::kLogicalWidth);
-    uint32_t height = static_cast<uint32_t>(gfx::kLogicalHeight);
+    uint32_t width = static_cast<uint32_t>(kScreenWidth);
+    uint32_t height = static_cast<uint32_t>(kScreenHeight);
     refraction.visible = gfx::NamedRenderTarget("water visible", width, height, true, true);
     refraction.refracted = gfx::NamedRenderTarget("water refracted", width, height, false, true);
     if (refraction.visible == gfx::kNullTexture || refraction.refracted == gfx::kNullTexture) {

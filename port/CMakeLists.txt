@@ -26,49 +26,13 @@ if(NOT EXISTS ${KZ_ROOT}/include/kazarov/port.h)
     message(FATAL_ERROR "${KZ_ROOT} is empty: run git submodule update --init tools/kazarov")
 endif()
 
+include(${KZ_ROOT}/cmake/KazarovPort.cmake)
+
 # Python runs ${KZ_ROOT}/scripts/port_override.py.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-# SDL3 owns the window and input; Vulkan 1.4 renders.
-find_package(SDL3 REQUIRED CONFIG)
-find_package(Vulkan 1.4 REQUIRED)
-# nlohmann/json reads config.json: the installed package where there is one, fetched otherwise.
-include(FetchContent)
-FetchContent_Declare(nlohmann_json
-    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
-    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
-    FIND_PACKAGE_ARGS CONFIG)
-FetchContent_MakeAvailable(nlohmann_json)
-
-# The soundtrack decoders are Flatpak sources there, since its build sandbox has no network.
-# Other builds fetch the same pinned files at configure time.
-if(EXISTS ${CMAKE_SOURCE_DIR}/audio_decoders/dr_wav.h AND
-   EXISTS ${CMAKE_SOURCE_DIR}/audio_decoders/dr_flac.h AND
-   EXISTS ${CMAKE_SOURCE_DIR}/audio_decoders/stb_vorbis.c)
-    set(AUDIO_DECODER_DIR ${CMAKE_SOURCE_DIR}/audio_decoders)
-else()
-    set(AUDIO_DECODER_DIR ${CMAKE_BINARY_DIR}/audio_decoders)
-    file(DOWNLOAD https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_wav.h
-        ${AUDIO_DECODER_DIR}/dr_wav.h EXPECTED_HASH SHA256=03e70c1a2d9787cd7ed3e966c075bea7bac6373f759db9cd7ca9ccdfc4ec4493)
-    file(DOWNLOAD https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_flac.h
-        ${AUDIO_DECODER_DIR}/dr_flac.h EXPECTED_HASH SHA256=111144e778f55738db6851cb226015c419e00d04b916a09506d4856d9cff945c)
-    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_vorbis.c
-        ${AUDIO_DECODER_DIR}/stb_vorbis.c EXPECTED_HASH SHA256=4c7cb2ff1f7011e9d67950446b7eb9ca044f2e464d76bfbb0b84dd2e23e65636)
-endif()
-# The message font's rasterizer (platform/ttffont.cpp): a single-file library, public domain or MIT, at a pinned
-# commit. Flatpak has it as a source, since its build sandbox has no network; other builds fetch the same file.
-if(EXISTS ${CMAKE_SOURCE_DIR}/stb_truetype/stb_truetype.h)
-    set(TTF_DIR ${CMAKE_SOURCE_DIR}/stb_truetype)
-else()
-    set(TTF_DIR ${CMAKE_BINARY_DIR}/stb_truetype)
-    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_truetype.h
-        ${TTF_DIR}/stb_truetype.h EXPECTED_HASH SHA256=ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab)
-endif()
-# The button symbols' PNG atlases (platform/glyphs.cpp): the same library family at the same pinned commit, a
-# Flatpak source beside stb_truetype.h, or fetched.
-if(NOT EXISTS ${TTF_DIR}/stb_image.h)
-    file(DOWNLOAD https://raw.githubusercontent.com/nothings/stb/2c980bb59875b0d32144a71867fbdebb2f77cd20/stb_image.h
-        ${TTF_DIR}/stb_image.h EXPECTED_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3)
-endif()
+# Flatpak builds have no network: their single-file libraries are staged in audio_decoders/ and stb_truetype/; others fetch them.
+set(KZ_PORT_VENDOR_DIRS ${CMAKE_SOURCE_DIR}/audio_decoders ${CMAKE_SOURCE_DIR}/stb_truetype)
+kz_port_host_library(dc_host)
 
 set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
 set(PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -177,32 +141,8 @@ target_compile_options(dc_ps2 PRIVATE -Wall -Wno-writable-strings -Wno-unknown-p
 
 set(PORT_LIB_SOURCES ${PORT_SOURCES})
 list(FILTER PORT_LIB_SOURCES EXCLUDE REGEX "/tests/|/main\\.cpp$")
-# The host side (platform, gfx, audio) never sees a game header, so it is built
-# without dc_options: no port.h ahead of each unit and no game include paths.
-set(HOST_SOURCES ${PORT_LIB_SOURCES})
-list(FILTER HOST_SOURCES INCLUDE REGEX "/port/src/(platform|gfx|audio)/")
-list(FILTER PORT_LIB_SOURCES EXCLUDE REGEX "/port/src/(platform|gfx|audio)/")
 
-# Every shaders/*.vert|frag under port/src/gfx becomes a header holding its
-# SPIR-V words as a const uint32_t array named after the file (draw.frag ->
-# draw_frag), in ${SHADER_HEADER_DIR}/shaders/<file>.spv.hpp.
-find_program(GLSLANG_VALIDATOR NAMES glslangValidator REQUIRED)
-set(SHADER_DIR ${PORT_DIR}/gfx/shaders)
 set(SHADER_HEADER_DIR ${CMAKE_BINARY_DIR}/generated)
-file(GLOB SHADER_SOURCES CONFIGURE_DEPENDS ${SHADER_DIR}/*.vert ${SHADER_DIR}/*.frag)
-set(SHADER_HEADERS "")
-foreach(shader IN LISTS SHADER_SOURCES)
-    get_filename_component(shader_name ${shader} NAME)
-    string(REPLACE "." "_" shader_symbol ${shader_name})
-    set(header ${SHADER_HEADER_DIR}/shaders/${shader_name}.spv.hpp)
-    add_custom_command(OUTPUT ${header}
-        COMMAND ${GLSLANG_VALIDATOR} -V --target-env vulkan1.4 --quiet --vn ${shader_symbol}
-            --depfile ${header}.d -o ${header} ${shader}
-        DEPENDS ${shader}
-        DEPFILE ${header}.d
-        COMMENT "Compiling ${shader_name} to SPIR-V")
-    list(APPEND SHADER_HEADERS ${header})
-endforeach()
 
 # port/icon/chronicle-128.rgba, the window icon's raw 128x128 RGBA pixels, as a byte array.
 set(ICON_RGBA ${CMAKE_SOURCE_DIR}/port/icon/chronicle-128.rgba)
@@ -232,15 +172,17 @@ endif()
 file(CONFIGURE OUTPUT ${SHADER_HEADER_DIR}/options/credits.hpp
     CONTENT "#pragma once\ninline constexpr const char *kCredits[] = {${credit_names}};\n")
 
-add_library(dc_host OBJECT ${HOST_SOURCES} ${SHADER_HEADERS})
-target_include_directories(dc_host PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR} ${AUDIO_DECODER_DIR} ${TTF_DIR})
-target_link_libraries(dc_host PRIVATE SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
-target_compile_options(dc_host PRIVATE -Wall -ffunction-sections -fdata-sections)
-
-add_library(dc_port OBJECT ${PORT_LIB_SOURCES})
-target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json)
-# Replacement units reach the host side as "gfx/gfx.hpp", "platform/window.hpp".
+kz_port_sce_sources(DC_SCE_SOURCES LIBS libvu0 libpad libmc sifdev sifrpc eekernel libcdvd libgraph libdma libpkt)
+add_library(dc_port OBJECT ${PORT_LIB_SOURCES} ${DC_SCE_SOURCES})
+target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json kz_port_headers)
 target_include_directories(dc_port PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
+# captionfont.cpp rasterizes with stb_truetype, which Kazarov stages (or fetches) for dc_host.
+get_target_property(dc_host_includes dc_host INCLUDE_DIRECTORIES)
+foreach(include_dir IN LISTS dc_host_includes)
+    if(EXISTS ${include_dir}/stb_truetype.h)
+        target_include_directories(dc_port PRIVATE ${include_dir})
+    endif()
+endforeach()
 # The game's headers trip a few warnings that only describe how MWCC's source
 # was written, not a problem in the port.
 target_compile_options(dc_port PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label
@@ -270,7 +212,7 @@ endif()
 
 function(dc_link_game target)
     target_sources(${target} PRIVATE $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_host> $<TARGET_OBJECTS:dc_ps2>)
-    target_link_libraries(${target} PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan)
+    target_link_libraries(${target} PRIVATE dc_options kz_port_headers SDL3::SDL3 Vulkan::Vulkan)
     target_include_directories(${target} PRIVATE ${PORT_DIR})
     target_compile_options(${target} PRIVATE -Wall -Wno-mismatched-tags -Wno-unused-label
         -Wno-overloaded-virtual -Wno-unused-function)
@@ -295,10 +237,13 @@ add_custom_target(dc_lang
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/lang $<TARGET_FILE_DIR:darkcloud>/lang
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tools/font/DarkCloudCompendium.ttf
             $<TARGET_FILE_DIR:darkcloud>/lang/font.ttf
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/tools/font/DarkCloudCompendiumThin.ttf
+            $<TARGET_FILE_DIR:darkcloud>/lang/font_thin.ttf
     COMMENT "Copying the port's translated strings and message font")
 add_dependencies(darkcloud dc_lang)
 install(DIRECTORY lang/ DESTINATION ${CMAKE_INSTALL_BINDIR}/lang)
 install(FILES ${CMAKE_SOURCE_DIR}/tools/font/DarkCloudCompendium.ttf DESTINATION ${CMAKE_INSTALL_BINDIR}/lang RENAME font.ttf)
+install(FILES ${CMAKE_SOURCE_DIR}/tools/font/DarkCloudCompendiumThin.ttf DESTINATION ${CMAKE_INSTALL_BINDIR}/lang RENAME font_thin.ttf)
 
 # The button symbols (docs/GLYPHS.md): glyphs/ beside the executable. Rebuilt from art by tools/glyphs/build_glyphs.py.
 add_custom_target(dc_glyphs

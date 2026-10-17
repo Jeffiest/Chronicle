@@ -19,7 +19,9 @@
 #include "platform/clock.hpp"
 #include "rect.hpp"
 #include "renderinfo.hpp"
+#include "screen.hpp"
 #include "texture.hpp"
+#include "textwipe.hpp"
 
 // Retail defines the window rectangle as mgWindowRectStore and renames it at link time; the port
 // defines the name its callers use.
@@ -93,9 +95,9 @@ void ClearBars() {
     uint8_t          black[4] = {0, 0, 0, 0x80};
     gfx::LogicalRect bars[4] = {
         {left,               top,                 -left,                      bottom - top                },
-        {gfx::kLogicalWidth, top,                 right - gfx::kLogicalWidth, bottom - top                },
-        {0.0f,               top,                 gfx::kLogicalWidth,         -top                        },
-        {0.0f,               gfx::kLogicalHeight, gfx::kLogicalWidth,         bottom - gfx::kLogicalHeight},
+        {kScreenWidth, top,                 right - kScreenWidth, bottom - top                },
+        {0.0f,               top,                 kScreenWidth,         -top                        },
+        {0.0f,               kScreenHeight, kScreenWidth,         bottom - kScreenHeight},
     };
     for (const gfx::LogicalRect &bar : bars) {
         if (bar.w > 0.0f && bar.h > 0.0f) {
@@ -162,8 +164,8 @@ void Blit(const ResolvedRect &src, const ResolvedRect &dst, gfx::Filter filter) 
     if (src.texture == gfx::kMainTarget && dst.texture != gfx::kMainTarget) {
         g_last_frame_copy = dst.texture;
         g_frame_copies++;
-        g_frame_picture = gfx::NamedRenderTarget("frame copy picture", static_cast<uint32_t>(gfx::kLogicalWidth),
-                                                 static_cast<uint32_t>(gfx::kLogicalHeight), false, false, true);
+        g_frame_picture = gfx::NamedRenderTarget("frame copy picture", static_cast<uint32_t>(kScreenWidth),
+                                                 static_cast<uint32_t>(kScreenHeight), false, false, true);
         if (g_frame_picture != gfx::kNullTexture && !gfx::SnapshotFrame(g_frame_picture)) {
             g_frame_picture = gfx::kNullTexture;
         }
@@ -312,11 +314,11 @@ Draw3DExtent Draw3DVisibleExtent() {
     gfx::TextureHandle              target = gfx::CurrentRenderTarget();
     std::optional<gfx::TextureInfo> info = gfx::GetTextureInfo(target);
     gfx::LogicalRect                visible = gfx::VisibleLogicalRect(target);
-    float                           width = info ? static_cast<float>(info->width) : gfx::kLogicalWidth;
-    float                           height = info ? static_cast<float>(info->height) : gfx::kLogicalHeight;
+    float                           width = info ? static_cast<float>(info->width) : kScreenWidth;
+    float                           height = info ? static_cast<float>(info->height) : kScreenHeight;
     float                           wider = std::max({0.0f, -visible.x, visible.x + visible.w - width});
     float                           taller = std::max({0.0f, -visible.y, visible.y + visible.h - height});
-    return {gfx::kLogicalWidth * 0.5f + wider, SCREEN_HALF_HEIGHT_F + taller / MGPortTargetRowScale(target)};
+    return {kScreenWidth * 0.5f + wider, SCREEN_HALF_HEIGHT_F + taller / MGPortTargetRowScale(target)};
 }
 
 bool MGPortFrameTarget(std::string_view name) {
@@ -352,8 +354,8 @@ void Draw3DEyeToClip(const RenderInfo &info, float clip[4][4]) {
     float               ox = 2.0f * mapping.offset_x / width - 1.0f;
     float               ky = 2.0f * mapping.scale_y * rows / height;
     float               oy = 2.0f * mapping.offset_y / height - 1.0f;
-    float               centre_x = info.offset[0] - (kGsCentre - gfx::kLogicalWidth * 0.5f);
-    float               centre_y = info.offset[1] - (kGsCentre - gfx::kLogicalHeight * 0.5f);
+    float               centre_x = info.offset[0] - (kGsCentre - kScreenWidth * 0.5f);
+    float               centre_y = info.offset[1] - (kGsCentre - kScreenHeight * 0.5f);
 
     std::memset(clip, 0, sizeof(float) * 16);
     clip[0][0] = kx * info.scale[0];
@@ -486,7 +488,7 @@ PORT_OVERRIDE void MGInit() {
     mgWindowRect.y = 0;
     mgWindowRect.width = 640;
     mgWindowRect.height = SCREEN_HALF_HEIGHT;
-    MGPortCurrent().window = {0.0f, 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight};
+    MGPortCurrent().window = {0.0f, 0.0f, kScreenWidth, kScreenHeight};
     MGAdjustScreen(0, 0);
 
     mgBackColor[0] = 0.0f;
@@ -615,6 +617,7 @@ PORT_OVERRIDE void MGEndFrame() {
     gfx::SetRenderTarget(gfx::kMainTarget);
     gfx::DisplayListRef list;
     if (gfx::Recording()) {
+        textwipe::DrawDivider();
         list = gfx::EndRecording();
         GameRenderTick(list);
         sceVu0CopyMatrix(g_tick_view, mgRenderInfo.view_scaled);
@@ -745,7 +748,7 @@ PORT_OVERRIDE void MGSetWindowRect(CRect_i_ rect) {
 
 PORT_OVERRIDE void MGSetWindowRect() {
     MGSetWindowRect(CRect_i_(0, 0, 640, SCREEN_HALF_HEIGHT));
-    MGPortCurrent().window = {0.0f, 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight};
+    MGPortCurrent().window = {0.0f, 0.0f, kScreenWidth, kScreenHeight};
 }
 
 PORT_OVERRIDE void MGSetPLight(sceVu0FMATRIX direction, sceVu0FMATRIX color) {
@@ -997,8 +1000,8 @@ PORT_OVERRIDE void MGMoveImage(sceGsTex0 *src, const CRect_i_ &rect, sceGsTex0 *
 // off (retail's ALPHA there is (0 - 0) * FIX + Cs).
 static void StretchColour24(gfx::TextureHandle src, gfx::Rect src_rect, gfx::TextureHandle dst, gfx::Rect dst_rect,
                             const sceGsTexa &texa) {
-    uint32_t width = static_cast<uint32_t>(gfx::kLogicalWidth);
-    uint32_t height = static_cast<uint32_t>(gfx::kLogicalHeight);
+    uint32_t width = static_cast<uint32_t>(kScreenWidth);
+    uint32_t height = static_cast<uint32_t>(kScreenHeight);
     if (src != gfx::kMainTarget) {
         std::optional<gfx::TextureInfo> info = gfx::GetTextureInfo(src);
         if (!info) {
@@ -1144,14 +1147,14 @@ PORT_OVERRIDE void MGFillBox(const CRect_i_ &rect, unsigned char r, unsigned cha
 }
 
 PORT_OVERRIDE void MGClearZBuffer(int mode) {
-    gfx::LogicalRect frame = {0.0f, 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight};
+    gfx::LogicalRect frame = {0.0f, 0.0f, kScreenWidth, kScreenHeight};
     uint8_t          unused[4] = {};
     gfx::Clear(false, unused, true, MGPortDepth(static_cast<unsigned>(mode)), &frame);
     MGPortRestoreRegisters();
 }
 
 PORT_OVERRIDE void MGClearScreen(u_char r, u_char g, u_char b, u_char a) {
-    gfx::LogicalRect frame = {0.0f, 0.0f, gfx::kLogicalWidth, gfx::kLogicalHeight};
+    gfx::LogicalRect frame = {0.0f, 0.0f, kScreenWidth, kScreenHeight};
     uint8_t          color[4] = {r, g, b, a};
     gfx::Clear(true, color, true, 0.0f, &frame);
     MGPortRestoreRegisters();
@@ -1249,8 +1252,8 @@ PORT_OVERRIDE void MGEndDrawShadow(u_char alpha) {
         state.texa_ta0 = alpha;
         state.scissor = true;
         state.scissor_rect = current.window;
-        float         xs[4] = {0.0f, gfx::kLogicalWidth, gfx::kLogicalWidth, 0.0f};
-        float         ys[4] = {0.0f, 0.0f, gfx::kLogicalHeight, gfx::kLogicalHeight};
+        float         xs[4] = {0.0f, kScreenWidth, kScreenWidth, 0.0f};
+        float         ys[4] = {0.0f, 0.0f, kScreenHeight, kScreenHeight};
         gfx::Vertex2D quad[4] = {};
         for (int i = 0; i < 4; i++) {
             quad[i].x = quad[i].u = xs[i];

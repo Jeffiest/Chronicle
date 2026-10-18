@@ -63,6 +63,19 @@ void MGPortMovePreviousFrameImage(sceGsTex0 *dst);
 // not a camera cut of the frame's own view.
 void MGPortSetViewMatrixNoCut(float view[4][4], float *position);
 
+// A local overhead pass: keep the perspective scale at reference_depth while
+// projecting parallel rays. Restore perspective before returning to the HUD.
+float MGPortOrthographicDepth();
+class MGPortOrthographicScope {
+public:
+    explicit MGPortOrthographicScope(float reference_depth);
+    ~MGPortOrthographicScope();
+    MGPortOrthographicScope(const MGPortOrthographicScope &) = delete;
+    MGPortOrthographicScope &operator=(const MGPortOrthographicScope &) = delete;
+private:
+    float previous_;
+};
+
 // ---- Display lists ---------------------------------------------------------------------------
 
 // The next tick MGBeginFrame records is not interpolated from the one before (a mode's first).

@@ -577,7 +577,7 @@ PORT_OVERRIDE void DunMainDraw() {
             sceVu0FVECTOR map_pos;
             sceVu0FVECTOR map_rot;
 
-            gfx::UiAnchorScope map_anchor(kMiniMapAnchor);
+            gfx::UiAnchorScope map_anchor(ConfigGet().aerial_map ? gfx::UiAnchor{} : kMiniMapAnchor);
 
             TexManager.ReloadTexture(Vif1Packet, 0x1F);
             sceVu0CopyVector(map_pos, CharaFrame->position);

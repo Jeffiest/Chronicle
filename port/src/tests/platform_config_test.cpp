@@ -45,7 +45,7 @@ TEST(PlatformConfig, ShadowDistance) {
 TEST(PlatformConfig, AerialMap) {
     Config defaults = ConfigParse("");
     ASSERT_TRUE(defaults.aerial_map);
-    ASSERT_FLOAT_EQ(defaults.aerial_map_ceiling, 40.0f);
+    ASSERT_FLOAT_EQ(defaults.aerial_map_ceiling, 400.0f);
     ASSERT_FLOAT_EQ(defaults.aerial_map_zoom, 1.0f);
     ASSERT_FLOAT_EQ(defaults.aerial_map_model_scale, 8.0f);
     ASSERT_FALSE(defaults.aerial_map_markers);
@@ -64,7 +64,7 @@ TEST(PlatformConfig, AerialMap) {
     Config bad = ConfigParse(
         R"({"game": {"aerial_map": "on", "aerial_map_ceiling": -1, "aerial_map_zoom": 0.1, "aerial_map_model_scale": "big"}})");
     ASSERT_TRUE(bad.aerial_map);
-    ASSERT_FLOAT_EQ(bad.aerial_map_ceiling, 40.0f);
+    ASSERT_FLOAT_EQ(bad.aerial_map_ceiling, 400.0f);
     ASSERT_FLOAT_EQ(bad.aerial_map_zoom, 1.0f);
     ASSERT_FLOAT_EQ(bad.aerial_map_model_scale, 8.0f);
 }

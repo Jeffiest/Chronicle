@@ -1,6 +1,7 @@
 #include "dungeon_aerial.hpp"
 
 #include <SDL3/SDL.h>
+#include "dungeon_aerial_cache.hpp"
 #include <libvu0.h>
 
 #include <algorithm>
@@ -41,7 +42,7 @@ namespace {
 
 constexpr float kCell = 160.0f;          // world units per grid cell
 constexpr float kRetailScale = 0.1f;     // retail map pixels per world unit (16 per cell)
-// Retail's map is 20 x 20 cells of 16 pixels at 380,64; game.aerial_map_size grows it from its
+// Retail's map uses 16 pixels per grid cell at 380,64; game.aerial_map_size grows it from its
 // top-right corner, moving up as far as the frame allows.
 float kMapLeft = 380.0f;
 float kMapTop = 64.0f;
@@ -51,7 +52,7 @@ void PlaceMap(float size) {
     kMapSize = 320.0f * size;
     kMapTop = std::max(8.0f, std::min(64.0f, 472.0f - kMapSize));
     kMapSize = std::min(kMapSize, 472.0f - kMapTop);
-    kMapLeft = 700.0f - kMapSize;
+    kMapLeft = 632.0f - kMapSize;
 }
 constexpr float kFloorCentre = 9.5f * kCell;
 constexpr float kAerialHeight = 4000.0f; // camera height above the player's feet
@@ -79,11 +80,11 @@ int CellOf(const float *pos) {
     int col = (int) ((80.0f + pos[0]) / kCell);
     int row = (int) ((80.0f + pos[2]) / kCell);
 
-    if (col < 0 || row < 0 || col >= 20 || row >= 20) {
+    if (col < 0 || row < 0 || col >= dungeon_grid::side || row >= dungeon_grid::side) {
         return -1;
     }
 
-    return col + row * 20;
+    return col + row * dungeon_grid::side;
 }
 
 // The aerial view, scaled by scale about pivot so a model draws larger where it stands without its
@@ -121,11 +122,12 @@ struct Marker {
     float  x;
     float  z;
     u_char r, g, b;
+    bool   pulse;
 };
 std::vector<Marker> g_markers;
 
-void AddMarker(const float *pos, u_char r, u_char g, u_char b) {
-    g_markers.push_back({pos[0], pos[2], r, g, b});
+void AddMarker(const float *pos, u_char r, u_char g, u_char b, bool pulse = true) {
+    g_markers.push_back({pos[0], pos[2], r, g, b, pulse});
 }
 
 bool CellShown(CDungeonMap *map, int cell, int show_all) {
@@ -133,15 +135,15 @@ bool CellShown(CDungeonMap *map, int cell, int show_all) {
 }
 
 void DrawModels(CDungeonMap *map, const sceVu0FMATRIX base, const float *eye, const float *player, float scale, int crystal,
-                int show_all) {
+                int show_all, int pass) {
     float lid[4];
 
     // Chests: retail's symbol shows a closed box on a revealed cell, or all of them with the crystal.
-    if (map->box_lid_model != NULL && map->box_body_model != NULL && map->chest_body_model != NULL &&
+    if (pass == 0 && map->box_lid_model != NULL && map->box_body_model != NULL && map->chest_body_model != NULL &&
         map->chest_lid_model != NULL) {
         TexManager.ReloadTexture(Vif1Packet, 3);
 
-        for (int i = 0; i < 24; i++) {
+        for (int i = 0; i < dungeon_grid::boxes; i++) {
             TREASURE_BOX *box = &map->boxes[i];
             int           cell = CellOf(box->pos);
 
@@ -171,7 +173,7 @@ void DrawModels(CDungeonMap *map, const sceVu0FMATRIX base, const float *eye, co
     }
 
     // Atla balls: as their symbols, on a revealed cell or with the crystal.
-    if (map->atra_model != NULL && atraGetStatus == 0) {
+    if (pass == 0 && map->atra_model != NULL && atraGetStatus == 0) {
         TexManager.ReloadTexture(Vif1Packet, 0x16);
 
         for (int i = 0; i < 8; i++) {
@@ -200,10 +202,13 @@ void DrawModels(CDungeonMap *map, const sceVu0FMATRIX base, const float *eye, co
         MGGetAmbient(ambient);
         TexManager.ReloadTexture(Vif1Packet, 42);
 
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < std::extent_v<decltype(CMonstorUnit::monster)>; i++) {
             MONSTOR *monster = &unit->monster[i];
 
             if (monster->state == -1 || monster->revealed == 0 || !(crystal || monster->state == 2)) {
+                continue;
+            }
+            if ((monster->state == 2) != (pass == 1)) {
                 continue;
             }
 
@@ -226,46 +231,103 @@ void DrawModels(CDungeonMap *map, const sceVu0FMATRIX base, const float *eye, co
     }
 
     // The player.
-    if (BtActStatus.player_visible != 0 && EdEventInfo.player_draw != 0) {
+    if (pass == 1 && BtActStatus.player_visible != 0 && EdEventInfo.player_draw != 0) {
         SetView(base, eye, player, scale);
         Draw_MainUnit();
-        AddMarker(player, 0x30, 0xFF, 0x30);
+        AddMarker(player, 0x30, 0xFF, 0x30, false);
+    }
+}
+
+// The things the map marks with a dot, by retail's symbol rules: closed chests and Atla on a
+// revealed cell (every one with the crystal), awake monsters (every one with the crystal).
+void CollectMarkers(CDungeonMap *map, int crystal, int show_all) {
+    g_markers.clear();
+    for (int i = 0; i < dungeon_grid::boxes; i++) {
+        const TREASURE_BOX *box = &map->boxes[i];
+        const int cell = CellOf(box->pos);
+        if (box->used == 0 || box->closed == 0 || cell < 0 || map->cells[cell].parts_no == MAP_PARTS_NONE ||
+            !(crystal || map->mask[cell] != 0) || (box->kind != TREASURE_BOX_LARGE && box->kind != TREASURE_BOX_SMALL)) {
+            continue;
+        }
+        AddMarker(box->pos, 0xFF, 0xC0, 0x20);
+    }
+    if (atraGetStatus == 0) {
+        for (int i = 0; i < 8; i++) {
+            const int cell = CellOf(map->atra[i].pos);
+            if (map->atra[i].used == 0 || cell < 0 || map->cells[cell].parts_no == MAP_PARTS_NONE ||
+                !(crystal || map->mask[cell] != 0)) {
+                continue;
+            }
+            AddMarker(map->atra[i].pos, 0x40, 0xC0, 0xFF);
+        }
+    }
+    CMonstorUnit *unit = NowMonstorUnit;
+    if (unit != NULL && CMonUnitHyde == 0 && BtEventMode == 0) {
+        float pos[4];
+        for (int i = 0; i < std::extent_v<decltype(CMonstorUnit::monster)>; i++) {
+            const MONSTOR *monster = &unit->monster[i];
+            if (monster->state == -1 || monster->hp <= 0 || monster->revealed == 0 || !(crystal || monster->state == 2)) continue;
+            unit->chara[i][0].GetPosition(pos);
+            if (!CellShown(map, CellOf(pos), show_all || crystal)) continue;
+            AddMarker(pos, 0xFF, 0x30, 0x30);
+        }
     }
 }
 
 // Renders the floor from above into the "aerial_map" target; false when it cannot.
-bool RenderAerial(CDungeonMap *map, const float *player, Aerial &aerial, int show_all, int crystal) {
+bool RenderAerial(CDungeonMap *map, const float *player, Aerial &aerial, int show_all, int crystal, bool render) {
     if (!gfx::InFrame() && !gfx::Recording()) {
         return false;
     }
+    MGPortOrthographicScope overhead(kAerialHeight);
 
+    // Two images: "aerial_floor" holds the floor and everything that stands still (chests, Atla,
+    // sleeping monsters) and is redrawn only when that changes; "aerial_map" is a copy of it with the
+    // awake monsters and the player drawn on top each frame.
+    gfx::TextureHandle floor_target = gfx::NamedRenderTarget("aerial_floor", 640, 480, true);
     gfx::TextureHandle target = gfx::NamedRenderTarget("aerial_map", 640, 480, true);
 
-    if (target == gfx::kNullTexture) {
+    if (target == gfx::kNullTexture || floor_target == gfx::kNullTexture) {
         return false;
     }
 
     const Config &config = ConfigGet();
     aerial.zoom = config.aerial_map_zoom * kMapSize / 320.0f;
 
-    // Up to zoom 1 the whole floor shows, centred on the map as retail's; past it the map follows
-    // the player.
+    // Centre on the floor's built cells. When they do not fit (large generated floors, or zoom
+    // past 1) the map follows the player, clamped so it never scrolls past the floor's edge.
+    const float map_scale = kRetailScale * aerial.zoom;
+    int lo_x = dungeon_grid::side, lo_z = dungeon_grid::side, hi_x = -1, hi_z = -1;
+    for (int cell = 0; cell < dungeon_grid::cells; cell++) {
+        if (map->cells[cell].parts_no == MAP_PARTS_NONE) continue;
+        lo_x = std::min(lo_x, cell % dungeon_grid::side); hi_x = std::max(hi_x, cell % dungeon_grid::side);
+        lo_z = std::min(lo_z, cell / dungeon_grid::side); hi_z = std::max(hi_z, cell / dungeon_grid::side);
+    }
     float centre[2] = {kFloorCentre, kFloorCentre};
-
-    if (config.aerial_map_zoom > 1.0f) {
-        centre[0] = player[0];
-        centre[1] = player[2];
+    float render_centre[2] = {kFloorCentre, kFloorCentre};
+    float render_span = 20.0f * kCell;
+    if (hi_x >= lo_x) {
+        const float visible = kMapSize / map_scale;
+        const float min_x = kCell * lo_x - kCell / 2.0f, max_x = kCell * hi_x + kCell / 2.0f;
+        const float min_z = kCell * lo_z - kCell / 2.0f, max_z = kCell * hi_z + kCell / 2.0f;
+        centre[0] = (min_x + max_x) / 2.0f;
+        centre[1] = (min_z + max_z) / 2.0f;
+        render_centre[0] = centre[0];
+        render_centre[1] = centre[1];
+        render_span = std::max(render_span, std::max(max_x - min_x, max_z - min_z));
+        if (max_x - min_x > visible) centre[0] = std::clamp(player[0], min_x + visible / 2.0f, max_x - visible / 2.0f);
+        if (max_z - min_z > visible) centre[1] = std::clamp(player[2], min_z + visible / 2.0f, max_z - visible / 2.0f);
     }
 
-    const float map_scale = kRetailScale * aerial.zoom;
     aerial.map_x = kMapLeft + kMapSize / 2.0f - map_scale * centre[0];
     aerial.map_y = kMapTop + kMapSize / 2.0f - map_scale * centre[1];
 
     const RenderInfo         saved_info = mgRenderInfo;
     const gfx::TextureHandle previous = gfx::CurrentRenderTarget();
 
-    // Texels per world unit at the feet: the map's span fills kTargetFill rows.
-    const float target_scale = kTargetFill / (kMapSize / map_scale);
+    // Texels per world unit: the whole floor fills kTargetFill rows, so the image never depends on
+    // where the map is scrolled and can be reused until new cells are revealed.
+    const float target_scale = kTargetFill / render_span;
     const float near_dist = kAerialHeight - config.aerial_map_ceiling;
     MGSetRenderInfo(target_scale * kAerialHeight, near_dist > 1.0f ? near_dist : 1.0f, kAerialHeight + kAerialDepth);
     mgRenderInfo.fog_a = mgRenderInfo.fog_near;
@@ -275,7 +337,7 @@ bool RenderAerial(CDungeonMap *map, const float *player, Aerial &aerial, int sho
     // Straight down: eye x along world x, eye y (screen down) along world z, depth down the height.
     // The game's own view sets the handedness, so faces cull as they do in the main view.
     const float   side = Det3(saved_info.view) < 0.0f ? -1.0f : 1.0f;
-    const float   eye[4] = {centre[0], player[1] + kAerialHeight, centre[1], 1.0f};
+    const float   eye[4] = {render_centre[0], player[1] + kAerialHeight, render_centre[1], 1.0f};
     sceVu0FMATRIX base;
     std::memset(base, 0, sizeof base);
     base[0][0] = side;
@@ -291,47 +353,55 @@ bool RenderAerial(CDungeonMap *map, const float *player, Aerial &aerial, int sho
     // (320, 240), target_scale texels per world unit at the camera's height above it.
     aerial.du = side * target_scale;
     aerial.dv = target_scale;
-    aerial.u0 = 320.0f - aerial.du * centre[0];
-    aerial.v0 = 240.0f - aerial.dv * centre[1];
-
-    gfx::SetRenderTarget(target);
+    aerial.u0 = 320.0f - aerial.du * render_centre[0];
+    aerial.v0 = 240.0f - aerial.dv * render_centre[1];
     const uint8_t black[4] = {0, 0, 0, 0x80};
-    gfx::Clear(true, black, true, 0.0f);
+    if (render) {
+        gfx::SetRenderTarget(floor_target);
+        gfx::Clear(true, black, true, 0.0f);
 
-    // The cells, as CDungeonMap::DrawMap places them; each part is shared by every cell using it.
-    struct PartPlace {
-        float pos[4];
-        int   direction;
-    };
-    PartPlace saved_parts[72];
+        // The cells, as CDungeonMap::DrawMap places them; each part is shared by every cell using it.
+        struct PartPlace {
+            float pos[4];
+            int   direction;
+        };
+        PartPlace saved_parts[72];
 
-    for (int i = 0; i < 72; i++) {
-        sceVu0CopyVector(saved_parts[i].pos, map->parts[i].pos);
-        saved_parts[i].direction = map->parts[i].direction;
-    }
-
-    TexManager.ReloadTexture(Vif1Packet, 3);
-
-    for (int cell = 0; cell < 400; cell++) {
-        if (!CellShown(map, cell, show_all)) {
-            continue;
+        for (int i = 0; i < 72; i++) {
+            sceVu0CopyVector(saved_parts[i].pos, map->parts[i].pos);
+            saved_parts[i].direction = map->parts[i].direction;
         }
 
-        CDungeonParts *part = &map->parts[map->cells[cell].parts_no];
-        part->direction = map->cells[cell].direction;
-        part->pos[0] = kCell * (float) (cell % 20);
-        part->pos[1] = 0.0f;
-        part->pos[2] = kCell * (float) (cell / 20);
-        part->pos[3] = 1.0f;
-        part->Draw();
+        TexManager.ReloadTexture(Vif1Packet, 3);
+
+        for (int cell = 0; cell < dungeon_grid::cells; cell++) {
+            if (!CellShown(map, cell, show_all)) {
+                continue;
+            }
+
+            CDungeonParts *part = &map->parts[map->cells[cell].parts_no];
+            part->direction = map->cells[cell].direction;
+            part->pos[0] = kCell * (float) (cell % dungeon_grid::side);
+            part->pos[1] = 0.0f;
+            part->pos[2] = kCell * (float) (cell / dungeon_grid::side);
+            part->pos[3] = 1.0f;
+            part->Draw();
+        }
+
+        for (int i = 0; i < 72; i++) {
+            sceVu0CopyVector(map->parts[i].pos, saved_parts[i].pos);
+            map->parts[i].direction = saved_parts[i].direction;
+        }
+
+        DrawModels(map, base, eye, player, config.aerial_map_model_scale, crystal, show_all, 0);
     }
 
-    for (int i = 0; i < 72; i++) {
-        sceVu0CopyVector(map->parts[i].pos, saved_parts[i].pos);
-        map->parts[i].direction = saved_parts[i].direction;
-    }
-
-    DrawModels(map, base, eye, player, config.aerial_map_model_scale, crystal, show_all);
+    // The live layer: the still image, then the few things that move.
+    gfx::CopyTexture(floor_target, {0, 0, 640, 480}, target, 0, 0);
+    gfx::SetRenderTarget(target);
+    gfx::Clear(false, black, true, 0.0f);
+    SetView(base, eye, nullptr, 1.0f);
+    DrawModels(map, base, eye, player, config.aerial_map_model_scale, crystal, show_all, 1);
 
     gfx::SetRenderTarget(previous);
     mgRenderInfo = saved_info;
@@ -353,13 +423,13 @@ void CompositeAerial(CDungeonMap *map, const Aerial &aerial, int show_all, u_cha
     const float                tile = kCell * kRetailScale * aerial.zoom;
     std::vector<gfx::Vertex2D> quads;
 
-    for (int cell = 0; cell < 400; cell++) {
+    for (int cell = 0; cell < dungeon_grid::cells; cell++) {
         if (!CellShown(map, cell, show_all)) {
             continue;
         }
 
-        const float x = kCell * (float) (cell % 20) - kCell / 2.0f;
-        const float z = kCell * (float) (cell / 20) - kCell / 2.0f;
+        const float x = kCell * (float) (cell % dungeon_grid::side) - kCell / 2.0f;
+        const float z = kCell * (float) (cell / dungeon_grid::side) - kCell / 2.0f;
         const float dx = aerial.map_x + kRetailScale * aerial.zoom * x;
         const float dy = aerial.map_y + kRetailScale * aerial.zoom * z;
 
@@ -387,41 +457,36 @@ void CompositeAerial(CDungeonMap *map, const Aerial &aerial, int show_all, u_cha
     }
 }
 
-// A ring in each marker's colour around where it stands on the map.
-void DrawMarkers(const Aerial &aerial) {
+// A small pulsing dot for each marker, with a dark edge so it reads on any floor. Things within two
+// cells of the player are left out: they are in view already. The player is a steady green dot.
+void DrawMarkers(const Aerial &aerial, const float *player) {
     gfx::DrawState state = draw2d::SpriteState();
     state.scissor = true;
     state.scissor_rect = {kMapLeft, kMapTop, kMapSize, kMapSize};
 
     const float scale = kRetailScale * aerial.zoom;
-    // Big enough to frame a scaled model, never smaller than retail's 8 pixel symbol.
-    const float radius = std::max(6.0f, 0.12f * kCell * scale * ConfigGet().aerial_map_model_scale / 2.5f);
-    const float width = std::max(1.5f, radius * 0.25f);
-    constexpr int kSegments = 20;
+    const float wave = 0.5f + 0.5f * std::sin(static_cast<float>(SDL_GetTicks()) * 0.006f);
     std::vector<gfx::Vertex2D> quads;
-
+    auto dot = [&](float cx, float cy, float half, u_char r, u_char g, u_char b, u_char a) {
+        quads.push_back(draw2d::Vertex(cx - half, cy - half, 0.0f, 0, 0, r, g, b, a));
+        quads.push_back(draw2d::Vertex(cx + half, cy - half, 0.0f, 0, 0, r, g, b, a));
+        quads.push_back(draw2d::Vertex(cx + half, cy + half, 0.0f, 0, 0, r, g, b, a));
+        quads.push_back(draw2d::Vertex(cx - half, cy + half, 0.0f, 0, 0, r, g, b, a));
+    };
+    const float near = 2.0f * kCell;
     for (const Marker &marker : g_markers) {
+        const float dx = marker.x - player[0], dz = marker.z - player[2];
+        if (dx * dx + dz * dz < near * near) continue;
         const float cx = aerial.map_x + scale * marker.x;
         const float cy = aerial.map_y + scale * marker.z;
-
-        for (int pass = 0; pass < 2; pass++) {
-            // A dark outline under the coloured ring keeps it readable on any floor.
-            const float  inner = pass == 0 ? radius - width - 1.0f : radius - width;
-            const float  outer = pass == 0 ? radius + 1.0f : radius;
-            const u_char r = pass == 0 ? 0 : marker.r;
-            const u_char g = pass == 0 ? 0 : marker.g;
-            const u_char b = pass == 0 ? 0 : marker.b;
-
-            for (int i = 0; i < kSegments; i++) {
-                const float a0 = 6.2831853f * i / kSegments;
-                const float a1 = 6.2831853f * (i + 1) / kSegments;
-                quads.push_back(draw2d::Vertex(cx + inner * std::cos(a0), cy + inner * std::sin(a0), 0.0f, 0, 0, r, g, b, 0x80));
-                quads.push_back(draw2d::Vertex(cx + outer * std::cos(a0), cy + outer * std::sin(a0), 0.0f, 0, 0, r, g, b, 0x80));
-                quads.push_back(draw2d::Vertex(cx + outer * std::cos(a1), cy + outer * std::sin(a1), 0.0f, 0, 0, r, g, b, 0x80));
-                quads.push_back(draw2d::Vertex(cx + inner * std::cos(a1), cy + inner * std::sin(a1), 0.0f, 0, 0, r, g, b, 0x80));
-            }
-        }
+        const u_char a = static_cast<u_char>(0x50 + 0x30 * wave);
+        dot(cx, cy, 3.0f, 0, 0, 0, a);
+        dot(cx, cy, 2.0f, marker.r, marker.g, marker.b, a);
     }
+    const float px = aerial.map_x + scale * player[0];
+    const float py = aerial.map_y + scale * player[2];
+    dot(px, py, 3.5f, 0, 0, 0, 0x80);
+    dot(px, py, 2.5f, 0x30, 0xFF, 0x30, 0x80);
 
     if (!quads.empty()) {
         textwipe::Draw2D(gfx::Primitive::Quads, quads, {}, state);
@@ -508,6 +573,8 @@ void TuneAerial() {
 } // namespace
 
 PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
+    CDungeonMap *self = this;
+    CDungeonMap *map_self = self;
     int status = UserStatus->minimap_status;
     g_drawn = false;
 
@@ -515,12 +582,11 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         return;
     }
 
-    unsigned char red_table[3] = {0x20, 0x40, 0x60};
-    unsigned char green_table[3] = {0x60, 0x80, 0xA2};
-    unsigned char blue_table[3] = {0x40, 0x60, 0xA2};
-    unsigned char red = red_table[status];
-    unsigned char green = green_table[status];
-    unsigned char blue = blue_table[status];
+    // The Dungeon Map option picks the map's size (large, medium, small) at one fixed brightness.
+    static const float sizes[3] = {1.5f, 1.15f, 0.85f};
+    unsigned char red = 0x58;    // unrevealed cells shown by the map item
+    unsigned char green = 0x80;  // revealed cells
+    unsigned char blue = 0x80;   // opaque
     int           saved_map = BtEquipMap;
     int           saved_crystal = BtEquipMasuisyou;
 
@@ -537,16 +603,41 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         sceVu0CopyVector(player, pos);
 
         TuneAerial();
-        g_markers.clear();
-        PlaceMap(ConfigGet().aerial_map_size);
+        PlaceMap(sizes[status] * ConfigGet().aerial_map_size / 1.4f);
 
-        if (RenderAerial(this, player, aerial, show_all, crystal)) {
-            CompositeAerial(this, aerial, show_all, green, red, blue);
-            DrawTrapSymbols(this, aerial, blue);
-
-            if (ConfigGet().aerial_map_markers) {
-                DrawMarkers(aerial);
+        // The floor image is drawn only when it changes: a new floor, the map item or crystal, or
+        // newly revealed cells. Between those the map reuses it and just moves the view and dots.
+        static std::uint64_t last_key = 0;
+        static bool cached = false;
+        const int  flags = show_all | (crystal << 1);
+        std::uint64_t key = DungeonAerialFloorKey(*map_self, flags, ConfigGet().aerial_map_ceiling,
+                                                 ConfigGet().aerial_map_model_scale, std::round(player[1]));
+        const auto mix = [&](std::uint64_t value) { key = (key ^ value) * 1099511628211ull; };
+        mix(selectMapNo); mix(UserStatus->cur_georama);
+        mix(gfx::FindNamedRenderTarget("aerial_floor"));
+        mix(gfx::FindNamedRenderTarget("aerial_map"));
+        // Sleeping monsters are fixed. Waking/sleeping invalidates the cache;
+        // animation offsets must not make it redraw the floor every tick.
+        if (NowMonstorUnit != nullptr) {
+            for (int i = 0; i < std::extent_v<decltype(CMonstorUnit::monster)>; i++) {
+                const MONSTOR &m = NowMonstorUnit->monster[i];
+                if (m.state != -1 && m.state != 2 && m.hp > 0) {
+                    mix(i + 1); mix(m.revealed);
+                }
             }
+        }
+        const bool stale = !cached || key != last_key;
+        bool       drawn = RenderAerial(map_self, player, aerial, show_all, crystal, stale);
+        if (drawn && stale) {
+            last_key = key;
+            cached = true;
+        }
+        CollectMarkers(map_self, crystal, show_all);
+
+        if (drawn) {
+            CompositeAerial(map_self, aerial, show_all, green, red, blue);
+            DrawTrapSymbols(map_self, aerial, blue);
+            if (ConfigGet().aerial_map_markers) DrawMarkers(aerial, player);
             g_drawn = true;
             BtEquipMap = saved_map;
             BtEquipMasuisyou = saved_crystal;
@@ -554,7 +645,11 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         }
     }
 
-    DrawRetailMiniMap(this, pos, angle, red, green, blue);
+    // Retain retail's density/opacity choices when aerial rendering is disabled or unavailable.
+    constexpr u_char retail_red[] = {0x20, 0x40, 0x60};
+    constexpr u_char retail_green[] = {0x60, 0x80, 0xA2};
+    constexpr u_char retail_blue[] = {0x40, 0x60, 0xA2};
+    DrawRetailMiniMap(map_self, pos, angle, retail_red[status], retail_green[status], retail_blue[status]);
     BtEquipMap = saved_map;
     BtEquipMasuisyou = saved_crystal;
 }
@@ -568,9 +663,9 @@ void DrawRetailMiniMap(CDungeonMap *map, float *pos, float angle, u_char red, u_
     CTexture  *symbol_texture = TexManager.GetTexture(const_cast<char *>("itempack"), -1);
     int        map_x;
 
-    for (int row = 0; row < 20; row++) {
-        for (int col = 0; col < 20; col++) {
-            int           cell_no = col + row * 20;
+    for (int row = 0; row < dungeon_grid::side; row++) {
+        for (int col = 0; col < dungeon_grid::side; col++) {
+            int           cell_no = col + row * dungeon_grid::side;
             int           masked = map->mask[cell_no];
             int           show = masked;
             unsigned char alpha;
@@ -625,7 +720,7 @@ void DrawRetailMiniMap(CDungeonMap *map, float *pos, float angle, u_char red, u_
     for (const Symbol &symbol : symbols) {
         int x = (int) (symbol.pos[0] * 0.1f);
         int y = (int) (symbol.pos[2] * 0.1f);
-        int cell = (int) ((80.0f + symbol.pos[0]) / 160.0f) + (int) ((80.0f + symbol.pos[2]) / 160.0f) * 20;
+        int cell = (int) ((80.0f + symbol.pos[0]) / 160.0f) + (int) ((80.0f + symbol.pos[2]) / 160.0f) * dungeon_grid::side;
         int show = map->mask[cell];
 
         if (BtEquipMasuisyou == 1) {

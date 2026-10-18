@@ -42,12 +42,12 @@ struct Config : HostSettings {
     // game.aerial_map: the dungeon map is the live floor seen from above instead of retail's tiles.
     bool              aerial_map = true;
     // World units above the player's feet where the aerial map cuts the ceiling away.
-    float             aerial_map_ceiling = 40.0f;
+    float             aerial_map_ceiling = 400.0f;
     // Aerial map magnification over retail's 16 pixels per cell; 1 shows the whole floor as retail does.
     float             aerial_map_zoom = 1.0f;
     // Size of monsters, chests and the player on the aerial map relative to the floor.
     float             aerial_map_model_scale = 8.0f;
-    // Size of the aerial map over retail's 320 pixel square, grown from its top-right corner.
+    // Scale of the native Dungeon Map size choices; 1.4 keeps their standard sizes.
     float             aerial_map_size = 1.4f;
     // Coloured rings around monsters (red), chests (gold), atla (blue) and the player (green).
     bool              aerial_map_markers = false;

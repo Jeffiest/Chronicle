@@ -134,6 +134,10 @@ bool CellShown(CDungeonMap *map, int cell, int show_all) {
     return cell >= 0 && map->cells[cell].parts_no != MAP_PARTS_NONE && (show_all || map->mask[cell] != 0);
 }
 
+// The overhead camera's height, in 80-unit steps: walking over bumpy ground must not change the
+// cached floor image (its key includes this), or the whole floor is redrawn on most ticks.
+float AerialEyeHeight(float feet) { return 80.0f * std::round(feet / 80.0f); }
+
 void DrawModels(CDungeonMap *map, const sceVu0FMATRIX base, const float *eye, const float *player, float scale, int crystal,
                 int show_all, int pass) {
     float lid[4];
@@ -232,9 +236,14 @@ void DrawModels(CDungeonMap *map, const sceVu0FMATRIX base, const float *eye, co
 
     // The player.
     if (pass == 1 && BtActStatus.player_visible != 0 && EdEventInfo.player_draw != 0) {
-        SetView(base, eye, player, scale);
+        // Larger than the rest and fully lit, so the player reads at a glance from straight above.
+        sceVu0FVECTOR saved_ambient;
+        sceVu0FVECTOR bright = {128.0f, 128.0f, 128.0f, 128.0f};
+        MGGetAmbient(saved_ambient);
+        MGSetAmbient(bright);
+        SetView(base, eye, player, scale * 1.8f);
         Draw_MainUnit();
-        AddMarker(player, 0x30, 0xFF, 0x30, false);
+        MGSetAmbient(saved_ambient);
     }
 }
 
@@ -337,7 +346,7 @@ bool RenderAerial(CDungeonMap *map, const float *player, Aerial &aerial, int sho
     // Straight down: eye x along world x, eye y (screen down) along world z, depth down the height.
     // The game's own view sets the handedness, so faces cull as they do in the main view.
     const float   side = Det3(saved_info.view) < 0.0f ? -1.0f : 1.0f;
-    const float   eye[4] = {render_centre[0], player[1] + kAerialHeight, render_centre[1], 1.0f};
+    const float   eye[4] = {render_centre[0], AerialEyeHeight(player[1]) + kAerialHeight, render_centre[1], 1.0f};
     sceVu0FMATRIX base;
     std::memset(base, 0, sizeof base);
     base[0][0] = side;
@@ -458,7 +467,7 @@ void CompositeAerial(CDungeonMap *map, const Aerial &aerial, int show_all, u_cha
 }
 
 // A small pulsing dot for each marker, with a dark edge so it reads on any floor. Things within two
-// cells of the player are left out: they are in view already. The player is a steady green dot.
+// cells of the player are left out: they are in view already. The player shows as their model (DrawModels).
 void DrawMarkers(const Aerial &aerial, const float *player) {
     gfx::DrawState state = draw2d::SpriteState();
     state.scissor = true;
@@ -483,10 +492,6 @@ void DrawMarkers(const Aerial &aerial, const float *player) {
         dot(cx, cy, 3.0f, 0, 0, 0, a);
         dot(cx, cy, 2.0f, marker.r, marker.g, marker.b, a);
     }
-    const float px = aerial.map_x + scale * player[0];
-    const float py = aerial.map_y + scale * player[2];
-    dot(px, py, 3.5f, 0, 0, 0, 0x80);
-    dot(px, py, 2.5f, 0x30, 0xFF, 0x30, 0x80);
 
     if (!quads.empty()) {
         textwipe::Draw2D(gfx::Primitive::Quads, quads, {}, state);
@@ -611,7 +616,7 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         static bool cached = false;
         const int  flags = show_all | (crystal << 1);
         std::uint64_t key = DungeonAerialFloorKey(*map_self, flags, ConfigGet().aerial_map_ceiling,
-                                                 ConfigGet().aerial_map_model_scale, std::round(player[1]));
+                                                 ConfigGet().aerial_map_model_scale, AerialEyeHeight(player[1]));
         const auto mix = [&](std::uint64_t value) { key = (key ^ value) * 1099511628211ull; };
         mix(selectMapNo); mix(UserStatus->cur_georama);
         mix(gfx::FindNamedRenderTarget("aerial_floor"));
